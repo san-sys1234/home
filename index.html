@@ -482,77 +482,100 @@ function renderSearch(){
   const input=document.getElementById('catalogSearch');
   const box=document.getElementById('searchResults');
   if(!input || !box) return;
-  const raw=String(input.value||'');
-  const q=normalizeSearch(raw);
+
+  const q=normalizeSearch(input.value || '');
   const all=allCatalog();
 
   if(!q){
-    box.innerHTML='<div class="hint">Tippe einfach einen Begriff ein – z. B. <b>Fen</b>, <b>Tür</b>, <b>Kamin</b> oder <b>Wasch</b>.</div>';
+    box.innerHTML='<div class="hint">Tippe z. B. <b>Fen</b>, <b>Tür</b>, <b>Kamin</b> oder <b>Wasch</b>.</div>';
     return;
   }
 
   const words=q.split(/\s+/).filter(Boolean);
+
   const results=all.map((x,index)=>{
-    const fields={
-      title:normalizeSearch(x.title),
-      room:normalizeSearch(x.room),
-      area:normalizeSearch(x.area),
-      place:normalizeSearch(x.place),
-      cat:normalizeSearch(x.cat)
-    };
-    const searchable=[fields.title,fields.room,fields.area,fields.place,fields.cat].filter(Boolean).join(' ');
-    let score=0, matched=0;
+    const title=normalizeSearch(x.title);
+    const room=normalizeSearch(x.room);
+    const area=normalizeSearch(x.area);
+    const place=normalizeSearch(x.place);
+    const cat=normalizeSearch(x.cat);
 
-    words.forEach(w=>{
+    const fields=[title,room,area,place,cat];
+    let score=0;
+    let matchedWords=0;
+
+    for(const word of words){
       let best=0;
-      // Aufgabe selbst bekommt die höchste Priorität.
-      if(fields.title===w) best=Math.max(best,100);
-      else if(fields.title.startsWith(w)) best=Math.max(best,85);
-      else if(fields.title.split(/\s+/).some(t=>t.startsWith(w))) best=Math.max(best,80);
-      else if(fields.title.includes(w)) best=Math.max(best,65);
 
-      if(fields.room===w) best=Math.max(best,55);
-      else if(fields.room.startsWith(w) || fields.room.split(/\s+/).some(t=>t.startsWith(w))) best=Math.max(best,48);
-      else if(fields.room.includes(w)) best=Math.max(best,40);
+      // The important part: partial words are valid matches.
+      // "fen" therefore matches "fenster".
+      for(const field of fields){
+        if(!field) continue;
 
-      if(fields.area.includes(w)) best=Math.max(best,32);
-      if(fields.place.includes(w)) best=Math.max(best,30);
-      if(fields.cat.includes(w)) best=Math.max(best,28);
-      if(searchable.includes(w)) best=Math.max(best,18);
+        if(field===word) best=Math.max(best,100);
+        else if(field.startsWith(word)) best=Math.max(best,90);
+        else if(field.split(/\s+/).some(part=>part.startsWith(word))) best=Math.max(best,85);
+        else if(field.includes(word)) best=Math.max(best,70);
+      }
 
-      if(best>0){matched++; score+=best;}
-    });
+      if(best>0){
+        matchedWords++;
+        score+=best;
+      }
+    }
 
-    // Bei mehreren Suchwörtern müssen alle vorkommen.
-    if(words.length>1 && matched<words.length) score=0;
-    if(matched===words.length) score+=25;
+    // For a multi-word search every word must occur somewhere.
+    if(matchedWords!==words.length) return null;
+
+    // Prefer matches in the actual task title.
+    if(title.includes(q)) score+=60;
+    if(title.startsWith(q)) score+=40;
+
     return {...x,index,score};
-  }).filter(x=>x.score>0)
-    .sort((a,b)=>b.score-a.score || String(a.title).localeCompare(String(b.title),'de'))
+  }).filter(Boolean)
+    .sort((a,b)=>b.score-a.score || a.title.localeCompare(b.title,'de'))
     .slice(0,25);
 
   if(!results.length){
-    box.innerHTML='<div class="result"><b>Keine passende Katalogaufgabe gefunden.</b><small>Versuche z. B. „Fen“, „Tür“, „Kamin“, „Bad“ oder „Wasch“.</small></div>';
+    box.innerHTML='<div class="result"><b>Keine passende Aufgabe gefunden.</b><small>Versuche einen kürzeren Anfang wie „Fen“, „Tür“ oder „Kamin“.</small></div>';
     return;
   }
 
-  box.innerHTML='<div class="hint">'+results.length+' passende Vorschläge · tippe bei einem Vorschlag auf „＋ Heute“</div>';
+  box.innerHTML='<div class="hint">'+results.length+' passende Vorschläge</div>';
+
   results.forEach(x=>{
-    const d=document.createElement('div'); d.className='result';
-    const title=document.createElement('b'); title.textContent=x.title;
+    const d=document.createElement('div');
+    d.className='result';
+
+    const title=document.createElement('b');
+    title.textContent=x.title;
+
     const meta=document.createElement('small');
     meta.textContent=(x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.place?' · '+x.place:'')+(x.cat?' · '+x.cat:'');
+
     const br=document.createElement('br');
-    const btn=document.createElement('button'); btn.className='small'; btn.textContent='＋ Heute';
-    btn.onclick=()=>addToday(key()+'|catalog|'+x.index+'|'+x.title,'catalog|'+x.title,x.title,(x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.place?' · '+x.place:''));
-    d.append(title,meta,br,btn); box.appendChild(d);
+    const btn=document.createElement('button');
+    btn.className='small';
+    btn.textContent='＋ Heute';
+    btn.onclick=()=>addToday(
+      key()+'|catalog|'+x.index+'|'+x.title,
+      'catalog|'+x.title,
+      x.title,
+      (x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.place?' · '+x.place:'')
+    );
+
+    d.append(title,meta,br,btn);
+    box.appendChild(d);
   });
 }
 
 // Sicherstellen, dass die Suche auch auf iPhone/Safari bei jedem Tastendruck reagiert.
 document.addEventListener('DOMContentLoaded',()=>{
   const input=document.getElementById('catalogSearch');
-  if(input){ input.addEventListener('input',renderSearch); input.addEventListener('keyup',renderSearch); }
+  if(input){
+    input.addEventListener('input',renderSearch);
+    input.addEventListener('keyup',renderSearch);
+  }
 });
 function saveCustom(add){let title=document.getElementById('customTitle').value.trim();if(!title){alert('Bitte gib der Aufgabe einen Namen.');return}let x={title,room:document.getElementById('customRoom').value.trim(),place:document.getElementById('customPlace').value.trim(),area:document.getElementById('customArea').value,rec:document.getElementById('customRec').value,start:document.getElementById('customStart').value||key(),cat:document.getElementById('customCat').value.trim()};state.custom.push(x);save();if(add){let i=state.custom.length-1;addToday(key()+'|custom|'+i+'|'+title,'custom|'+i,title,(x.room||'Ganzes Haus')+' · '+x.area+(x.place?' · '+x.place:''))}else{closeModal();toast('Eigene Aufgabe gespeichert ❤️')}}
 document.getElementById('customStart').value=key();
