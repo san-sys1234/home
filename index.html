@@ -94,7 +94,7 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
  <div class="sheet">
   <div class="sheethead"><h2 style="margin:0">Aufgabe hinzufügen</h2><button onclick="closeModal()">✕</button></div>
   <p class="hint">Durchsuche den ausführlichen Aufgabenkatalog – oder lege unten deine eigene Aufgabe an.</p>
-  <div class="search"><input id="catalogSearch" autocomplete="off" placeholder="z. B. Fenster, Garderobe, Kamin …" oninput="renderSearch()"></div>
+  <div class="search"><input id="catalogSearch" autocomplete="off" placeholder="z. B. Fenster, Garderobe, Kamin …" oninput="renderSearch()" placeholder="z.B. Fenster, Fen, Tür, Kamin …"></div>
   <div id="searchResults" style="margin-top:10px"></div>
   <div class="card" style="margin-top:15px">
    <h3 style="margin:0 0 8px">＋ Neue eigene Aufgabe</h3>
@@ -119,6 +119,83 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
 <div id="toast" class="toast hidden"></div>
 
 <script>
+
+function normalizeSearchText(value){
+  return String(value ?? "")
+    .toLocaleLowerCase("de-DE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/ß/g,"ss")
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function catalogSearchScore(task, query){
+  const q = normalizeSearchText(query);
+  if(!q) return 0;
+
+  const fields = [
+    ["title", task.title || task.name || "", 100],
+    ["room", task.room || "", 55],
+    ["area", task.area || "", 45],
+    ["place", task.place || task.exactPlace || "", 45],
+    ["category", task.category || "", 35]
+  ];
+
+  const tokens = q.split(" ").filter(Boolean);
+  let score = 0;
+  let matchedTokens = 0;
+
+  for(const token of tokens){
+    let best = 0;
+    for(const [kind, raw, weight] of fields){
+      const value = normalizeSearchText(raw);
+      if(!value) continue;
+
+      if(value === token) best = Math.max(best, weight + 35);
+      else if(value.startsWith(token)) best = Math.max(best, weight + 25);
+      else if(value.includes(" " + token)) best = Math.max(best, weight + 20);
+      else if(value.includes(token)) best = Math.max(best, weight + 10);
+      else {
+        // Light typo tolerance for words >= 4 characters.
+        const words = value.split(" ");
+        for(const w of words){
+          if(w.length >= 4 && token.length >= 4){
+            let common = 0;
+            const shorter = token.length < w.length ? token : w;
+            const longer  = token.length < w.length ? w : token;
+            for(let i=0;i<shorter.length;i++) if(longer.includes(shorter[i])) common++;
+            if(common / shorter.length >= 0.75) best = Math.max(best, weight);
+          }
+        }
+      }
+    }
+    if(best > 0){
+      matchedTokens++;
+      score += best;
+    }
+  }
+
+  if(matchedTokens === tokens.length) score += 80;
+  else score -= (tokens.length - matchedTokens) * 40;
+
+  return score;
+}
+
+function searchCatalog(query){
+  const q = String(query ?? "").trim();
+  if(!q) return [];
+
+  return (typeof catalog !== "undefined" ? catalog : [])
+    .map((task, index) => ({task, index, score: catalogSearchScore(task, q)}))
+    .filter(x => x.score > 0)
+    .sort((a,b) => b.score - a.score || String(a.task.title||a.task.name||"").localeCompare(String(b.task.title||b.task.name||""),"de"))
+    .slice(0,25)
+    .map(x => x.task);
+}
+
+
 const STORAGE='unserZuhauseV24';
 const roomsByDay={
  0:[],
