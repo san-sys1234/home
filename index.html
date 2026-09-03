@@ -135,11 +135,7 @@ const roomsByDay={
   ['Kinderzimmer 2','OG',['Herumliegende Dinge grob ordnen','Kleidung wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']]
  ],
  4:[],
- 5:[
-  ['Waschküche','Keller',['Waschmaschine außen abwischen','Trockner außen abwischen','Arbeitsfläche abwischen','Wäsche ordnen','Boden nur bei sichtbarer Verschmutzung saugen']],
-  ['Musikzimmer','Keller',['Herumliegende Dinge grob ordnen','Sichtbaren Staub entfernen','Boden saugen']],
-  ['Trainingsraum','Keller',['Trainingssachen wegräumen','Trainingsflächen bei Bedarf abwischen','Boden saugen']]
- ],
+ 5:[],
  6:[
   ['Waschküche','Keller',['Wäsche sortieren','Wäsche aufhängen/trocknen','Fertige Wäsche zusammenlegen, wenn du möchtest','Boden wischen']]
  ]
@@ -170,9 +166,25 @@ function weekIsA(d=today){
  const week=Math.ceil((((x-yearStart)/86400000)+1)/7);
  return week%2===0;
 }
+const fridayA=[
+ ['Waschküche','Keller',['Waschmaschine außen abwischen','Trockner außen abwischen','Arbeitsfläche abwischen','Wäsche ordnen']]
+];
+const fridayB=[
+ ['Musikzimmer','Keller',['Herumliegende Dinge grob ordnen','Sichtbaren Staub entfernen','Boden saugen']]
+];
+const fridayC=[
+ ['Trainingsraum','Keller',['Trainingssachen wegräumen','Trainingsflächen bei Bedarf abwischen','Boden saugen']]
+];
+function weekCycle3(d=today){
+ const x=new Date(d); x.setHours(12,0,0,0); x.setDate(x.getDate()+4-(x.getDay()||7));
+ const yearStart=new Date(x.getFullYear(),0,1);
+ const week=Math.ceil((((x-yearStart)/86400000)+1)/7);
+ return ((week-1)%3);
+}
 function plannedRoomsForDay(dow,d=today){
  if(dow===2) return weekIsA(d)?bathroomA:bathroomB;
  if(dow===4) return weekIsA(d)?thursdayA:thursdayB;
+ if(dow===5){ const c=weekCycle3(d); return c===0?fridayA:c===1?fridayB:fridayC; }
  return roomsByDay[dow]||[];
 }
 
@@ -260,8 +272,8 @@ function dateLabel(d){return new Intl.DateTimeFormat('de-AT',{weekday:'long',day
 function iso(d){return d.toISOString().slice(0,10)}
 function taskId(prefix,text,idx){return prefix+'|'+text+'|'+idx}
 function mark(id,canonical){state.done[id]=!state.done[id]; if(state.done[id])state.lastDone[canonical]=key(); save(); renderToday()}
-function postpone(id,canonical,text,room){
-  state.postponed[id]={canonical,text,room,from:key()};
+function postpone(id,canonical,text,room,area,place){
+  state.postponed[id]={canonical,text,room,area:area||'',place:place||'',from:key()};
   save(); toast('Aufgabe auf später verschoben ↩'); renderToday();
 }
 function togglePostponed(){
@@ -294,10 +306,10 @@ function renderPostponed(){
     if(x.place) parts.push(x.place);
     parts.push('verschoben am '+new Intl.DateTimeFormat('de-AT').format(new Date(x.from)));
     s.textContent=parts.join(' · ');
-    const br=document.createElement('br');
+    s.textContent=parts.join(' · ');
     const restore=document.createElement('button');restore.className='small';restore.textContent='↩ Wieder öffnen';
     restore.onclick=()=>restorePostponed(id);
-    d.append(b,s,br,restore);list.appendChild(d);
+    d.append(b,s,restore);list.appendChild(d);
   });
 }
 function enableSwipe(row,id,canonical){
@@ -319,7 +331,10 @@ function enableSwipe(row,id,canonical){
     if(dx>75){
       state.done[id]=true;state.lastDone[canonical]=key();save();toast('Erledigt ✓');renderToday();
     }else if(dx<-75){
-      postpone(id,canonical,row.querySelector('span')?.textContent||'',row.closest('.section')?.querySelector('.loc')?.textContent||'');
+      const sec=row.closest('.section');
+      const room=(sec?.querySelector('.loc')?.textContent||'').replace(/^ · /,'');
+      const custom=state.todayExtras?.find(x=>x.id===id);
+      postpone(id,canonical,row.querySelector('.task-content span')?.textContent||'',custom?.room||room,custom?.area||'',custom?.place||'');
     }else{content.style.transform='translateX(0)';l.style.opacity=r.style.opacity=0}
   });
 }
@@ -327,8 +342,9 @@ function addToday(id,canonical,text,room){state.done[id]=false; state.lastDone[c
 function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.remove('hidden');setTimeout(()=>x.classList.add('hidden'),1800)}
 function renderToday(){
  document.getElementById('todayDate').textContent=dateLabel(today);
- let dow=today.getDay(), themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder · kleine Hälfte','OG · Schlaf- & Kinderbereiche','EG · kleine Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];
+ let dow=today.getDay(), themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder · kleine Hälfte','OG · Schlaf- & Kinderbereiche','EG · kleine Nebenräume','Keller · nur ein Raum','Wäsche + max. eine Sonderaufgabe'];
  let theme=themes[dow];
+ if(dow===5){ const c=weekCycle3(today); theme=c===0?'Waschküche · kleine Portion':c===1?'Musikzimmer · kleine Portion':'Trainingsraum · kleine Portion'; }
  if(dow===2) theme=weekIsA(today)?'Gäste-WC + Kinderbad · kleine Bäderhälfte':'Bad + WC · kleine Bäderhälfte';
  if(dow===4) theme=weekIsA(today)?'Eingang + Garderobe + Flur · kleine Hälfte':'Büro + Abstellraum + Speis · kleine Hälfte';
  document.getElementById('todayTheme').textContent=state.chaos?'🧸 Heute zählt nur das Nötigste.':theme;
