@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f3ed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Unser Zuhause">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Unser Zuhause</title>
+<style>
+:root{--bg:#f7f3ed;--card:#fffdf9;--ink:#342f2a;--muted:#82786e;--line:#e8dfd5;--accent:#9b7b61;--green:#78966e;--rose:#c98d8d;--shadow:0 8px 24px rgba(64,45,30,.07)}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif}
+header{padding:22px 18px 12px;position:sticky;top:0;background:rgba(247,243,237,.94);backdrop-filter:blur(12px);z-index:5}
+h1{font-size:27px;margin:0 0 3px} h2{font-size:20px;margin:22px 0 10px} h3{margin:0;font-size:16px}.sub{color:var(--muted);font-size:13px}
+nav{display:flex;gap:7px;padding:7px 12px 12px;position:sticky;top:73px;background:rgba(247,243,237,.94);z-index:4}
+nav button{flex:1;border:0;background:#eee7df;border-radius:14px;padding:10px 4px;color:#665b51;font-weight:600}
+nav button.active{background:var(--ink);color:white}
+main{padding:0 14px 90px;max-width:720px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);margin:10px 0;overflow:hidden}
+.task{position:relative;touch-action:pan-y;overflow:hidden}
+.task .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px;color:white;font-weight:800;opacity:0}
+.task .under.right{background:var(--green)} .task .under.left{background:var(--rose);justify-content:flex-end}
+.task .body{position:relative;background:var(--card);padding:15px 16px;min-height:68px;display:flex;align-items:center;gap:12px;transition:transform .12s ease}
+.dot{width:14px;height:14px;border:2px solid #cfc4b8;border-radius:50%;flex:0 0 auto}.tag{font-size:11px;color:var(--muted);margin-top:4px}
+.badge{font-size:11px;padding:4px 7px;border-radius:9px;background:#eee7df;color:#695d52;margin-left:auto;white-space:nowrap}
+.done{opacity:.58}.done .dot{background:var(--green);border-color:var(--green)}
+.done .title{text-decoration:line-through}
+.sectionhead{display:flex;justify-content:space-between;align-items:end;margin-top:20px}
+.smallbtn{border:0;background:#ebe2d9;color:#62574d;border-radius:12px;padding:8px 10px;font-weight:600}
+.hint{background:#f0e8df;border-radius:16px;padding:11px 13px;color:#675c53;font-size:13px;margin:10px 0 14px}
+.chaos{background:#f5e4df}.progress{height:8px;background:#e6ddd4;border-radius:8px;overflow:hidden}.progress>i{display:block;height:100%;background:var(--green);width:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:15px;background:var(--card);border:1px solid var(--line);border-radius:18px}.num{font-size:25px;font-weight:750}.label{font-size:12px;color:var(--muted)}
+.day{padding:14px}.day strong{display:block}.day ul{padding-left:18px;margin:8px 0 0;color:#665c54;font-size:13px}
+.hidden{display:none}.empty{text-align:center;padding:35px 15px;color:var(--muted)}
+.modal{position:fixed;inset:0;background:rgba(35,28,23,.35);display:none;align-items:flex-end;z-index:20}.modal.show{display:flex}.sheet{background:var(--card);width:100%;border-radius:25px 25px 0 0;padding:20px;max-height:80vh;overflow:auto}.close{float:right;border:0;background:#eee7df;border-radius:50%;width:32px;height:32px}
+footer{position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:rgba(247,243,237,.95);backdrop-filter:blur(12px);z-index:6}
+footer button{width:100%;padding:13px;border:0;border-radius:15px;background:var(--ink);color:white;font-weight:700}
+@media(min-width:700px){footer{position:static;background:none;padding:15px 0}footer button{width:auto}}
+</style>
+</head>
+<body>
+<header><h1>Unser Zuhause 🏡</h1><div class="sub" id="date"></div></header>
+<nav>
+<button data-tab="today" class="active">Heute</button>
+<button data-tab="week">Woche</button>
+<button data-tab="rotation">Rotation</button>
+</nav>
+<main>
+<section id="today"></section>
+<section id="week" class="hidden"></section>
+<section id="rotation" class="hidden"></section>
+</main>
+<footer><button id="chaosBtn">🧸 Hanni-Chaosmodus</button></footer>
+<div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="modalContent"></div></div></div>
+<script>
+const rooms = {
+  egLiving:["Wohnzimmer","Essbereich","Küche","Speis"],
+  egEntry:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum"],
+  bath:["Gäste-WC","Kinderbad","Bad","WC","Saunaraum"],
+  og:["Elternbereich","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"],
+  basement:["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Keller"]
+};
+const tasks = [
+ {id:"daily-morning",title:"Morgenroutine",kind:"daily",dur:10,details:["Bett machen","Schlafzimmer lüften","Kleidung weg","Wäschekorb prüfen","Vorhänge/Raffstores öffnen","Spülmaschine ausräumen","Frühstücksgeschirr einräumen","Arbeitsflächen + Esstisch wischen","Hochstuhl/Essbereich sauber machen","Garderobe grob ordnen"]},
+ {id:"daily-meals",title:"Nach den Mahlzeiten",kind:"daily",dur:10,details:["Geschirr in die Spülmaschine","Tisch wischen","Hochstuhl/Essbereich reinigen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf wischen"]},
+ {id:"daily-evening",title:"Abendlicher 10-Minuten-Reset",kind:"daily",dur:10,details:["Spülmaschine beladen/starten","Arbeitsflächen","Herd","Spüle + Armatur","Esstisch","Hanni-Essbereich","Müll prüfen","Wohnzimmer grob resetten","Garderobe","Kleidung wegräumen","Vorhänge/Raffstores"]},
+ {id:"daily-check",title:"Tagescheck",kind:"daily",dur:5,details:["Restmüll/Biomüll","Wäsche nur bei Bedarf","Toiletten nur bei Bedarf","Küchenboden bei Essensresten","Sichtbare Flecken","Kühlschrank nur bei Bedarf"]},
+
+ {id:"thu-entry",title:"Eingang & Garderobe",kind:"anchor",day:4,dur:25,details:["Schuhe ordentlich","Jacken/Taschen","sichtbare Flächen","Boden bei Bedarf","Spiegel/Glas bei Bedarf"]},
+ {id:"thu-hall",title:"Flur & Büro",kind:"anchor",day:4,dur:25,details:["Flur grob ordnen","Büroflächen frei machen","sichtbaren Staub entfernen","Boden bei Bedarf"]},
+ {id:"thu-pantry",title:"Speis & Abstellraum",kind:"anchor",day:4,dur:25,details:["Lebensmittel grob prüfen","Arbeits-/Ablageflächen","Vorräte ordnen","sichtbaren Schmutz entfernen"]},
+
+ {id:"fri-laundry",title:"Waschküche – kleiner Durchgang",kind:"anchor",day:5,dur:20,details:["Waschmaschine außen","Trockner außen","Arbeitsfläche","Wäsche ordnen","Boden nur bei sichtbarem Schmutz"]},
+ {id:"fri-music",title:"Musikzimmer – kleiner Durchgang",kind:"anchor",day:5,dur:15,details:["Grob aufräumen","sichtbare Flächen","offensichtlichen Schmutz"]},
+ {id:"fri-training",title:"Trainingsraum – kleiner Durchgang",kind:"anchor",day:5,dur:15,details:["Sachen zurücklegen","Trainingsflächen bei Bedarf wischen","sichtbaren Schmutz"]},
+
+ {id:"mon-eg",title:"EG Wohnen · Essen · Küche",kind:"anchor",day:1,dur:35,details:["Wohnzimmer sichtbare Flächen","Essbereich","Küche","Speis nur kurz","Boden nur wenn nötig"]},
+ {id:"tue-bath",title:"Bad & WC – Wochenreset",kind:"anchor",day:2,dur:35,details:["Waschbecken","Armaturen","Toiletten","Dusche/Badewanne nach Bedarf","Spiegel","Böden","Hochfrequentierte Stellen"]},
+ {id:"wed-og",title:"OG Schlafen & Kinderzimmer",kind:"anchor",day:3,dur:35,details:["Schlafzimmer ordnen","Ankleidezimmer ordnen","Kinderzimmer 1","Kinderzimmer 2","Boden nach Bedarf"]},
+ {id:"sat-laundry",title:"Samstag: Wäsche & eine kleine Extra-Aufgabe",kind:"anchor",day:6,dur:25,details:["Wäsche nur wenn nötig","Wäsche zusammenlegen","eine kleine Extra-Aufgabe auswählen – nicht mehrere"]},
+
+ {id:"rotate-handles",title:"Türklinken & häufig berührte Stellen",kind:"rotation",interval:7,dur:15,details:["Türklinken abwischen","häufig berührte Stellen"],group:"Kontaktflächen"},
+ {id:"rotate-frames",title:"Türrahmen / Zargen",kind:"rotation",interval:30,dur:20,details:["sichtbaren Staub entfernen","vorsichtig feucht nachwischen"],group:"Türen"},
+ {id:"rotate-doors",title:"Türblätter",kind:"rotation",interval:75,dur:30,details:["Türblätter nach Material reinigen"],group:"Türen"},
+ {id:"rotate-baseboards",title:"Sockelleisten",kind:"rotation",interval:42,dur:30,details:["absaugen/abstauben","bei Bedarf feucht wischen"],group:"Wände & Böden"},
+ {id:"rotate-corners",title:"Decken-/Wandecken & Spinnweben",kind:"rotation",interval:30,dur:10,details:["Ecken kontrollieren","Spinnweben vorsichtig entfernen"],group:"Wände & Böden"},
+ {id:"rotate-switches",title:"Lichtschalter außen",kind:"rotation",interval:30,dur:10,details:["nur außen reinigen","leicht feucht, nicht durchnässen"],group:"Kontaktflächen"},
+ {id:"rotate-outlets",title:"Steckdosen außen",kind:"rotation",interval:75,dur:10,details:["nur außen abstauben/wischen","niemals öffnen"],group:"Kontaktflächen"},
+ {id:"rotate-stucco",title:"Stuck – sanfter Staubdurchgang",kind:"rotation",interval:120,dur:20,details:["trocken und materialschonend entstauben","Material beachten"],group:"Wände & Decken"},
+ {id:"rotate-windows",title:"Fenster – Teilabschnitt",kind:"rotation",interval:180,dur:45,details:["Fenster nach Abschnitten reinigen","Rahmen/Falze mitmachen"],group:"Fenster"},
+ {id:"rotate-blinds",title:"Raffstores",kind:"rotation",interval:180,dur:30,details:["Herstellerhinweise beachten","Lamellen schonend reinigen"],group:"Fenster"},
+ {id:"rotate-curtains",title:"Vorhänge & Schienen",kind:"rotation",interval:180,dur:30,details:["Pflegeetikett beachten","Schienen/Stangen abstauben"],group:"Textilien"},
+ {id:"rotate-fridge",title:"Kühlschrank – Monatscheck",kind:"rotation",interval:30,dur:20,details:["verdorbene Lebensmittel raus","Fächer/Flächen bei Bedarf reinigen"],group:"Küche"},
+ {id:"rotate-oven",title:"Backofen",kind:"rotation",interval:75,dur:30,details:["Innenraum reinigen","Roste/Bleche bei Bedarf"],group:"Küche"},
+ {id:"rotate-dishwasher",title:"Spülmaschine – Pflege",kind:"rotation",interval:30,dur:10,details:["Filter reinigen","Dichtung kontrollieren","Pflegeprogramm nach Hersteller"],group:"Küche"},
+ {id:"rotate-washer",title:"Waschmaschine – Pflege",kind:"rotation",interval:30,dur:15,details:["Waschmittelschublade","Türdichtung","Tür offen trocknen lassen","Pflegeprogramm nach Hersteller"],group:"Waschküche"},
+ {id:"rotate-sauna",title:"Saunaraum – Monatscheck",kind:"rotation",interval:30,dur:20,details:["Oberflächen","Boden","nach Hersteller reinigen"],group:"Sauna"},
+ {id:"rotate-mattress",title:"Matratzen – Pflege",kind:"rotation",interval:180,dur:20,details:["nach Pflegehinweisen","wenden/rotieren nur wenn vorgesehen"],group:"Schlafzimmer"},
+ {id:"rotate-grout",title:"Fugen & Silikon – Kontrolle",kind:"rotation",interval:90,dur:20,details:["Fugen kontrollieren","Silikon kontrollieren","nur bei Bedarf gründlicher reinigen"],group:"Bad"},
+ {id:"rotate-lamps",title:"Erreichbare Lampen",kind:"rotation",interval:120,dur:15,details:["nur sicher erreichbare Lampen","trocken/geeignet reinigen"],group:"Licht"}
+];
+
+const state = JSON.parse(localStorage.getItem("zuhauseState")||'{"done":{},"skipped":{},"lastDone":{},"chaos":false}');
+function save(){localStorage.setItem("zuhauseState",JSON.stringify(state));render()}
+function key(id,date=todayKey()){return id+"@"+date}
+function todayKey(){let d=new Date();return d.toISOString().slice(0,10)}
+function dateDE(s){return new Date(s+"T12:00:00").toLocaleDateString("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"})}
+function daysSince(s){if(!s)return 9999;return Math.floor((new Date(todayKey())-new Date(s))/86400000)}
+function isDone(t){return !!state.done[key(t.id)]}
+function isSkipped(t){return !!state.skipped[key(t.id)]}
+function complete(t){state.done[key(t.id)]=true;state.lastDone[t.id]=todayKey();delete state.skipped[key(t.id)];save()}
+function skip(t){state.skipped[key(t.id)]=true;save()}
+function resetToday(){Object.keys(state.done).filter(k=>k.endsWith("@"+todayKey())).forEach(k=>delete state.done[k]);Object.keys(state.skipped).filter(k=>k.endsWith("@"+todayKey())).forEach(k=>delete state.skipped[k]);save()}
+function taskCard(t,swipe=true){
+ let done=isDone(t), skipped=isSkipped(t);
+ if(skipped)return "";
+ return `<div class="card task ${done?"done":""}" data-id="${t.id}">
+   <div class="under right">ERLEDIGT ✓</div><div class="under left">SPÄTER</div>
+   <div class="body">
+    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">${t.dur} Min · ${t.kind==="rotation"?"Rotation":"heute"}</div></div>
+    <span class="badge">${done?"✓ erledigt":"wischen"}</span>
+   </div></div>`
+}
+function bindSwipes(){
+ document.querySelectorAll(".task").forEach(el=>{
+  let sx=0,dx=0,moving=false;
+  el.addEventListener("pointerdown",e=>{sx=e.clientX;dx=0;moving=true;el.setPointerCapture(e.pointerId)});
+  el.addEventListener("pointermove",e=>{
+   if(!moving)return; dx=e.clientX-sx;
+   if(Math.abs(dx)<8)return;
+   const body=el.querySelector(".body"), r=el.querySelector(".right"), l=el.querySelector(".left");
+   body.style.transform=`translateX(${dx}px)`; let a=Math.min(Math.abs(dx)/100,1);
+   if(dx>0){r.style.opacity=a;l.style.opacity=0}else{l.style.opacity=a;r.style.opacity=0}
+  });
+  el.addEventListener("pointerup",()=>{
+   if(!moving)return;moving=false;
+   if(Math.abs(dx)>85){const t=tasks.find(x=>x.id===el.dataset.id);dx>0?complete(t):skip(t)}
+   else {el.querySelector(".body").style.transform="";el.querySelector(".right").style.opacity=0;el.querySelector(".left").style.opacity=0}
+  });
+  el.addEventListener("pointercancel",()=>{moving=false;el.querySelector(".body").style.transform=""});
+  el.addEventListener("click",e=>{if(Math.abs(dx)<20){const t=tasks.find(x=>x.id===el.dataset.id);openModal(t)}});
+ });
+}
+function renderToday(){
+ const d=new Date(), dow=d.getDay()===0?7:d.getDay();
+ const daily=tasks.filter(t=>t.kind==="daily");
+ const anchors=tasks.filter(t=>t.kind==="anchor"&&t.day===dow);
+ const due=tasks.filter(t=>t.kind==="rotation"&&daysSince(state.lastDone[t.id])>=t.interval);
+ const active=[...daily,...anchors,...due];
+ const done=active.filter(isDone).length, total=active.length;
+ let html=`<div class="hint">👉 <b>Nach rechts wischen = erledigt.</b> Nach links = für heute überspringen. Nichts wird morgen automatisch nachgeholt. Deine Rotation richtet sich nach dem letzten echten Erledigungsdatum.</div>
+ <div class="grid"><div class="stat"><div class="num">${done}/${total}</div><div class="label">heute erledigt</div></div><div class="stat"><div class="num">${active.reduce((a,t)=>a+t.dur,0)} Min</div><div class="label">wenn du alles machst</div></div></div>
+ <div class="sectionhead"><h2>Heute</h2><button class="smallbtn" onclick="resetToday()">Tag zurücksetzen</button></div>
+ <div class="progress"><i style="width:${total?done/total*100:0}%"></i></div>`;
+ if(!active.length) html+=`<div class="empty">Heute ist nichts Dringendes geplant. 🥰</div>`;
+ else active.forEach(t=>html+=taskCard(t));
+ html+=`<h2>🧸 Haus darf heute auch Haus sein</h2><div class="hint">Wenn Hanni-Chaos ist: nur das Funktionale. Essen, Geschirr, Müll, sichere Wege und offensichtlichen Schmutz. Spielzeug darf liegen bleiben.</div>`;
+ document.getElementById("today").innerHTML=html;bindSwipes();
+}
+function renderWeek(){
+ const names=["","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+ let html=`<h2>Diese Woche</h2><div class="hint">Die Wochentage sind Anker, keine Pflicht. Wenn ein Tag ausfällt, stapelt sich nichts.</div>`;
+ for(let i=1;i<=7;i++){
+  let a=tasks.filter(t=>t.kind==="anchor"&&t.day===i);
+  if(i===7) html+=`<div class="card day"><strong>Sonntag 🌿</strong><div class="sub">Haushaltsfrei – nur Alltag & Notwendiges.</div></div>`;
+  else html+=`<div class="card day"><strong>${names[i]}</strong><ul>${a.map(t=>`<li>${t.title}</li>`).join("")||"<li>nur Alltag</li>"}</ul></div>`;
+ }
+ document.getElementById("week").innerHTML=html;
+}
+function renderRotation(){
+ const groups={};
+ tasks.filter(t=>t.kind==="rotation").forEach(t=>{(groups[t.group]??=[]).push(t)});
+ let html=`<h2>Hauspflege-Rotation</h2><div class="hint">Hier zählt nicht, ob etwas einmal im Kalender stand, sondern wann du es tatsächlich zuletzt gemacht hast. „Später“ verschiebt die Aufgabe nicht automatisch auf morgen.</div>`;
+ Object.entries(groups).forEach(([g,arr])=>{
+  html+=`<h3 style="margin:18px 4px 8px">${g}</h3>`;
+  arr.forEach(t=>{
+   let last=state.lastDone[t.id], left=last?Math.max(0,t.interval-daysSince(last)):0;
+   let status=!last?"noch nie erledigt":left===0?"jetzt fällig":`in ${left} Tag${left===1?"":"en"}`;
+   html+=`<div class="card day"><strong>${t.title}</strong><div class="sub">${status} · Rhythmus ca. ${t.interval} Tage</div><button class="smallbtn" style="margin-top:9px" onclick="openModal(tasks.find(x=>x.id==='${t.id}'))">Details</button></div>`
+  });
+ });
+ document.getElementById("rotation").innerHTML=html;
+}
+function render(){document.getElementById("date").textContent=dateDE(todayKey());renderToday();renderWeek();renderRotation();if(state.chaos)document.body.classList.add("chaos");else document.body.classList.remove("chaos")}
+function openModal(t){document.getElementById("modalContent").innerHTML=`<h2>${t.title}</h2><p class="sub">${t.dur} Minuten · ${t.kind==="rotation"?"Rotation":"Tages-/Wochenaufgabe"}</p><ul>${t.details.map(x=>`<li style="margin:8px 0">${x}</li>`).join("")}</ul><div class="hint">Heute: <b>${isDone(t)?"erledigt ✓":isSkipped(t)?"übersprungen":"offen"}</b></div>`;document.getElementById("modal").classList.add("show")}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");["today","week","rotation"].forEach(id=>document.getElementById(id).classList.toggle("hidden",id!==b.dataset.tab))});
+document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;document.getElementById("chaosBtn").textContent=state.chaos?"🧸 Chaosmodus AUS":"🧸 Hanni-Chaosmodus";save()};
+document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
+render();
+</script>
+</body>
+</html>
