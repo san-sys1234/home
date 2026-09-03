@@ -1,11 +1,1 @@
-{
-  "name": "Unser Zuhause 🏡",
-  "short_name": "Unser Zuhause",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#f7f3ed",
-  "theme_color": "#f7f3ed",
-  "lang": "de",
-  "description": "Persönliche Haushaltsplanung für unser Zuhause – mit integriertem Haushalts-Chat."
-}
+{"name":"Unser Zuhause – Haushaltsplan","short_name":"Unser Zuhause","start_url":".","display":"standalone","background_color":"#f7f4ef","theme_color":"#8d7464","lang":"de"}
