@@ -21,9 +21,13 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
 .task input{width:20px;height:20px;accent-color:var(--accent);flex:none}.task span{line-height:1.3}.done{text-decoration:line-through;color:#999}
 .row-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.empty{color:var(--muted);padding:12px 0}.hidden{display:none!important}
 .daygrid{display:grid;grid-template-columns:repeat(7,minmax(80px,1fr));gap:6px;overflow:auto}.day{border:1px solid var(--line);border-radius:12px;padding:8px;background:white;min-width:88px}.day b{font-size:12px}.day small{display:block;color:var(--muted);margin-top:4px}
-.search{display:flex;gap:8px}.search input,.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font:inherit;background:white}.search input{flex:1}
+.search{display:flex;gap:8px}.search input,.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:14px;padding:13px 14px;font:inherit;background:white}.search input{flex:1;box-shadow:0 1px 5px #00000008}
 .modal{position:fixed;inset:0;background:#0005;display:flex;align-items:flex-end;justify-content:center;padding:12px;z-index:20}.sheet{background:var(--bg);width:min(760px,100%);max-height:90vh;overflow:auto;border-radius:24px;padding:17px}.sheethead{display:flex;justify-content:space-between;align-items:center}.result{background:white;border:1px solid var(--line);border-radius:14px;padding:12px;margin:7px 0}.result b{display:block}.result small{color:var(--muted)}
 .field{margin:10px 0}.field label{display:block;font-size:12px;font-weight:700;margin:0 0 5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.postponed{margin-top:14px;border:1px solid var(--line);border-radius:17px;background:#faf8f5;overflow:hidden}
+.postponed-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer}
+.postponed-head b{font-size:14px}.postponed-list{padding:0 14px 10px}.postponed-list .result{background:#fff}
+.postponed-empty{color:var(--muted);font-size:12px;padding:10px 0}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
 /* Swipe */
 .task{position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
@@ -62,6 +66,13 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
   <div class="note" id="chaosNote">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div>
  </div>
  <div class="card" id="tasks"></div>
+ <div id="postponedSection" class="postponed hidden">
+   <div class="postponed-head" onclick="togglePostponed()">
+     <b>↩ Auf später verschoben <span id="postponedCount"></span></b>
+     <span id="postponedArrow">＋</span>
+   </div>
+   <div id="postponedList" class="postponed-list hidden"></div>
+ </div>
 </section>
 
 <section id="week" class="hidden">
@@ -81,7 +92,7 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
  <div class="sheet">
   <div class="sheethead"><h2 style="margin:0">Aufgabe hinzufügen</h2><button onclick="closeModal()">✕</button></div>
   <p class="hint">Durchsuche den ausführlichen Aufgabenkatalog – oder lege unten deine eigene Aufgabe an.</p>
-  <div class="search"><input id="catalogSearch" placeholder="z. B. Fenster, Garderobe, Kamin …" oninput="renderSearch()"><button onclick="renderSearch()">Suchen</button></div>
+  <div class="search"><input id="catalogSearch" autocomplete="off" placeholder="z. B. Fenster, Garderobe, Kamin …" oninput="renderSearch()"></div>
   <div id="searchResults" style="margin-top:10px"></div>
   <div class="card" style="margin-top:15px">
    <h3 style="margin:0 0 8px">＋ Neue eigene Aufgabe</h3>
@@ -219,6 +230,7 @@ const catalogSeed=[
 
 let state=JSON.parse(localStorage.getItem(STORAGE)||'null')||{done:{},lastDone:{},postponed:{},custom:[],chaos:false};
 state.postponed=state.postponed||{};
+state.postponedOpen=!!state.postponedOpen;
 let today=new Date(); today.setHours(12,0,0,0);
 function key(){return today.toISOString().slice(0,10)}
 function save(){localStorage.setItem(STORAGE,JSON.stringify(state))}
@@ -229,6 +241,36 @@ function mark(id,canonical){state.done[id]=!state.done[id]; if(state.done[id])st
 function postpone(id,canonical,text,room){
   state.postponed[id]={canonical,text,room,from:key()};
   save(); toast('Aufgabe auf später verschoben ↩'); renderToday();
+}
+function togglePostponed(){
+  state.postponedOpen=!state.postponedOpen;
+  save(); renderPostponed();
+}
+function restorePostponed(id){
+  delete state.postponed[id];
+  save(); toast('Aufgabe wieder in die offenen Aufgaben gelegt ❤️'); renderToday();
+}
+function renderPostponed(){
+  const entries=Object.entries(state.postponed||{});
+  const section=document.getElementById('postponedSection');
+  const list=document.getElementById('postponedList');
+  const count=document.getElementById('postponedCount');
+  const arrow=document.getElementById('postponedArrow');
+  if(!entries.length){section.classList.add('hidden');return}
+  section.classList.remove('hidden');
+  count.textContent=' · '+entries.length;
+  list.classList.toggle('hidden',!state.postponedOpen);
+  arrow.textContent=state.postponedOpen?'−':'＋';
+  list.innerHTML='';
+  entries.slice().reverse().forEach(([id,x])=>{
+    const d=document.createElement('div');d.className='result';
+    const b=document.createElement('b');b.textContent=x.text||'Aufgabe';
+    const s=document.createElement('small');s.textContent=(x.room||'Ganzes Haus')+' · verschoben am '+new Intl.DateTimeFormat('de-AT').format(new Date(x.from));
+    const br=document.createElement('br');
+    const restore=document.createElement('button');restore.className='small';restore.textContent='↩ Wieder öffnen';
+    restore.onclick=()=>restorePostponed(id);
+    d.append(b,s,br,restore);list.appendChild(d);
+  });
 }
 function enableSwipe(row,id,canonical){
   let sx=0,sy=0,dx=0,active=false;
@@ -285,6 +327,7 @@ function renderToday(){
    content.append(c,s);row.append(bgL,bgR,content);sec.appendChild(row);enableSwipe(row,id,canonical)});box.appendChild(sec)
  });
  document.getElementById('bar').style.width=total?(done/total*100)+'%':'0%';document.getElementById('count').textContent=done+' von '+total+' Aufgaben abgehakt';
+ renderPostponed();
 }
 function dayTaskId(scope,i,t){return key()+'|'+scope+'|'+i+'|'+t}
 function rotationDue(){
@@ -300,7 +343,60 @@ function renderHistory(){let box=document.getElementById('historyList');box.inne
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
 function allCatalog(){let a=[];catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Ganzes Haus',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',custom:i}));return a}
-function renderSearch(){let q=document.getElementById('catalogSearch').value.toLowerCase().trim();let res=allCatalog().filter(x=>!q||(x.title+' '+x.room+' '+x.area+' '+x.cat).toLowerCase().includes(q)).slice(0,80);let box=document.getElementById('searchResults');box.innerHTML='<div class="hint">'+res.length+' Treffer im Aufgabenkatalog</div>';res.forEach((x,i)=>{let d=document.createElement('div');d.className='result';d.innerHTML='<b>'+x.title+'</b><small>'+x.room+' · '+x.area+(x.cat?' · '+x.cat:'')+'</small>';let b=document.createElement('button');b.className='small';b.textContent='＋ Heute';b.onclick=()=>addToday(key()+'|catalog|'+i+'|'+x.title,'catalog|'+x.title,x.title,x.room+' · '+x.area);d.appendChild(document.createElement('br'));d.appendChild(b);box.appendChild(d)})}
+function renderSearch(){
+  const input=document.getElementById('catalogSearch');
+  const box=document.getElementById('searchResults');
+  const q=(input.value||'').trim().toLocaleLowerCase('de-DE');
+  const all=allCatalog();
+
+  if(!q){
+    box.innerHTML='<div class="hint">Tippe einfach einen Begriff ein – z. B. <b>Fenster</b>, <b>Kamin</b>, <b>Tür</b>, <b>Kühlschrank</b> oder <b>Garderobe</b>.</div>';
+    return;
+  }
+
+  const words=q.split(/\s+/).filter(Boolean);
+  const results=all.map((x,index)=>{
+    const text=(x.title+' '+x.room+' '+x.area+' '+x.cat+' '+(x.place||'')).toLocaleLowerCase('de-DE');
+    let score=0;
+    words.forEach(w=>{
+      if(x.title.toLocaleLowerCase('de-DE').startsWith(w)) score+=12;
+      else if(x.title.toLocaleLowerCase('de-DE').includes(w)) score+=8;
+      if(x.room.toLocaleLowerCase('de-DE').includes(w)) score+=5;
+      if(x.area.toLocaleLowerCase('de-DE').includes(w)) score+=3;
+      if(x.cat.toLocaleLowerCase('de-DE').includes(w)) score+=2;
+      if(text.includes(w)) score+=1;
+    });
+    return {...x,index,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,25);
+
+  if(!results.length){
+    box.innerHTML='<div class="result"><b>Keine passende Katalogaufgabe gefunden.</b><small>Du kannst darunter direkt eine eigene Aufgabe anlegen.</small></div>';
+    return;
+  }
+
+  box.innerHTML='<div class="hint">'+results.length+' passende Vorschläge · tippe bei einem Vorschlag auf „＋ Heute“</div>';
+
+  results.forEach(x=>{
+    const d=document.createElement('div');
+    d.className='result';
+    const title=document.createElement('b');
+    title.textContent=x.title;
+    const meta=document.createElement('small');
+    meta.textContent=(x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.cat?' · '+x.cat:'');
+    const br=document.createElement('br');
+    const b=document.createElement('button');
+    b.className='small';
+    b.textContent='＋ Heute';
+    b.onclick=()=>addToday(
+      key()+'|catalog|'+x.index+'|'+x.title,
+      'catalog|'+x.title,
+      x.title,
+      (x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')
+    );
+    d.append(title,meta,br,b);
+    box.appendChild(d);
+  });
+}
 function saveCustom(add){let title=document.getElementById('customTitle').value.trim();if(!title){alert('Bitte gib der Aufgabe einen Namen.');return}let x={title,room:document.getElementById('customRoom').value.trim(),place:document.getElementById('customPlace').value.trim(),area:document.getElementById('customArea').value,rec:document.getElementById('customRec').value,start:document.getElementById('customStart').value||key(),cat:document.getElementById('customCat').value.trim()};state.custom.push(x);save();if(add){let i=state.custom.length-1;addToday(key()+'|custom|'+i+'|'+title,'custom|'+i,title,(x.room||'Ganzes Haus')+' · '+x.area+(x.place?' · '+x.place:''))}else{closeModal();toast('Eigene Aufgabe gespeichert ❤️')}}
 document.getElementById('customStart').value=key();
 renderToday();
