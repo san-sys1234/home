@@ -158,7 +158,7 @@ export default {
       if (!response.ok) {
         return json({
           error: "Die KI konnte gerade nicht antworten.",
-          details: data?.error?.message || "OpenAI API error"
+          details: data?.error?.message || data?.error?.code || `HTTP ${response.status} von OpenAI`
         }, 502, origin);
       }
 
