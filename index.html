@@ -41,9 +41,10 @@ footer{position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(8px + env(sa
 <footer><button id="chaos">🧸 Hanni-Chaosmodus</button></footer>
 <div class="modal" id="modal"><div class="sheet"><button class="close" id="close">×</button><div id="modalText"></div></div></div>
 <script>
-const KEY="unserZuhauseV10";
-const state=JSON.parse(localStorage.getItem(KEY)||'{"done":{},"skipped":{},"lastDone":{},"chaos":false}');
+const KEY="unserZuhauseV12";
+const state=JSON.parse(localStorage.getItem(KEY)||'{"done":{},"skipped":{},"lastDone":{},"chaos":false,"rotationStart":null}');
 const today=()=>new Date().toISOString().slice(0,10);
+if(!state.rotationStart) state.rotationStart=today();
 const germanDate=()=>new Date().toLocaleDateString("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
 const dayNumber=()=>{const n=new Date().getDay();return n===0?7:n};
 const save=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
