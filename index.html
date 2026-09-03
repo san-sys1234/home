@@ -63,102 +63,52 @@ const rooms = {
   basement:["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Keller"]
 };
 const tasks = [
- {id:"daily-morning",title:"Morgenroutine",kind:"daily",dur:10,details:["Bett machen","Schlafzimmer lüften","Kleidung weg","Wäschekorb prüfen","Vorhänge/Raffstores öffnen","Spülmaschine ausräumen","Frühstücksgeschirr einräumen","Arbeitsflächen + Esstisch wischen","Hochstuhl/Essbereich sauber machen","Garderobe grob ordnen"]},
+ {id:"daily-morning",title:"Morgenroutine",kind:"daily",dur:10,details:["Bett machen","Schlafzimmer lüften","Kleidung wegräumen","Wäschekorb prüfen","Vorhänge/Raffstores öffnen","Spülmaschine ausräumen","Frühstücksgeschirr einräumen","Arbeitsflächen wischen","Esstisch wischen","Hochstuhl/Essbereich sauber machen","Garderobe grob ordnen"]},
  {id:"daily-meals",title:"Nach den Mahlzeiten",kind:"daily",dur:10,details:["Geschirr in die Spülmaschine","Tisch wischen","Hochstuhl/Essbereich reinigen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf wischen"]},
  {id:"daily-evening",title:"Abendlicher 10-Minuten-Reset",kind:"daily",dur:10,details:["Spülmaschine beladen/starten","Arbeitsflächen","Herd","Spüle + Armatur","Esstisch","Hanni-Essbereich","Müll prüfen","Wohnzimmer grob resetten","Garderobe","Kleidung wegräumen","Vorhänge/Raffstores"]},
  {id:"daily-check",title:"Tagescheck",kind:"daily",dur:5,details:["Restmüll/Biomüll","Wäsche nur bei Bedarf","Toiletten nur bei Bedarf","Küchenboden bei Essensresten","Sichtbare Flecken","Kühlschrank nur bei Bedarf"]},
 
- {id:"thu-entry",title:"Eingang & Garderobe",kind:"anchor",day:4,dur:25,details:["Schuhe ordentlich","Jacken/Taschen","sichtbare Flächen","Boden bei Bedarf","Spiegel/Glas bei Bedarf"]},
- {id:"thu-hall",title:"Flur & Büro",kind:"anchor",day:4,dur:25,details:["Flur grob ordnen","Büroflächen frei machen","sichtbaren Staub entfernen","Boden bei Bedarf"]},
- {id:"thu-pantry",title:"Speis & Abstellraum",kind:"anchor",day:4,dur:25,details:["Lebensmittel grob prüfen","Arbeits-/Ablageflächen","Vorräte ordnen","sichtbaren Schmutz entfernen"]},
+ {id:"thu-entry",title:"Eingangsbereich",kind:"anchor",day:4,dur:10,details:["Eingangsbereich ordentlich machen","sichtbare Flächen","Boden nur bei Bedarf"]},
+ {id:"thu-wardrobe",title:"Garderobe",kind:"anchor",day:4,dur:10,details:["Schuhe ordnen","Jacken und Taschen ordnen","sichtbare Flächen"]},
+ {id:"thu-hall",title:"Flur",kind:"anchor",day:4,dur:10,details:["Flur ordentlich machen","sichtbaren Staub entfernen","Boden nur bei Bedarf"]},
+ {id:"thu-office",title:"Büro",kind:"anchor",day:4,dur:15,details:["Schreibtisch/Arbeitsflächen ordnen","sichtbare Flächen abstauben","Boden nur bei Bedarf"]},
+ {id:"thu-storage",title:"Abstellraum",kind:"anchor",day:4,dur:10,details:["Ordnung schaffen","sichtbare Flächen","offensichtlichen Schmutz entfernen"]},
+ {id:"thu-pantry",title:"Speis",kind:"anchor",day:4,dur:15,details:["Lebensmittel grob prüfen","Vorräte ordentlich stellen","Ablageflächen","offensichtlichen Schmutz entfernen"]},
 
- {id:"fri-laundry",title:"Waschküche – kleiner Durchgang",kind:"anchor",day:5,dur:20,details:["Waschmaschine außen","Trockner außen","Arbeitsfläche","Wäsche ordnen","Boden nur bei sichtbarem Schmutz"]},
- {id:"fri-music",title:"Musikzimmer – kleiner Durchgang",kind:"anchor",day:5,dur:15,details:["Grob aufräumen","sichtbare Flächen","offensichtlichen Schmutz"]},
- {id:"fri-training",title:"Trainingsraum – kleiner Durchgang",kind:"anchor",day:5,dur:15,details:["Sachen zurücklegen","Trainingsflächen bei Bedarf wischen","sichtbaren Schmutz"]},
+ {id:"fri-laundry",title:"Waschküche",kind:"anchor",day:5,dur:20,details:["Waschmaschine außen","Trockner außen","Arbeitsfläche","Wäsche ordnen","Boden nur bei sichtbarem Schmutz"]},
+ {id:"fri-music",title:"Musikzimmer",kind:"anchor",day:5,dur:15,details:["Grob aufräumen","sichtbare Flächen","offensichtlichen Schmutz"]},
+ {id:"fri-training",title:"Trainingsraum",kind:"anchor",day:5,dur:15,details:["Sachen zurücklegen","Trainingsflächen bei Bedarf wischen","sichtbaren Schmutz"]},
 
- {id:"mon-eg",title:"EG Wohnen · Essen · Küche",kind:"anchor",day:1,dur:35,details:["Wohnzimmer sichtbare Flächen","Essbereich","Küche","Speis nur kurz","Boden nur wenn nötig"]},
- {id:"tue-bath",title:"Bad & WC – Wochenreset",kind:"anchor",day:2,dur:35,details:["Waschbecken","Armaturen","Toiletten","Dusche/Badewanne nach Bedarf","Spiegel","Böden","Hochfrequentierte Stellen"]},
- {id:"wed-og",title:"OG Schlafen & Kinderzimmer",kind:"anchor",day:3,dur:35,details:["Schlafzimmer ordnen","Ankleidezimmer ordnen","Kinderzimmer 1","Kinderzimmer 2","Boden nach Bedarf"]},
- {id:"sat-laundry",title:"Samstag: Wäsche & eine kleine Extra-Aufgabe",kind:"anchor",day:6,dur:25,details:["Wäsche nur wenn nötig","Wäsche zusammenlegen","eine kleine Extra-Aufgabe auswählen – nicht mehrere"]},
+ {id:"mon-living",title:"Wohnzimmer",kind:"anchor",day:1,dur:15,details:["sichtbare Flächen","Grob ordnen","Boden nur bei Bedarf"]},
+ {id:"mon-dining",title:"Essbereich",kind:"anchor",day:1,dur:10,details:["Esstisch","sichtbare Flächen","Boden nur bei Bedarf"]},
+ {id:"mon-kitchen",title:"Küche",kind:"anchor",day:1,dur:20,details:["Arbeitsflächen","Herd","Spüle","sichtbare Flächen","Boden nur bei Bedarf"]},
+ {id:"tue-bath",title:"Bäder & WCs",kind:"anchor",day:2,dur:35,details:["Waschbecken","Armaturen","Toiletten","Dusche/Badewanne nach Bedarf","Spiegel","Böden"]},
+ {id:"wed-bedroom",title:"Schlafzimmer & Ankleidezimmer",kind:"anchor",day:3,dur:20,details:["Schlafzimmer ordnen","Ankleidezimmer ordnen","sichtbare Flächen"]},
+ {id:"wed-children",title:"Kinderzimmer",kind:"anchor",day:3,dur:20,details:["Kinderzimmer 1","Kinderzimmer 2","sichtbare Flächen","Boden nach Bedarf"]},
+ {id:"sat-laundry",title:"Wäsche",kind:"anchor",day:6,dur:25,details:["Wäsche nur wenn nötig","Wäsche zusammenlegen","Wäsche wegräumen"]},
 
- {id:"rotate-handles",title:"Türklinken & häufig berührte Stellen",kind:"rotation",interval:7,dur:15,details:["Türklinken abwischen","häufig berührte Stellen"],group:"Kontaktflächen"},
+ {id:"rotate-handles",title:"Türklinken",kind:"rotation",interval:7,dur:15,details:["alle relevanten Türklinken"],group:"Kontaktflächen"},
  {id:"rotate-frames",title:"Türrahmen / Zargen",kind:"rotation",interval:30,dur:20,details:["sichtbaren Staub entfernen","vorsichtig feucht nachwischen"],group:"Türen"},
  {id:"rotate-doors",title:"Türblätter",kind:"rotation",interval:75,dur:30,details:["Türblätter nach Material reinigen"],group:"Türen"},
  {id:"rotate-baseboards",title:"Sockelleisten",kind:"rotation",interval:42,dur:30,details:["absaugen/abstauben","bei Bedarf feucht wischen"],group:"Wände & Böden"},
  {id:"rotate-corners",title:"Decken-/Wandecken & Spinnweben",kind:"rotation",interval:30,dur:10,details:["Ecken kontrollieren","Spinnweben vorsichtig entfernen"],group:"Wände & Böden"},
- {id:"rotate-switches",title:"Lichtschalter außen",kind:"rotation",interval:30,dur:10,details:["nur außen reinigen","leicht feucht, nicht durchnässen"],group:"Kontaktflächen"},
+ {id:"rotate-switches",title:"Lichtschalter",kind:"rotation",interval:30,dur:10,details:["nur außen reinigen"],group:"Kontaktflächen"},
  {id:"rotate-outlets",title:"Steckdosen außen",kind:"rotation",interval:75,dur:10,details:["nur außen abstauben/wischen","niemals öffnen"],group:"Kontaktflächen"},
- {id:"rotate-stucco",title:"Stuck – sanfter Staubdurchgang",kind:"rotation",interval:120,dur:20,details:["trocken und materialschonend entstauben","Material beachten"],group:"Wände & Decken"},
+ {id:"rotate-stucco",title:"Stuck",kind:"rotation",interval:120,dur:20,details:["trocken und materialschonend entstauben"],group:"Wände & Decken"},
  {id:"rotate-windows",title:"Fenster – Teilabschnitt",kind:"rotation",interval:180,dur:45,details:["Fenster nach Abschnitten reinigen","Rahmen/Falze mitmachen"],group:"Fenster"},
  {id:"rotate-blinds",title:"Raffstores",kind:"rotation",interval:180,dur:30,details:["Herstellerhinweise beachten","Lamellen schonend reinigen"],group:"Fenster"},
  {id:"rotate-curtains",title:"Vorhänge & Schienen",kind:"rotation",interval:180,dur:30,details:["Pflegeetikett beachten","Schienen/Stangen abstauben"],group:"Textilien"},
- {id:"rotate-fridge",title:"Kühlschrank – Monatscheck",kind:"rotation",interval:30,dur:20,details:["verdorbene Lebensmittel raus","Fächer/Flächen bei Bedarf reinigen"],group:"Küche"},
+ {id:"rotate-fridge",title:"Kühlschrank",kind:"rotation",interval:30,dur:20,details:["verdorbene Lebensmittel entfernen","Fächer/Flächen bei Bedarf reinigen"],group:"Küche"},
  {id:"rotate-oven",title:"Backofen",kind:"rotation",interval:75,dur:30,details:["Innenraum reinigen","Roste/Bleche bei Bedarf"],group:"Küche"},
  {id:"rotate-dishwasher",title:"Spülmaschine – Pflege",kind:"rotation",interval:30,dur:10,details:["Filter reinigen","Dichtung kontrollieren","Pflegeprogramm nach Hersteller"],group:"Küche"},
- {id:"rotate-washer",title:"Waschmaschine – Pflege",kind:"rotation",interval:30,dur:15,details:["Waschmittelschublade","Türdichtung","Tür offen trocknen lassen","Pflegeprogramm nach Hersteller"],group:"Waschküche"},
+ {id:"rotate-washer",title:"Waschmaschine – Pflege",kind:"rotation",interval:30,dur:15,details:["Waschmittelschublade","Türdichtung","Pflegeprogramm nach Hersteller"],group:"Waschküche"},
  {id:"rotate-sauna",title:"Saunaraum – Monatscheck",kind:"rotation",interval:30,dur:20,details:["Oberflächen","Boden","nach Hersteller reinigen"],group:"Sauna"},
  {id:"rotate-mattress",title:"Matratzen – Pflege",kind:"rotation",interval:180,dur:20,details:["nach Pflegehinweisen","wenden/rotieren nur wenn vorgesehen"],group:"Schlafzimmer"},
- {id:"rotate-grout",title:"Fugen & Silikon – Kontrolle",kind:"rotation",interval:90,dur:20,details:["Fugen kontrollieren","Silikon kontrollieren","nur bei Bedarf gründlicher reinigen"],group:"Bad"},
- {id:"rotate-lamps",title:"Erreichbare Lampen",kind:"rotation",interval:120,dur:15,details:["nur sicher erreichbare Lampen","trocken/geeignet reinigen"],group:"Licht"}
+ {id:"rotate-grout",title:"Fugen & Silikon – Kontrolle",kind:"rotation",interval:90,dur:20,details:["Fugen kontrollieren","Silikon kontrollieren"],group:"Bad"},
+ {id:"rotate-lamps",title:"Erreichbare Lampen",kind:"rotation",interval:120,dur:15,details:["nur sicher erreichbare Lampen"],group:"Licht"}
 ];
 
-// Jede einzelne Tätigkeit wird zu einer eigenen Karte.
-// So kann wirklich jedes To-do separat nach rechts (erledigt) oder links (später) gewischt werden.
-const locations = {
-  "daily-morning":"OG · Schlafzimmer / Ankleidezimmer / Kinderzimmer · EG · Garderobe / Küche / Essbereich",
-  "daily-meals":"EG · Küche / Essbereich",
-  "daily-evening":"EG · Küche / Essbereich / Wohnzimmer / Garderobe",
-  "daily-check":"EG · Küche / Gäste-WC · gesamtes Haus bei Bedarf",
-  "thu-entry":"EG · Eingangsbereich / Garderobe",
-  "thu-hall":"EG · Flur / Büro",
-  "thu-pantry":"EG · Speis / Abstellraum",
-  "fri-laundry":"Keller · Waschküche",
-  "fri-music":"Keller · Musikzimmer",
-  "fri-training":"Keller · Trainingsraum",
-  "mon-eg":"EG · Wohnzimmer / Essbereich / Küche / Speis",
-  "tue-bath":"EG · Gäste-WC · OG · Kinderbad / Bad / WC / Saunaraum",
-  "wed-og":"OG · Elternbereich / Schlafzimmer / Ankleidezimmer / Kinderzimmer 1 / Kinderzimmer 2",
-  "sat-laundry":"Keller · Waschküche · gesamtes Haus für Wäsche",
-  "rotate-handles":"gesamtes Haus · alle relevanten Türen",
-  "rotate-frames":"gesamtes Haus · Türrahmen / Zargen",
-  "rotate-doors":"gesamtes Haus · Türblätter",
-  "rotate-baseboards":"gesamtes Haus · Sockelleisten",
-  "rotate-corners":"gesamtes Haus · Decken-/Wandecken",
-  "rotate-switches":"gesamtes Haus · Lichtschalter",
-  "rotate-outlets":"gesamtes Haus · Steckdosen",
-  "rotate-stucco":"gesamtes Haus · Stuck",
-  "rotate-windows":"gesamtes Haus · Fenster nach Abschnitt",
-  "rotate-blinds":"gesamtes Haus · Raffstores",
-  "rotate-curtains":"gesamtes Haus · Vorhänge / Schienen",
-  "rotate-fridge":"EG · Küche · Kühlschrank",
-  "rotate-oven":"EG · Küche · Backofen",
-  "rotate-dishwasher":"EG · Küche · Spülmaschine",
-  "rotate-washer":"Keller · Waschküche · Waschmaschine",
-  "rotate-sauna":"OG · Saunaraum",
-  "rotate-mattress":"OG · Schlafzimmer / Kinderzimmer",
-  "rotate-grout":"OG · Kinderbad / Bad / WC · EG · Gäste-WC",
-  "rotate-lamps":"gesamtes Haus · erreichbare Lampen"
-};
-
-const baseTasks = tasks.slice();
-tasks.length = 0;
-baseTasks.forEach(t => {
-  const items = (t.details && t.details.length) ? t.details : [t.title];
-  items.forEach((item, i) => {
-    tasks.push({
-      ...t,
-      id: items.length === 1 ? t.id : `${t.id}-${i}`,
-      title: items.length === 1 ? t.title : item,
-      parentTitle: items.length === 1 ? "" : t.title,
-      location: locations[t.id] || "gesamtes Haus",
-      details: [items.length === 1 ? item : item],
-      dur: Math.max(2, Math.round(t.dur / items.length))
-    });
-  });
-});
-
-
-const STORAGE_KEY="zuhauseStateV3";
+const STORAGE_KEY="zuhauseStateV4";
 const raw=localStorage.getItem(STORAGE_KEY);
 const state=raw?JSON.parse(raw):{"done":{},"skipped":{},"lastDone":{},"chaos":false};
 function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
@@ -210,7 +160,7 @@ function taskCard(t,swipe=true){
  return `<div class="card task ${done?"done":""}" data-id="${t.id}">
    <div class="under right">ERLEDIGT ✓</div><div class="under left">SPÄTER</div>
    <div class="body">
-    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">📍 ${t.location || "gesamtes Haus"}</div><div class="tag">${t.parentTitle ? t.parentTitle+" · " : ""}${t.dur} Min · ${t.kind==="rotation"?"Rotation":"heute"}</div></div>
+    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">${t.parentTitle ? t.parentTitle+" · " : ""}${t.dur} Min · ${t.kind==="rotation"?"Rotation":"heute"}</div></div>
     <span class="badge">${done?"✓ erledigt":"wischen"}</span>
    </div></div>`
 }
@@ -238,10 +188,10 @@ function renderToday(){
  const d=new Date(), dow=d.getDay()===0?7:d.getDay();
  const daily=tasks.filter(t=>t.kind==="daily");
  const anchors=tasks.filter(t=>t.kind==="anchor"&&t.day===dow);
- const due=tasks.filter(t=>t.kind==="rotation"&&daysSince(state.lastDone[t.id])>=t.interval);
+ const due=[];
  const active=[...daily,...anchors,...due];
  const done=active.filter(isDone).length, total=active.length;
- let html=`<div class="hint">👉 <b>Nach rechts wischen = erledigt.</b> Nach links = für heute überspringen. Nichts wird morgen automatisch nachgeholt. Deine Rotation richtet sich nach dem letzten echten Erledigungsdatum.</div>
+ let html=`<div class="hint">👉 <b>Nach rechts wischen = erledigt.</b> Nach links = für heute überspringen. Nichts wird morgen automatisch nachgeholt.<br><br><b>Heute: EG · Eingangsbereich, Garderobe, Flur, Büro, Abstellraum & Speis.</b> Keine Bäder, keine Spezial-Rotation.</div>
  <div class="grid"><div class="stat"><div class="num">${done}/${total}</div><div class="label">heute erledigt</div></div><div class="stat"><div class="num">${active.reduce((a,t)=>a+t.dur,0)} Min</div><div class="label">maximal heute geplant</div></div></div>
  <div class="sectionhead"><h2>Heute</h2><button class="smallbtn" onclick="resetToday()">Tag zurücksetzen</button></div>
  <div class="progress"><i style="width:${total?done/total*100:0}%"></i></div>`;
