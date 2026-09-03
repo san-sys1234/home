@@ -10,378 +10,156 @@
 <link rel="manifest" href="manifest.webmanifest">
 <title>Unser Zuhause</title>
 <style>
-:root{--bg:#f7f3ed;--card:#fffdf9;--ink:#342f2a;--muted:#82786e;--line:#e8dfd5;--accent:#9b7b61;--green:#78966e;--rose:#c98d8d;--shadow:0 8px 24px rgba(64,45,30,.07)}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif}
-header{padding:22px 18px 12px;position:sticky;top:0;background:rgba(247,243,237,.94);backdrop-filter:blur(12px);z-index:5}
-h1{font-size:27px;margin:0 0 3px} h2{font-size:20px;margin:22px 0 10px} h3{margin:0;font-size:16px}.sub{color:var(--muted);font-size:13px}
-nav{display:flex;gap:7px;padding:7px 12px 12px;position:sticky;top:73px;background:rgba(247,243,237,.94);z-index:4}
-nav button{flex:1;border:0;background:#eee7df;border-radius:14px;padding:10px 4px;color:#665b51;font-weight:600}
+:root{--bg:#f7f3ed;--card:#fffdf9;--ink:#342f2a;--muted:#82786e;--line:#e8dfd5;--green:#78966e;--rose:#c98d8d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif}
+header{padding:22px 18px 12px;position:sticky;top:0;background:rgba(247,243,237,.96);backdrop-filter:blur(12px);z-index:5}
+h1{font-size:27px;margin:0 0 3px}.sub{color:var(--muted);font-size:13px}
+nav{display:flex;gap:7px;padding:7px 12px 12px;position:sticky;top:73px;background:rgba(247,243,237,.96);z-index:4}
+nav button{flex:1;border:0;background:#eee7df;border-radius:14px;padding:10px 4px;color:#665b51;font-weight:650}
 nav button.active{background:var(--ink);color:white}
-main{padding:0 14px 90px;max-width:720px;margin:auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);margin:10px 0;overflow:hidden}
-.task{position:relative;touch-action:pan-y;overflow:hidden}
-.task .under{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 22px;color:white;font-weight:800;opacity:0}
-.task .under.right{background:var(--green)} .task .under.left{background:var(--rose);justify-content:flex-end}
-.task .body{position:relative;background:var(--card);padding:15px 16px;min-height:68px;display:flex;align-items:center;gap:12px;transition:transform .12s ease}
-.dot{width:14px;height:14px;border:2px solid #cfc4b8;border-radius:50%;flex:0 0 auto}.tag{font-size:11px;color:var(--muted);margin-top:4px}
-.badge{font-size:11px;padding:4px 7px;border-radius:9px;background:#eee7df;color:#695d52;margin-left:auto;white-space:nowrap}
-.done{opacity:.58}.done .dot{background:var(--green);border-color:var(--green)}
-.done .title{text-decoration:line-through}
-.sectionhead{display:flex;justify-content:space-between;align-items:end;margin-top:20px}
-.smallbtn{border:0;background:#ebe2d9;color:#62574d;border-radius:12px;padding:8px 10px;font-weight:600}
-.hint{background:#f0e8df;border-radius:16px;padding:11px 13px;color:#675c53;font-size:13px;margin:10px 0 14px}
-.chaos{background:#f5e4df}.progress{height:8px;background:#e6ddd4;border-radius:8px;overflow:hidden}.progress>i{display:block;height:100%;background:var(--green);width:0}
+main{padding:0 14px 90px;max-width:720px;margin:auto}.hint{background:#f0e8df;border-radius:16px;padding:12px 14px;color:#675c53;font-size:13px;margin:10px 0 14px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:15px;background:var(--card);border:1px solid var(--line);border-radius:18px}.num{font-size:25px;font-weight:750}.label{font-size:12px;color:var(--muted)}
-.day{padding:14px}.day strong{display:block}.day ul{padding-left:18px;margin:8px 0 0;color:#665c54;font-size:13px}
-.hidden{display:none}.empty{text-align:center;padding:35px 15px;color:var(--muted)}
-.modal{position:fixed;inset:0;background:rgba(35,28,23,.35);display:none;align-items:flex-end;z-index:20}.modal.show{display:flex}.sheet{background:var(--card);width:100%;border-radius:25px 25px 0 0;padding:20px;max-height:80vh;overflow:auto}.close{float:right;border:0;background:#eee7df;border-radius:50%;width:32px;height:32px}
-footer{position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:rgba(247,243,237,.95);backdrop-filter:blur(12px);z-index:6}
-footer button{width:100%;padding:13px;border:0;border-radius:15px;background:var(--ink);color:white;font-weight:700}
+.sectionhead{display:flex;justify-content:space-between;align-items:center;margin-top:20px}.sectionhead h2{margin:0}h2{font-size:20px;margin:22px 0 10px}
+.smallbtn{border:0;background:#ebe2d9;color:#62574d;border-radius:12px;padding:8px 10px;font-weight:600}
+.progress{height:8px;background:#e6ddd4;border-radius:8px;overflow:hidden;margin:10px 0 14px}.progress i{display:block;height:100%;background:var(--green);width:0}
+.room{background:var(--card);border:1px solid var(--line);border-radius:20px;margin:12px 0;overflow:hidden}
+.roomhead{display:flex;justify-content:space-between;align-items:center;padding:15px 16px 11px;background:#faf6f0}.roomtitle{font-size:18px;font-weight:750}.count{font-size:12px;background:#e8e0d7;padding:6px 9px;border-radius:11px;color:#62574d}
+.task{position:relative;overflow:hidden;border-top:1px solid var(--line);touch-action:pan-y}.under{position:absolute;inset:0;display:flex;align-items:center;padding:0 20px;color:white;font-weight:800;opacity:0}.under.right{background:var(--green)}.under.left{background:var(--rose);justify-content:flex-end}
+.body{position:relative;background:var(--card);display:flex;align-items:center;gap:12px;padding:13px 14px;min-height:60px;transition:transform .12s ease}.dot{width:14px;height:14px;border:2px solid #cfc4b8;border-radius:50%;flex:none}.title{font-size:15px}.done .dot{background:var(--green);border-color:var(--green)}.done .title{text-decoration:line-through;opacity:.6}.task.done{opacity:.65}
+.badge{margin-left:auto;font-size:11px;padding:5px 7px;border-radius:9px;background:#eee7df;color:#695d52;white-space:nowrap}
+.day{padding:14px;background:var(--card);border:1px solid var(--line);border-radius:18px;margin:10px 0}.day strong{font-size:16px}.day ul{margin:8px 0 0;padding-left:18px;color:#665c54;font-size:13px}
+.empty{text-align:center;color:var(--muted);padding:35px 10px}
+footer{position:fixed;bottom:0;left:0;right:0;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:rgba(247,243,237,.96);z-index:6}footer button{width:100%;padding:13px;border:0;border-radius:15px;background:var(--ink);color:#fff;font-weight:700}
+.modal{position:fixed;inset:0;background:rgba(35,28,23,.35);display:none;align-items:flex-end;z-index:20}.modal.show{display:flex}.sheet{background:var(--card);width:100%;border-radius:25px 25px 0 0;padding:20px;max-height:75vh;overflow:auto}.close{float:right;border:0;background:#eee7df;border-radius:50%;width:32px;height:32px}
 @media(min-width:700px){footer{position:static;background:none;padding:15px 0}footer button{width:auto}}
-
-.roomcard{overflow:hidden}
-.roomhead{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 12px;background:#faf6f0}
-.roomtitle{font-size:18px;font-weight:750}
-.roombadge{font-size:12px;background:#e8e0d7;padding:6px 9px;border-radius:11px;color:#62574d}
-.roomtasks{padding:0 10px 10px}
-.roomtasks .card{margin:8px 0;border-radius:15px;box-shadow:none}
-.roomtasks .body{min-height:58px;padding:12px 13px}
-.roomtasks .tag{font-size:11px}
 </style>
 </head>
 <body>
 <header><h1>Unser Zuhause 🏡</h1><div class="sub" id="date"></div></header>
-<nav>
-<button data-tab="today" class="active">Heute</button>
-<button data-tab="week">Woche</button>
-<button data-tab="rotation">Rotation</button>
-</nav>
-<main>
-<section id="today"></section>
-<section id="week" class="hidden"></section>
-<section id="rotation" class="hidden"></section>
-</main>
-<footer><button id="chaosBtn">🧸 Hanni-Chaosmodus</button></footer>
-<div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="modalContent"></div></div></div>
+<nav><button class="active" data-tab="today">Heute</button><button data-tab="week">Woche</button><button data-tab="rotation">Rotation</button></nav>
+<main><section id="today"></section><section id="week" hidden></section><section id="rotation" hidden></section></main>
+<footer><button id="chaos">🧸 Hanni-Chaosmodus</button></footer>
+<div class="modal" id="modal"><div class="sheet"><button class="close" id="close">×</button><div id="modalText"></div></div></div>
 <script>
-const rooms = {
-  egLiving:["Wohnzimmer","Essbereich","Küche","Speis"],
-  egEntry:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum"],
-  bath:["Gäste-WC","Kinderbad","Bad","WC","Saunaraum"],
-  og:["Elternbereich","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"],
-  basement:["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Keller"]
+const KEY="unserZuhauseV10";
+const state=JSON.parse(localStorage.getItem(KEY)||'{"done":{},"skipped":{},"lastDone":{},"chaos":false}');
+const today=()=>new Date().toISOString().slice(0,10);
+const germanDate=()=>new Date().toLocaleDateString("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
+const dayNumber=()=>{const n=new Date().getDay();return n===0?7:n};
+const save=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
+const idFor=(room,index)=>today()+"|"+room+"|"+index;
+const done=id=>!!state.done[id], skipped=id=>!!state.skipped[id];
+const finish=id=>{state.done[id]=true;delete state.skipped[id];save()};
+const later=id=>{state.skipped[id]=true;save()};
+const roomsByDay={
+  1:[
+    ["Wohnzimmer",["Herumliegende Dinge grob wegräumen","Sichtbare Flächen abstauben","Sofakissen richten","Boden bei Bedarf saugen"]],
+    ["Essbereich",["Esstisch abwischen","Stühle kurz abwischen","Sichtbare Krümel entfernen","Boden bei Bedarf saugen"]],
+    ["Küche",["Arbeitsflächen wischen","Herd wischen","Spüle und Armatur wischen","Fronten bei sichtbaren Flecken wischen","Boden bei Bedarf saugen"]]
+  ],
+  2:[
+    ["Gäste-WC · EG",["Waschbecken reinigen","Armatur reinigen","Toilette reinigen","Spiegel reinigen","Boden reinigen"]],
+    ["Kinderbad · OG",["Waschbecken reinigen","Armatur reinigen","Badewanne/Dusche reinigen","Spiegel reinigen","Toilette reinigen","Boden reinigen"]],
+    ["Bad · OG",["Waschbecken reinigen","Armaturen reinigen","Dusche/Badewanne reinigen","Spiegel reinigen","Toilette reinigen","Boden reinigen"]],
+    ["WC · OG",["Waschbecken reinigen","Armatur reinigen","Toilette reinigen","Spiegel reinigen","Boden reinigen"]]
+  ],
+  3:[
+    ["Schlafzimmer · OG",["Bett machen","Kleidung wegräumen","Nachttische ordnen","Sichtbare Flächen abstauben","Boden saugen"]],
+    ["Ankleidezimmer · OG",["Kleidung ordentlich einräumen","Herumliegende Dinge wegräumen","Ablagen ordnen","Sichtbare Flächen abstauben","Boden saugen"]],
+    ["Kinderzimmer 1 · OG",["Herumliegende Dinge grob ordnen","Sichtbare Flächen abstauben","Boden saugen"]],
+    ["Kinderzimmer 2 · OG",["Herumliegende Dinge grob ordnen","Sichtbare Flächen abstauben","Boden saugen"]]
+  ],
+  4:[
+    ["Eingangsbereich · EG",["Herumliegende Dinge wegräumen","Ablageflächen aufräumen","Ablageflächen abwischen","Spiegel reinigen","Boden bei Bedarf saugen"]],
+    ["Garderobe · EG",["Schuhe ordentlich stellen","Jacken und Taschen ordnen","Garderobenbank / Ablage aufräumen","Garderobenflächen abwischen","Spiegel reinigen"]],
+    ["Flur · EG",["Herumliegende Dinge wegräumen","Sichtbare Flächen abstauben","Boden saugen"]],
+    ["Büro · EG",["Schreibtisch aufräumen","Arbeitsflächen abwischen","Sichtbare Flächen abstauben","Papier und herumliegende Dinge ordnen","Boden saugen"]],
+    ["Abstellraum · EG",["Dinge an ihren Platz stellen","Ablageflächen ordnen","Sichtbaren Staub entfernen","Boden bei Bedarf reinigen"]],
+    ["Speis · EG",["Lebensmittel auf Ablauf prüfen","Vorräte ordentlich stellen","Ablageflächen abwischen","Krümel und sichtbaren Schmutz entfernen","Boden bei Bedarf saugen"]]
+  ],
+  5:[
+    ["Waschküche · Keller",["Waschmaschine außen abwischen","Trockner außen abwischen","Arbeitsfläche abwischen","Wäsche ordnen","Boden bei sichtbarem Schmutz reinigen"]],
+    ["Musikzimmer · Keller",["Herumliegende Dinge grob ordnen","Sichtbare Flächen abstauben","Offensichtlichen Schmutz entfernen"]],
+    ["Trainingsraum · Keller",["Sachen zurücklegen","Trainingsflächen bei Bedarf wischen","Sichtbaren Schmutz entfernen"]]
+  ],
+  6:[
+    ["Waschküche · Keller",["Wäsche nur bei Bedarf waschen","Wäsche zusammenlegen","Wäsche wegräumen"]],
+    ["Kleine Extra-Aufgabe",["Genau eine kleine Zusatzaufgabe auswählen"]]
+  ],
+  7:[]
 };
-const tasks = [
- {id:"daily-morning",title:"Morgenroutine",kind:"daily",dur:10,details:["Bett machen","Schlafzimmer lüften","Kleidung wegräumen","Wäschekorb prüfen","Vorhänge/Raffstores öffnen","Spülmaschine ausräumen","Frühstücksgeschirr einräumen","Arbeitsflächen wischen","Esstisch wischen","Hochstuhl/Essbereich sauber machen","Garderobe grob ordnen"]},
- {id:"daily-meals",title:"Nach den Mahlzeiten",kind:"daily",dur:10,details:["Geschirr in die Spülmaschine","Tisch wischen","Hochstuhl/Essbereich reinigen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf wischen"]},
- {id:"daily-evening",title:"Abendlicher 10-Minuten-Reset",kind:"daily",dur:10,details:["Spülmaschine beladen/starten","Arbeitsflächen","Herd","Spüle + Armatur","Esstisch","Hanni-Essbereich","Müll prüfen","Wohnzimmer grob resetten","Garderobe","Kleidung wegräumen","Vorhänge/Raffstores"]},
- {id:"daily-check",title:"Tagescheck",kind:"daily",dur:5,details:["Restmüll/Biomüll","Wäsche nur bei Bedarf","Toiletten nur bei Bedarf","Küchenboden bei Essensresten","Sichtbare Flecken","Kühlschrank nur bei Bedarf"]},
-
- {id:"thu-entry",title:"Eingangsbereich",kind:"anchor",day:4,dur:10,details:["Eingangsbereich ordentlich machen","sichtbare Flächen","Boden nur bei Bedarf"]},
- {id:"thu-wardrobe",title:"Garderobe",kind:"anchor",day:4,dur:10,details:["Schuhe ordnen","Jacken und Taschen ordnen","sichtbare Flächen"]},
- {id:"thu-hall",title:"Flur",kind:"anchor",day:4,dur:10,details:["Flur ordentlich machen","sichtbaren Staub entfernen","Boden nur bei Bedarf"]},
- {id:"thu-office",title:"Büro",kind:"anchor",day:4,dur:15,details:["Schreibtisch/Arbeitsflächen ordnen","sichtbare Flächen abstauben","Boden nur bei Bedarf"]},
- {id:"thu-storage",title:"Abstellraum",kind:"anchor",day:4,dur:10,details:["Ordnung schaffen","sichtbare Flächen","offensichtlichen Schmutz entfernen"]},
- {id:"thu-pantry",title:"Speis",kind:"anchor",day:4,dur:15,details:["Lebensmittel grob prüfen","Vorräte ordentlich stellen","Ablageflächen","offensichtlichen Schmutz entfernen"]},
-
- {id:"fri-laundry",title:"Waschküche",kind:"anchor",day:5,dur:20,details:["Waschmaschine außen","Trockner außen","Arbeitsfläche","Wäsche ordnen","Boden nur bei sichtbarem Schmutz"]},
- {id:"fri-music",title:"Musikzimmer",kind:"anchor",day:5,dur:15,details:["Grob aufräumen","sichtbare Flächen","offensichtlichen Schmutz"]},
- {id:"fri-training",title:"Trainingsraum",kind:"anchor",day:5,dur:15,details:["Sachen zurücklegen","Trainingsflächen bei Bedarf wischen","sichtbaren Schmutz"]},
-
- {id:"mon-living",title:"Wohnzimmer",kind:"anchor",day:1,dur:15,details:["sichtbare Flächen","Grob ordnen","Boden nur bei Bedarf"]},
- {id:"mon-dining",title:"Essbereich",kind:"anchor",day:1,dur:10,details:["Esstisch","sichtbare Flächen","Boden nur bei Bedarf"]},
- {id:"mon-kitchen",title:"Küche",kind:"anchor",day:1,dur:20,details:["Arbeitsflächen","Herd","Spüle","sichtbare Flächen","Boden nur bei Bedarf"]},
- {id:"tue-bath",title:"Bäder & WCs",kind:"anchor",day:2,dur:35,details:["Waschbecken","Armaturen","Toiletten","Dusche/Badewanne nach Bedarf","Spiegel","Böden"]},
- {id:"wed-bedroom",title:"Schlafzimmer & Ankleidezimmer",kind:"anchor",day:3,dur:20,details:["Schlafzimmer ordnen","Ankleidezimmer ordnen","sichtbare Flächen"]},
- {id:"wed-children",title:"Kinderzimmer",kind:"anchor",day:3,dur:20,details:["Kinderzimmer 1","Kinderzimmer 2","sichtbare Flächen","Boden nach Bedarf"]},
- {id:"sat-laundry",title:"Wäsche",kind:"anchor",day:6,dur:25,details:["Wäsche nur wenn nötig","Wäsche zusammenlegen","Wäsche wegräumen"]},
-
- {id:"rotate-handles",title:"Türklinken",kind:"rotation",interval:7,dur:15,details:["alle relevanten Türklinken"],group:"Kontaktflächen"},
- {id:"rotate-frames",title:"Türrahmen / Zargen",kind:"rotation",interval:30,dur:20,details:["sichtbaren Staub entfernen","vorsichtig feucht nachwischen"],group:"Türen"},
- {id:"rotate-doors",title:"Türblätter",kind:"rotation",interval:75,dur:30,details:["Türblätter nach Material reinigen"],group:"Türen"},
- {id:"rotate-baseboards",title:"Sockelleisten",kind:"rotation",interval:42,dur:30,details:["absaugen/abstauben","bei Bedarf feucht wischen"],group:"Wände & Böden"},
- {id:"rotate-corners",title:"Decken-/Wandecken & Spinnweben",kind:"rotation",interval:30,dur:10,details:["Ecken kontrollieren","Spinnweben vorsichtig entfernen"],group:"Wände & Böden"},
- {id:"rotate-switches",title:"Lichtschalter",kind:"rotation",interval:30,dur:10,details:["nur außen reinigen"],group:"Kontaktflächen"},
- {id:"rotate-outlets",title:"Steckdosen außen",kind:"rotation",interval:75,dur:10,details:["nur außen abstauben/wischen","niemals öffnen"],group:"Kontaktflächen"},
- {id:"rotate-stucco",title:"Stuck",kind:"rotation",interval:120,dur:20,details:["trocken und materialschonend entstauben"],group:"Wände & Decken"},
- {id:"rotate-windows",title:"Fenster – Teilabschnitt",kind:"rotation",interval:180,dur:45,details:["Fenster nach Abschnitten reinigen","Rahmen/Falze mitmachen"],group:"Fenster"},
- {id:"rotate-blinds",title:"Raffstores",kind:"rotation",interval:180,dur:30,details:["Herstellerhinweise beachten","Lamellen schonend reinigen"],group:"Fenster"},
- {id:"rotate-curtains",title:"Vorhänge & Schienen",kind:"rotation",interval:180,dur:30,details:["Pflegeetikett beachten","Schienen/Stangen abstauben"],group:"Textilien"},
- {id:"rotate-fridge",title:"Kühlschrank",kind:"rotation",interval:30,dur:20,details:["verdorbene Lebensmittel entfernen","Fächer/Flächen bei Bedarf reinigen"],group:"Küche"},
- {id:"rotate-oven",title:"Backofen",kind:"rotation",interval:75,dur:30,details:["Innenraum reinigen","Roste/Bleche bei Bedarf"],group:"Küche"},
- {id:"rotate-dishwasher",title:"Spülmaschine – Pflege",kind:"rotation",interval:30,dur:10,details:["Filter reinigen","Dichtung kontrollieren","Pflegeprogramm nach Hersteller"],group:"Küche"},
- {id:"rotate-washer",title:"Waschmaschine – Pflege",kind:"rotation",interval:30,dur:15,details:["Waschmittelschublade","Türdichtung","Pflegeprogramm nach Hersteller"],group:"Waschküche"},
- {id:"rotate-sauna",title:"Saunaraum – Monatscheck",kind:"rotation",interval:30,dur:20,details:["Oberflächen","Boden","nach Hersteller reinigen"],group:"Sauna"},
- {id:"rotate-mattress",title:"Matratzen – Pflege",kind:"rotation",interval:180,dur:20,details:["nach Pflegehinweisen","wenden/rotieren nur wenn vorgesehen"],group:"Schlafzimmer"},
- {id:"rotate-grout",title:"Fugen & Silikon – Kontrolle",kind:"rotation",interval:90,dur:20,details:["Fugen kontrollieren","Silikon kontrollieren"],group:"Bad"},
- {id:"rotate-lamps",title:"Erreichbare Lampen",kind:"rotation",interval:120,dur:15,details:["nur sicher erreichbare Lampen"],group:"Licht"}
+const daily=[
+ ["Morgenroutine · Alltag",["Bett machen","Schlafzimmer lüften","Kleidung wegräumen","Wäschekorb prüfen","Vorhänge / Raffstores öffnen","Spülmaschine ausräumen","Frühstücksgeschirr einräumen","Arbeitsflächen wischen","Esstisch wischen","Hochstuhl / Essbereich reinigen","Garderobe grob ordnen"]],
+ ["Nach den Mahlzeiten · EG",["Geschirr in die Spülmaschine räumen","Esstisch wischen","Hochstuhl / Essbereich reinigen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf wischen"]],
+ ["Abendlicher 10-Minuten-Reset · Alltag",["Spülmaschine beladen und starten","Arbeitsflächen wischen","Herd wischen","Spüle und Armatur wischen","Esstisch wischen","Hanni-Essbereich reinigen","Müll prüfen","Wohnzimmer grob zurücksetzen","Garderobe grob ordnen","Kleidung wegräumen"]],
+ ["Tagescheck · Alltag",["Restmüll / Biomüll prüfen","Wäsche nur bei Bedarf","Toiletten nur bei Bedarf prüfen","Küchenboden bei Essensresten reinigen","Sichtbare Flecken entfernen"]]
 ];
-
-const STORAGE_KEY="zuhauseStateV6";
-const raw=localStorage.getItem(STORAGE_KEY);
-const state=raw?JSON.parse(raw):{"done":{},"skipped":{},"lastDone":{},"chaos":false};
-function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
-function key(id,date=todayKey()){return id+"@"+date}
-function todayKey(){let d=new Date();return d.toISOString().slice(0,10)}
-function dateDE(s){return new Date(s+"T12:00:00").toLocaleDateString("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"})}
-function daysSince(s){if(!s)return 9999;return Math.floor((new Date(todayKey())-new Date(s))/86400000)}
-function addDays(base,n){let d=new Date(base+"T12:00:00");d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
-function seedRotation(){
-  if(localStorage.getItem(STORAGE_KEY)) return;
-  // Gentle staggered start: only a few rotation tasks are due on day 1.
-  const seedOffsets={
-    "rotate-handles":0,
-    "rotate-frames":7,
-    "rotate-doors":21,
-    "rotate-baseboards":3,
-    "rotate-corners":14,
-    "rotate-switches":10,
-    "rotate-outlets":35,
-    "rotate-stucco":60,
-    "rotate-windows":90,
-    "rotate-blinds":120,
-    "rotate-curtains":150,
-    "rotate-fridge":0,
-    "rotate-oven":28,
-    "rotate-dishwasher":16,
-    "rotate-washer":0,
-    "rotate-sauna":12,
-    "rotate-mattress":75,
-    "rotate-grout":40,
-    "rotate-lamps":55
-  };
-  Object.entries(seedOffsets).forEach(([id,offset])=>{
-    tasks.filter(x=>x.id===id || x.id.startsWith(id+"-")).forEach(t=>{
-      state.lastDone[t.id]=addDays(todayKey(),-(Math.max(0,t.interval-offset)));
-    });
-  });
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-}
-seedRotation();
-function isDone(t){return !!state.done[key(t.id)]}
-function isSkipped(t){return !!state.skipped[key(t.id)]}
-function complete(t){state.done[key(t.id)]=true;state.lastDone[t.id]=todayKey();delete state.skipped[key(t.id)];save()}
-function skip(t){state.skipped[key(t.id)]=true;save()}
-function resetToday(){Object.keys(state.done).filter(k=>k.endsWith("@"+todayKey())).forEach(k=>delete state.done[k]);Object.keys(state.skipped).filter(k=>k.endsWith("@"+todayKey())).forEach(k=>delete state.skipped[k]);save()}
+const rotations=[
+ ["Türklinken",7,"gesamtes Haus"],["Türrahmen / Zargen",30,"gesamtes Haus"],["Türblätter",75,"gesamtes Haus"],
+ ["Sockelleisten",42,"gesamtes Haus"],["Decken-/Wandecken & Spinnweben",30,"gesamtes Haus"],["Lichtschalter",30,"gesamtes Haus"],
+ ["Steckdosen außen",75,"gesamtes Haus"],["Stuck",120,"gesamtes Haus"],["Fenster – Teilabschnitt",180,"gesamtes Haus"],
+ ["Raffstores",180,"gesamtes Haus"],["Vorhänge & Schienen",180,"gesamtes Haus"],["Kühlschrank",30,"Küche · EG"],
+ ["Backofen",75,"Küche · EG"],["Spülmaschine – Pflege",30,"Küche · EG"],["Waschmaschine – Pflege",30,"Waschküche · Keller"],
+ ["Saunaraum – Monatscheck",30,"Saunaraum · OG"],["Matratzen – Pflege",180,"Schlafzimmer / Kinderzimmer · OG"],
+ ["Fugen & Silikon – Kontrolle",90,"Bäder & WCs"],["Erreichbare Lampen",120,"gesamtes Haus"]
+];
 function taskCard(t){
- let done=isDone(t), skipped=isSkipped(t);
- if(skipped)return "";
- return `<div class="card task ${done?"done":""}" data-id="${t.id}">
-   <div class="under right">ERLEDIGT ✓</div><div class="under left">SPÄTER</div>
-   <div class="body">
-    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">${t.dur} Min</div></div>
-    <span class="badge">${done?"✓ erledigt":"wischen"}</span>
-   </div></div>`
-}
-function roomCard(title, subtitle, subtasks){
- const visible=subtasks.filter(t=>!isSkipped(t));
- if(!visible.length)return "";
- const done=visible.filter(isDone).length;
- return `<div class="card roomcard">
-   <div class="roomhead">
-     <div><div class="roomtitle">${title}</div><div class="sub">${subtitle}</div></div>
-     <div class="roombadge">${done}/${visible.length}</div>
-   </div>
-   <div class="roomtasks">
-     ${visible.map(t=>taskCard(t)).join("")}
-   </div>
+ const isDone=done(t.id);
+ return `<div class="task ${isDone?"done":""}" data-id="${t.id}">
+  <div class="under right">ERLEDIGT ✓</div><div class="under left">SPÄTER</div>
+  <div class="body"><span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="sub">${t.dur} Min</div></div><span class="badge">${isDone?"✓":"wischen"}</span></div>
  </div>`;
 }
-function findTodayTask(id){
- const m=id.match(/^(\d{4}-\d{2}-\d{2})::(\d+)::(\d+)$/);
- if(!m)return null;
- const dow=new Date(m[1]+"T12:00:00").getDay()||7;
- const specialRooms = dow===4 ? [
-  {title:"Eingangsbereich",subtitle:"EG",tasks:[["Boden saugen / sichtbaren Schmutz entfernen",6],["Spiegel reinigen",4],["Ablageflächen abwischen",4],["Türbereich aufräumen",4]]},
-  {title:"Garderobe",subtitle:"EG",tasks:[["Schuhe ordentlich stellen",4],["Jacken und Taschen ordnen",4],["Garderobenbank / Ablage aufräumen",4],["Garderobenflächen abwischen",4],["Spiegel reinigen",4]]},
-  {title:"Flur",subtitle:"EG",tasks:[["Herumliegende Dinge wegräumen",3],["Sichtbare Flächen abstauben",4],["Boden saugen",7]]},
-  {title:"Büro",subtitle:"EG",tasks:[["Schreibtisch aufräumen",5],["Arbeitsflächen abwischen",4],["Sichtbare Flächen abstauben",4],["Papier / herumliegende Dinge ordnen",4],["Boden saugen",7]]},
-  {title:"Abstellraum",subtitle:"EG",tasks:[["Dinge an ihren Platz stellen",5],["Ablageflächen ordnen",5],["Sichtbaren Staub entfernen",4],["Boden bei Bedarf reinigen",5]]},
-  {title:"Speis",subtitle:"EG",tasks:[["Lebensmittel auf Ablauf prüfen",5],["Vorräte ordentlich stellen",5],["Ablageflächen abwischen",5],["Krümel / sichtbaren Schmutz entfernen",4],["Boden bei Bedarf saugen",5]]}
- ] : [];
- const daily=[
-  {title:"Morgenroutine",tasks:[["Bett machen",2],["Schlafzimmer lüften",1],["Kleidung wegräumen",2],["Wäschekorb prüfen",1],["Vorhänge / Raffstores öffnen",1],["Spülmaschine ausräumen",3],["Frühstücksgeschirr einräumen",2],["Arbeitsflächen wischen",3],["Esstisch wischen",2],["Hochstuhl / Essbereich reinigen",3],["Garderobe grob ordnen",2]]},
-  {title:"Nach den Mahlzeiten",tasks:[["Geschirr in die Spülmaschine räumen",2],["Esstisch wischen",2],["Hochstuhl / Essbereich reinigen",3],["Heruntergefallenes Essen vom Boden entfernen",2],["Arbeitsfläche bei Bedarf wischen",2]]},
-  {title:"Abendlicher 10-Minuten-Reset",tasks:[["Spülmaschine beladen und starten",2],["Arbeitsflächen wischen",2],["Herd wischen",2],["Spüle und Armatur wischen",2],["Esstisch wischen",2],["Hanni-Essbereich reinigen",2],["Müll prüfen",1],["Wohnzimmer grob zurücksetzen",3],["Garderobe grob ordnen",2],["Kleidung wegräumen",2]]},
-  {title:"Tagescheck",tasks:[["Restmüll / Biomüll prüfen",1],["Wäsche nur bei Bedarf",1],["Toiletten nur bei Bedarf prüfen",1],["Küchenboden bei Essensresten reinigen",2],["Sichtbare Flecken entfernen",2],["Kühlschrank nur bei Bedarf prüfen",1]]}
- ];
- const rooms=[...daily,...specialRooms];
- const ri=Number(m[2]), ii=Number(m[3]);
- const room=rooms[ri], item=room?.tasks[ii];
- if(!item)return null;
- return {id,title:item[0],dur:item[1],kind:"today",details:[item[0]],room:room.title};
-}
-function todayRoomsFallback(dow){
- if(dow!==4)return [];
- return [
-  {title:"Eingangsbereich",tasks:[["Boden saugen / sichtbaren Schmutz entfernen",6],["Spiegel reinigen",4],["Ablageflächen abwischen",4],["Türbereich aufräumen",4]]},
-  {title:"Garderobe",tasks:[["Schuhe ordentlich stellen",4],["Jacken und Taschen ordnen",4],["Garderobenbank / Ablage aufräumen",4],["Garderobenflächen abwischen",4],["Spiegel reinigen",4]]},
-  {title:"Flur",tasks:[["Herumliegende Dinge wegräumen",3],["Sichtbare Flächen abstauben",4],["Boden saugen",7]]},
-  {title:"Büro",tasks:[["Schreibtisch aufräumen",5],["Arbeitsflächen abwischen",4],["Sichtbare Flächen abstauben",4],["Papier / herumliegende Dinge ordnen",4],["Boden saugen",7]]},
-  {title:"Abstellraum",tasks:[["Dinge an ihren Platz stellen",5],["Ablageflächen ordnen",5],["Sichtbaren Staub entfernen",4],["Boden bei Bedarf reinigen",5]]},
-  {title:"Speis",tasks:[["Lebensmittel auf Ablauf prüfen",5],["Vorräte ordentlich stellen",5],["Ablageflächen abwischen",5],["Krümel / sichtbaren Schmutz entfernen",4],["Boden bei Bedarf saugen",5]]}
- ];
-}
-function bindSwipes(){
- document.querySelectorAll(".task").forEach(el=>{
-  let sx=0,dx=0,moving=false;
-  el.addEventListener("pointerdown",e=>{sx=e.clientX;dx=0;moving=true;el.setPointerCapture(e.pointerId)});
-  el.addEventListener("pointermove",e=>{
-   if(!moving)return; dx=e.clientX-sx;
-   if(Math.abs(dx)<8)return;
-   const body=el.querySelector(".body"),r=el.querySelector(".right"),l=el.querySelector(".left");
-   body.style.transform=`translateX(${dx}px)`;
-   const a=Math.min(Math.abs(dx)/100,1);
-   if(dx>0){r.style.opacity=a;l.style.opacity=0}else{l.style.opacity=a;r.style.opacity=0}
-  });
-  el.addEventListener("pointerup",()=>{
-   if(!moving)return;moving=false;
-   if(Math.abs(dx)>85){
-    let t=tasks.find(x=>x.id===el.dataset.id)||findTodayTask(el.dataset.id);
-    if(t)dx>0?complete(t):skip(t);
-   }else{
-    el.querySelector(".body").style.transform="";
-    el.querySelector(".right").style.opacity=0;
-    el.querySelector(".left").style.opacity=0;
-   }
-  });
-  el.addEventListener("pointercancel",()=>{moving=false;el.querySelector(".body").style.transform=""});
- });
+function roomCard(room, actions){
+ const visible=actions.map((a,i)=>({id:idFor(room,i),title:a,dur:Math.max(1,Math.round(10/actions.length))})).filter(t=>!skipped(t.id));
+ if(!visible.length)return "";
+ const n=visible.filter(t=>done(t.id)).length;
+ return `<div class="room"><div class="roomhead"><div class="roomtitle">${room}</div><div class="count">${n}/${visible.length}</div></div>${visible.map(taskCard).join("")}</div>`;
 }
 function renderToday(){
- const d=new Date(), dow=d.getDay()===0?7:d.getDay();
-
- // Concrete room-specific actions. Each action is its own swipeable card.
- const todayRooms = dow===4 ? [
-   {title:"Eingangsbereich", subtitle:"EG", tasks:[
-     ["Boden saugen / sichtbaren Schmutz entfernen",6],
-     ["Spiegel reinigen",4],
-     ["Ablageflächen abwischen",4],
-     ["Türbereich aufräumen",4]
-   ]},
-   {title:"Garderobe", subtitle:"EG", tasks:[
-     ["Schuhe ordentlich stellen",4],
-     ["Jacken und Taschen ordnen",4],
-     ["Garderobenbank / Ablage aufräumen",4],
-     ["Garderobenflächen abwischen",4],
-     ["Spiegel reinigen",4]
-   ]},
-   {title:"Flur", subtitle:"EG", tasks:[
-     ["Herumliegende Dinge wegräumen",3],
-     ["Sichtbare Flächen abstauben",4],
-     ["Boden saugen",7]
-   ]},
-   {title:"Büro", subtitle:"EG", tasks:[
-     ["Schreibtisch aufräumen",5],
-     ["Arbeitsflächen abwischen",4],
-     ["Sichtbare Flächen abstauben",4],
-     ["Papier / herumliegende Dinge ordnen",4],
-     ["Boden saugen",7]
-   ]},
-   {title:"Abstellraum", subtitle:"EG", tasks:[
-     ["Dinge an ihren Platz stellen",5],
-     ["Ablageflächen ordnen",5],
-     ["Sichtbaren Staub entfernen",4],
-     ["Boden bei Bedarf reinigen",5]
-   ]},
-   {title:"Speis", subtitle:"EG", tasks:[
-     ["Lebensmittel auf Ablauf prüfen",5],
-     ["Vorräte ordentlich stellen",5],
-     ["Ablageflächen abwischen",5],
-     ["Krümel / sichtbaren Schmutz entfernen",4],
-     ["Boden bei Bedarf saugen",5]
-   ]}
- ] : [];
-
- const dailyRooms = [
-   {title:"Morgenroutine",subtitle:"Alltag",tasks:[
-     ["Bett machen",2],["Schlafzimmer lüften",1],["Kleidung wegräumen",2],
-     ["Wäschekorb prüfen",1],["Vorhänge / Raffstores öffnen",1],
-     ["Spülmaschine ausräumen",3],["Frühstücksgeschirr einräumen",2],
-     ["Arbeitsflächen wischen",3],["Esstisch wischen",2],
-     ["Hochstuhl / Essbereich reinigen",3],["Garderobe grob ordnen",2]
-   ]},
-   {title:"Nach den Mahlzeiten",subtitle:"Alltag · EG",tasks:[
-     ["Geschirr in die Spülmaschine räumen",2],["Esstisch wischen",2],
-     ["Hochstuhl / Essbereich reinigen",3],["Heruntergefallenes Essen vom Boden entfernen",2],
-     ["Arbeitsfläche bei Bedarf wischen",2]
-   ]},
-   {title:"Abendlicher 10-Minuten-Reset",subtitle:"Alltag · EG",tasks:[
-     ["Spülmaschine beladen und starten",2],["Arbeitsflächen wischen",2],
-     ["Herd wischen",2],["Spüle und Armatur wischen",2],
-     ["Esstisch wischen",2],["Hanni-Essbereich reinigen",2],
-     ["Müll prüfen",1],["Wohnzimmer grob zurücksetzen",3],
-     ["Garderobe grob ordnen",2],["Kleidung wegräumen",2]
-   ]},
-   {title:"Tagescheck",subtitle:"Alltag",tasks:[
-     ["Restmüll / Biomüll prüfen",1],["Wäsche nur bei Bedarf",1],
-     ["Toiletten nur bei Bedarf prüfen",1],["Küchenboden bei Essensresten reinigen",2],
-     ["Sichtbare Flecken entfernen",2],["Kühlschrank nur bei Bedarf prüfen",1]
-   ]}
- ];
-
- const rooms = [...dailyRooms,...todayRooms];
-
- // Use a stable per-day ID for every concrete action.
- const concrete=[];
- rooms.forEach((room,ri)=>room.tasks.forEach((item,ii)=>concrete.push({
-   id:`${todayKey()}::${ri}::${ii}`,
-   title:item[0], dur:item[1], room:room.title, subtitle:room.subtitle, kind:"today",
-   details:[item[0]]
- })));
-
- const done=concrete.filter(t=>isDone(t)).length;
- const total=concrete.length;
-
- let htmlOut=`<div class="hint">👉 <b>Nach rechts wischen = erledigt.</b> Nach links = für heute überspringen. Jede konkrete Tätigkeit ist einzeln gespeichert – nichts wird morgen automatisch nachgeholt.</div>`;
- if(dow===4) htmlOut+=`<div class="hint"><b>Donnerstag · EG</b><br>Heute sind nur Eingangsbereich, Garderobe, Flur, Büro, Abstellraum und Speis als Wochenbereich geplant. Die Alltagspflichten bleiben separat.</div>`;
-
- htmlOut+=`<div class="grid"><div class="stat"><div class="num">${done}/${total}</div><div class="label">Einzel-To-dos erledigt</div></div><div class="stat"><div class="num">${concrete.reduce((a,t)=>a+t.dur,0)} Min</div><div class="label">maximal geplant</div></div></div>
- <div class="sectionhead"><h2>Heute</h2><button class="smallbtn" onclick="resetToday()">Tag zurücksetzen</button></div>
- <div class="progress"><i style="width:${total?done/total*100:0}%"></i></div>`;
-
- rooms.forEach((room,ri)=>{
-   const subtasks=room.tasks.map((item,ii)=>({
-     id:`${todayKey()}::${ri}::${ii}`,title:item[0],dur:item[1],kind:"today",
-     details:[item[0]],room:room.title,subtitle:room.subtitle
-   }));
-   htmlOut+=roomCard(room.title,room.subtitle,subtasks);
- });
-
- htmlOut+=`<h2>🧸 Haus darf heute auch Haus sein</h2><div class="hint">Wenn Hanni-Chaos ist: Essen, Geschirr, Müll, sichere Wege und offensichtlichen Schmutz reichen. Spielzeug muss nicht ständig weggeräumt werden.</div>`;
- document.getElementById("today").innerHTML=htmlOut;
- bindSwipes();
+ const d=dayNumber(), special=roomsByDay[d]||[];
+ let items=[];
+ daily.forEach((g,ri)=>g[1].forEach((a,i)=>items.push({id:idFor("daily"+ri,i),title:a,dur:1})));
+ special.forEach((g,ri)=>g[1].forEach((a,i)=>items.push({id:idFor(g[0],i),title:a,dur:1})));
+ const n=items.filter(x=>done(x.id)).length,total=items.length;
+ let out=`<div class="hint">👉 <b>Rechts wischen = erledigt.</b> 👈 <b>Links = später.</b> Jede konkrete Tätigkeit ist einzeln gespeichert. Nichts wird automatisch auf morgen nachgeholt.</div>`;
+ if(d===4)out+=`<div class="hint"><b>Donnerstag · EG</b><br>Eingangsbereich, Garderobe, Flur, Büro, Abstellraum und Speis. Keine Spezial-Rotation heute.</div>`;
+ out+=`<div class="grid"><div class="stat"><div class="num">${n}/${total}</div><div class="label">Einzel-To-dos erledigt</div></div><div class="stat"><div class="num">${total}</div><div class="label">Einzel-To-dos heute</div></div></div>`;
+ out+=`<div class="sectionhead"><h2>Heute</h2><button class="smallbtn" id="reset">Zurücksetzen</button></div><div class="progress"><i style="width:${total?n/total*100:0}%"></i></div>`;
+ out+=`<h2>Alltag</h2>`;
+ daily.forEach((g,ri)=>{out+=roomCard(g[0],g[1].map((a,i)=>({id:idFor("daily"+ri,i),title:a,dur:1})).filter(x=>!skipped(x.id)).map(x=>x.title))});
+ // roomCard generates IDs by room, so daily IDs above are not used there; use dedicated function for exact IDs below.
+ out=out.replace(/<h2>Alltag<\/h2>[\s\S]*?<h2>/,`<h2>Alltag</h2>${daily.map((g,ri)=>roomCard(g[0],g[1])).join("")}<h2>`);
+ if(special.length)out+=special.map(g=>roomCard(g[0],g[1])).join("");
+ out+=`<h2>🧸 Haus darf heute auch Haus sein</h2><div class="hint">Bei Hanni-Chaos reichen Essen, Geschirr, Müll, sichere Wege und offensichtlicher Schmutz. Spielzeug muss nicht ständig weggeräumt werden.</div>`;
+ document.getElementById("today").innerHTML=out;bindSwipes();
 }
 function renderWeek(){
  const names=["","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
- let html=`<h2>Diese Woche</h2><div class="hint">Die Wochentage sind Anker, keine Pflicht. Wenn ein Tag ausfällt, stapelt sich nichts.</div>`;
- for(let i=1;i<=7;i++){
-  let a=tasks.filter(t=>t.kind==="anchor"&&t.day===i);
-  if(i===7) html+=`<div class="card day"><strong>Sonntag 🌿</strong><div class="sub">Haushaltsfrei – nur Alltag & Notwendiges.</div></div>`;
-  else html+=`<div class="card day"><strong>${names[i]}</strong><ul>${a.map(t=>`<li>${t.title}</li>`).join("")||"<li>nur Alltag</li>"}</ul></div>`;
- }
- document.getElementById("week").innerHTML=html;
+ let out="<h2>Diese Woche</h2><div class='hint'>Die Wochentage sind Anker, keine Pflicht. Ausgefallene Tage stapeln sich nicht.</div>";
+ for(let d=1;d<=7;d++){if(d===7)out+=`<div class="day"><strong>Sonntag 🌿</strong><div class="sub">Haushaltsfrei – nur Alltag & Notwendiges.</div></div>`;
+ else out+=`<div class="day"><strong>${names[d]}</strong><ul>${(roomsByDay[d]||[]).map(x=>"<li>"+x[0]+"</li>").join("")||"<li>nur Alltag</li>"}</ul></div>`}
+ document.getElementById("week").innerHTML=out;
 }
+function daysSince(s){if(!s)return 9999;return Math.floor((new Date(today())-new Date(s))/86400000)}
 function renderRotation(){
- const groups={};
- tasks.filter(t=>t.kind==="rotation").forEach(t=>{(groups[t.group]??=[]).push(t)});
- let html=`<h2>Hauspflege-Rotation</h2><div class="hint">Die Rotation ist bewusst verteilt, damit nicht alles auf einmal anfällt. Danach zählt immer das echte Erledigungsdatum. „Später“ verschiebt die Aufgabe nicht automatisch auf morgen.</div>`;
- Object.entries(groups).forEach(([g,arr])=>{
-  html+=`<h3 style="margin:18px 4px 8px">${g}</h3>`;
-  arr.forEach(t=>{
-   let last=state.lastDone[t.id], left=last?Math.max(0,t.interval-daysSince(last)):0;
-   let status=!last?"noch nie erledigt":left===0?"jetzt fällig":`in ${left} Tag${left===1?"":"en"}`;
-   html+=`<div class="card day"><strong>${t.title}</strong><div class="sub">📍 ${t.location || "gesamtes Haus"} · ${status} · Rhythmus ca. ${t.interval} Tage</div><button class="smallbtn" style="margin-top:9px" onclick="openModal(tasks.find(x=>x.id==='${t.id}'))">Details</button></div>`
-  });
- });
- document.getElementById("rotation").innerHTML=html;
+ let out="<h2>Hauspflege-Rotation</h2><div class='hint'>Die Rotation wird separat geführt und drängt sich nicht in deinen Tagesplan. Maßgeblich ist das echte Erledigungsdatum.</div>";
+ rotations.forEach((r,i)=>{const last=state.lastDone["rot"+i];const left=last?Math.max(0,r[1]-daysSince(last)):r[1];out+=`<div class="day"><strong>${r[0]}</strong><div class="sub">📍 ${r[2]} · ${last?left===0?"jetzt fällig":"in "+left+" Tagen":"noch nicht erledigt"}</div></div>`});
+ document.getElementById("rotation").innerHTML=out;
 }
-function render(){document.getElementById("date").textContent=dateDE(todayKey());renderToday();renderWeek();renderRotation();if(state.chaos)document.body.classList.add("chaos");else document.body.classList.remove("chaos")}
-function openModal(t){document.getElementById("modalContent").innerHTML=`<h2>${t.title}</h2><p class="sub">📍 ${t.location || "gesamtes Haus"}</p><p class="sub">${t.parentTitle ? t.parentTitle+" · " : ""}${t.dur} Minuten · ${t.kind==="rotation"?"Rotation":"Tages-/Wochenaufgabe"}</p><div class="hint">Dieses To-do ist bewusst <b>separat</b> abhackbar.</div><div class="hint">Heute: <b>${isDone(t)?"erledigt ✓":isSkipped(t)?"übersprungen":"offen"}</b></div>`;document.getElementById("modal").classList.add("show")}
-function closeModal(){document.getElementById("modal").classList.remove("show")}
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");["today","week","rotation"].forEach(id=>document.getElementById(id).classList.toggle("hidden",id!==b.dataset.tab))});
-document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;document.getElementById("chaosBtn").textContent=state.chaos?"🧸 Chaosmodus AUS":"🧸 Hanni-Chaosmodus";save()};
-document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
+function bindSwipes(){
+ document.querySelectorAll(".task").forEach(el=>{
+  let sx=0,dx=0;
+  el.addEventListener("pointerdown",e=>{sx=e.clientX;dx=0;el.setPointerCapture(e.pointerId)});
+  el.addEventListener("pointermove",e=>{dx=e.clientX-sx;const b=el.querySelector(".body"),r=el.querySelector(".right"),l=el.querySelector(".left");if(Math.abs(dx)>8){b.style.transform=`translateX(${dx}px)`;const a=Math.min(Math.abs(dx)/100,1);if(dx>0){r.style.opacity=a;l.style.opacity=0}else{l.style.opacity=a;r.style.opacity=0}}});
+  el.addEventListener("pointerup",()=>{if(Math.abs(dx)>85){dx>0?finish(el.dataset.id):later(el.dataset.id)}else{el.querySelector(".body").style.transform="";el.querySelector(".right").style.opacity=0;el.querySelector(".left").style.opacity=0}});
+  el.addEventListener("pointercancel",()=>{el.querySelector(".body").style.transform=""});
+ });
+}
+function render(){document.getElementById("date").textContent=germanDate();renderToday();renderWeek();renderRotation();document.getElementById("chaos").textContent=state.chaos?"🧸 Chaosmodus AUS":"🧸 Hanni-Chaosmodus"}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");["today","week","rotation"].forEach(id=>document.getElementById(id).hidden=id!==b.dataset.tab)});
+document.getElementById("chaos").onclick=()=>{state.chaos=!state.chaos;save()};
+document.getElementById("reset").onclick=()=>{Object.keys(state.done).filter(k=>k.startsWith(today()+"|")).forEach(k=>delete state.done[k]);Object.keys(state.skipped).filter(k=>k.startsWith(today()+"|")).forEach(k=>delete state.skipped[k]);save()};
 render();
 </script>
 </body>
