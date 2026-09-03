@@ -25,6 +25,15 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
 .modal{position:fixed;inset:0;background:#0005;display:flex;align-items:flex-end;justify-content:center;padding:12px;z-index:20}.sheet{background:var(--bg);width:min(760px,100%);max-height:90vh;overflow:auto;border-radius:24px;padding:17px}.sheethead{display:flex;justify-content:space-between;align-items:center}.result{background:white;border:1px solid var(--line);border-radius:14px;padding:12px;margin:7px 0}.result b{display:block}.result small{color:var(--muted)}
 .field{margin:10px 0}.field label{display:block;font-size:12px;font-weight:700;margin:0 0 5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
+/* Swipe */
+.task{position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
+.task .swipe-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-radius:10px;font-weight:700;color:white;opacity:0;transition:.15s;pointer-events:none}
+.task .swipe-bg.left{justify-content:flex-end;background:#c9a36a}
+.task .swipe-bg.right{justify-content:flex-start;background:#7e9b7b}
+.task .task-content{position:relative;display:flex;align-items:center;gap:10px;background:var(--card);width:100%;z-index:2;transition:transform .18s ease}
+.task.swiping .task-content{transition:none}
+.task .swipe-label{font-size:13px}
+.collapsed{display:none}
 @media(max-width:520px){.two{grid-template-columns:1fr}.daygrid{grid-template-columns:none}}
 </style>
 </head>
@@ -79,7 +88,7 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
    <div class="field"><label>Aufgabe *</label><input id="customTitle" placeholder="z. B. Pflanzen im Büro umtopfen"></div>
    <div class="two">
     <div class="field"><label>Raum / Ort</label><input id="customRoom" placeholder="z. B. Büro"></div>
-    <div class="field"><label>Bereich</label><select id="customArea"><option>EG</option><option>OG</option><option>Keller</option><option>Hausweit</option><option>Sonstiger Ort</option></select></div>
+    <div class="field"><label>Bereich</label><select id="customArea"><option>EG</option><option>OG</option><option>Keller</option><option>Ganzes Haus</option><option>Sonstiger Ort</option></select></div>
    </div>
    <div class="field"><label>Genauer Ort (optional)</label><input id="customPlace" placeholder="z. B. linkes Fensterbrett"></div>
    <div class="two">
@@ -135,26 +144,26 @@ const roomsByDay={
  ],
 };
 const daily=[
- ['☀️ Morgenroutine','Hausweit',['Bett machen','Schlafzimmer kurz lüften','Kleidung wegräumen','Schmutzwäsche in den Wäschekorb','Vorhänge/Raffstores öffnen','Geschirrspüler ausräumen','Frühstücksgeschirr einräumen','Küchenarbeitsfläche abwischen','Esstisch abwischen','Hochstuhl/Essplatz sauber machen','Schuhe, Jacken & Taschen kurz ordnen']],
- ['🍽️ Nach Mahlzeiten','Hausweit',['Geschirr in den Geschirrspüler','Tisch abwischen','Hochstuhl/Essplatz sauber machen','Heruntergefallenes Essen vom Boden entfernen','Arbeitsfläche bei Bedarf abwischen']],
- ['🌙 Abend · max. 10 Minuten','Hausweit',['Geschirrspüler einräumen & einschalten','Küchenflächen kurz abwischen','Spüle & Herd kurz sauber machen','Esstisch + Hochstuhl/Essplatz','Müll kontrollieren','Wohnzimmer grob zurücksetzen','Garderobe kurz ordnen','Kleidung wegräumen','Vorhänge/Raffstores schließen']],
- ['🔎 Tagescheck','Hausweit',['Restmüll kontrollieren','Biomüll kontrollieren','Wäsche nur bei Bedarf starten','Kühlschrank nur bei Bedarf prüfen','Toiletten nur bei Bedarf prüfen','Küchenboden bei Essensresten reinigen','Sichtbare Bodenflecken beseitigen']]
+ ['☀️ Morgenroutine','Ganzes Haus',['Bett machen','Schlafzimmer kurz lüften','Kleidung wegräumen','Schmutzwäsche in den Wäschekorb','Vorhänge/Raffstores öffnen','Geschirrspüler ausräumen','Frühstücksgeschirr einräumen','Küchenarbeitsfläche abwischen','Esstisch abwischen','Hochstuhl/Essplatz sauber machen','Schuhe, Jacken & Taschen kurz ordnen']],
+ ['🍽️ Nach Mahlzeiten','Ganzes Haus',['Geschirr in den Geschirrspüler','Tisch abwischen','Hochstuhl/Essplatz sauber machen','Heruntergefallenes Essen vom Boden entfernen','Arbeitsfläche bei Bedarf abwischen']],
+ ['🌙 Abend · max. 10 Minuten','Ganzes Haus',['Geschirrspüler einräumen & einschalten','Küchenflächen kurz abwischen','Spüle & Herd kurz sauber machen','Esstisch + Hochstuhl/Essplatz','Müll kontrollieren','Wohnzimmer grob zurücksetzen','Garderobe kurz ordnen','Kleidung wegräumen','Vorhänge/Raffstores schließen']],
+ ['🔎 Tagescheck','Ganzes Haus',['Restmüll kontrollieren','Biomüll kontrollieren','Wäsche nur bei Bedarf starten','Kühlschrank nur bei Bedarf prüfen','Toiletten nur bei Bedarf prüfen','Küchenboden bei Essensresten reinigen','Sichtbare Bodenflecken beseitigen']]
 ];
 const rotations=[
- ['🚪 Türklinken & häufig berührte Stellen','Hausweit',7],
- ['🚪 Türrahmen / Zargen','Hausweit',30],
- ['🚪 Türblätter gründlich','Hausweit',75],
- ['🧹 Sockelleisten','Hausweit',42],
- ['🕸️ Decken-/Wandecken auf Spinnweben','Hausweit',30],
- ['✨ Lichtschalter außen abwischen','Hausweit',30],
- ['🔌 Steckdosen außen abwischen','Hausweit',75],
- ['🏛️ Stuck vorsichtig trocken entstauben','Hausweit',120],
+ ['🚪 Türklinken & häufig berührte Stellen','Ganzes Haus',7],
+ ['🚪 Türrahmen / Zargen','Ganzes Haus',30],
+ ['🚪 Türblätter gründlich','Ganzes Haus',75],
+ ['🧹 Sockelleisten','Ganzes Haus',42],
+ ['🕸️ Decken-/Wandecken auf Spinnweben','Ganzes Haus',30],
+ ['✨ Lichtschalter außen abwischen','Ganzes Haus',30],
+ ['🔌 Steckdosen außen abwischen','Ganzes Haus',75],
+ ['🏛️ Stuck vorsichtig trocken entstauben','Ganzes Haus',120],
  ['🪟 Fenster EG – Abschnitt','EG',180],
  ['🪟 Fenster OG – Abschnitt','OG',180],
- ['☀️ Raffstores / Sonnenschutz nach Herstellerangabe','Hausweit',180],
- ['🪟 Fensterrahmen & Falze','Hausweit',180],
- ['🪟 Vorhangstangen / Schienen','Hausweit',180],
- ['💡 Erreichbare Lampen vorsichtig reinigen','Hausweit',120],
+ ['☀️ Raffstores / Sonnenschutz nach Herstellerangabe','Ganzes Haus',180],
+ ['🪟 Fensterrahmen & Falze','Ganzes Haus',180],
+ ['🪟 Vorhangstangen / Schienen','Ganzes Haus',180],
+ ['💡 Erreichbare Lampen vorsichtig reinigen','Ganzes Haus',120],
  ['🧊 Kühlschrank prüfen und bei Bedarf reinigen','Küche · EG',30],
  ['🔥 Backofen gründlich reinigen','Küche · EG',75],
  ['🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller','Küche · EG',30],
@@ -200,15 +209,16 @@ const catalogSeed=[
 ['Lagerraum','Keller',['Kartons ordnen','Vorräte prüfen','Regale abstauben','Boden saugen','Boden wischen']],
 ['Keller allgemein','Keller',['Spinnweben entfernen','Sichtbare Ablagerungen entfernen','Boden saugen','Boden wischen','Ecken kontrollieren']],
 ['Saunaraum','OG',['Nach Nutzung lüften','Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
-['Treppenhaus','Hausweit',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
-['Fenster / Hausweit','Hausweit',['Fenster innen reinigen','Fenster außen reinigen, wenn sicher','Fensterrahmen reinigen','Falze reinigen','Fensterbänke reinigen','Dichtungen kontrollieren','Vorhangstangen reinigen','Vorhänge nach Pflegeetikett reinigen','Raffstores nach Herstellerangabe reinigen']],
-['Türen / Hausweit','Hausweit',['Türklinken reinigen','Türrahmen/Zargen reinigen','Türblätter abwischen','Türkanten reinigen','Lichtschalter außen reinigen','Steckdosen außen abwischen','Spinnweben über Türen entfernen']],
+['Treppenhaus','Ganzes Haus',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
+['Fenster / Ganzes Haus','Ganzes Haus',['Fenster innen reinigen','Fenster außen reinigen, wenn sicher','Fensterrahmen reinigen','Falze reinigen','Fensterbänke reinigen','Dichtungen kontrollieren','Vorhangstangen reinigen','Vorhänge nach Pflegeetikett reinigen','Raffstores nach Herstellerangabe reinigen']],
+['Türen / Ganzes Haus','Ganzes Haus',['Türklinken reinigen','Türrahmen/Zargen reinigen','Türblätter abwischen','Türkanten reinigen','Lichtschalter außen reinigen','Steckdosen außen abwischen','Spinnweben über Türen entfernen']],
 ['Kamin / Wohnzimmer','EG',['Erkaltete Asche aus Feuerraum entfernen','Feuerraum auskehren','Kaminrost reinigen','Kaminbesteck abwischen','Kaminholz schlichten','Holzablage reinigen','Bereich direkt vor Kamin gründlich absaugen','Ruß-/Aschespuren entfernen','Kaminverkleidung materialgerecht reinigen','Kaminglas, falls vorhanden, reinigen','Fachgerechte Kontrolle/Wartung nach Vorgabe']],
-['Hausweit – Textilien',['Bettwäsche wechseln','Handtücher wechseln','Decken nach Pflegeetikett reinigen','Teppiche nach Pflegehinweisen reinigen','Vorhänge nach Pflegeetikett reinigen','Polster nach Pflegehinweisen reinigen']],
-['Hausweit – Allgemein',['Sockelleisten reinigen','Decken-/Wandecken entstauben','Stuck vorsichtig trocken entstauben','Erreichbare Lampen reinigen','Lichtschalter außen reinigen','Steckdosen außen reinigen','Türrahmen reinigen','Türblätter reinigen']]
+['Ganzes Haus – Textilien',['Bettwäsche wechseln','Handtücher wechseln','Decken nach Pflegeetikett reinigen','Teppiche nach Pflegehinweisen reinigen','Vorhänge nach Pflegeetikett reinigen','Polster nach Pflegehinweisen reinigen']],
+['Ganzes Haus – Allgemein',['Sockelleisten reinigen','Decken-/Wandecken entstauben','Stuck vorsichtig trocken entstauben','Erreichbare Lampen reinigen','Lichtschalter außen reinigen','Steckdosen außen reinigen','Türrahmen reinigen','Türblätter reinigen']]
 ];
 
-let state=JSON.parse(localStorage.getItem(STORAGE)||'null')||{done:{},lastDone:{},custom:[],chaos:false};
+let state=JSON.parse(localStorage.getItem(STORAGE)||'null')||{done:{},lastDone:{},postponed:{},custom:[],chaos:false};
+state.postponed=state.postponed||{};
 let today=new Date(); today.setHours(12,0,0,0);
 function key(){return today.toISOString().slice(0,10)}
 function save(){localStorage.setItem(STORAGE,JSON.stringify(state))}
@@ -216,6 +226,33 @@ function dateLabel(d){return new Intl.DateTimeFormat('de-AT',{weekday:'long',day
 function iso(d){return d.toISOString().slice(0,10)}
 function taskId(prefix,text,idx){return prefix+'|'+text+'|'+idx}
 function mark(id,canonical){state.done[id]=!state.done[id]; if(state.done[id])state.lastDone[canonical]=key(); save(); renderToday()}
+function postpone(id,canonical,text,room){
+  state.postponed[id]={canonical,text,room,from:key()};
+  save(); toast('Aufgabe auf später verschoben ↩'); renderToday();
+}
+function enableSwipe(row,id,canonical){
+  let sx=0,sy=0,dx=0,active=false;
+  const content=row.querySelector('.task-content'), l=row.querySelector('.swipe-bg.left'), r=row.querySelector('.swipe-bg.right');
+  row.addEventListener('touchstart',e=>{if(!e.touches[0])return;sx=e.touches[0].clientX;sy=e.touches[0].clientY;dx=0;active=true;row.classList.add('swiping')},{passive:true});
+  row.addEventListener('touchmove',e=>{
+    if(!active)return;
+    const x=e.touches[0].clientX,y=e.touches[0].clientY;dx=x-sx;
+    if(Math.abs(dx)<Math.abs(y-sy))return;
+    e.preventDefault();
+    const amount=Math.max(-105,Math.min(105,dx));
+    content.style.transform=`translateX(${amount}px)`;
+    l.style.opacity=dx<0?Math.min(1,Math.abs(dx)/75):0;
+    r.style.opacity=dx>0?Math.min(1,dx/75):0;
+  },{passive:false});
+  row.addEventListener('touchend',()=>{
+    if(!active)return;active=false;row.classList.remove('swiping');
+    if(dx>75){
+      state.done[id]=true;state.lastDone[canonical]=key();save();toast('Erledigt ✓');renderToday();
+    }else if(dx<-75){
+      postpone(id,canonical,row.querySelector('span')?.textContent||'',row.closest('.section')?.querySelector('.loc')?.textContent||'');
+    }else{content.style.transform='translateX(0)';l.style.opacity=r.style.opacity=0}
+  });
+}
 function addToday(id,canonical,text,room){state.done[id]=false; state.lastDone[canonical]=state.lastDone[canonical]||''; if(!state.todayExtras)state.todayExtras=[]; state.todayExtras.push({id,canonical,text,room});save();closeModal();renderToday();toast('Aufgabe für heute hinzugefügt ❤️')}
 function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.remove('hidden');setTimeout(()=>x.classList.add('hidden'),1800)}
 function renderToday(){
@@ -229,11 +266,23 @@ function renderToday(){
  daily.forEach((g,gi)=>groups.push([g[0],g[1],g[2], 'daily'+gi]));
  if(!state.chaos && roomsByDay[dow]) roomsByDay[dow].forEach((r,ri)=>groups.push([r[0],r[1],r[2],'room'+ri]));
  if(!state.chaos && dow!==0 && dow!==4){let rd=rotationDue(); if(rd)groups.push([rd[0],rd[1],[rd[0]],'rotation'+rd[2]])}
- if(!state.chaos && state.todayExtras) state.todayExtras.filter(x=>x.id.startsWith(key())).forEach((x,i)=>groups.push(['＋ Eigene Aufgabe',x.room||'Hausweit',[x.text],'extra'+i]));
+ if(!state.chaos && state.todayExtras) state.todayExtras.filter(x=>x.id.startsWith(key())).forEach((x,i)=>groups.push(['＋ Eigene Aufgabe',x.room||'Ganzes Haus',[x.text],'extra'+i]));
  groups.forEach(g=>{
+   let visibleTasks=g[2].filter((t,i)=>{
+     let testId=g[3].startsWith('extra')?state.todayExtras?.find(x=>x.text===t&&x.id.startsWith(key()))?.id:dayTaskId(g[3],i,t);
+     return !(testId && state.postponed[testId]);
+   });
+   if(!visibleTasks.length)return;
    let sec=document.createElement('div');sec.className='section';
    let h=document.createElement('h2');h.textContent=g[0];let loc=document.createElement('span');loc.className='loc';loc.textContent=' · '+g[1];h.appendChild(loc);sec.appendChild(h);
-   g[2].forEach((t,i)=>{total++;let id= g[3].startsWith('extra')?state.todayExtras.find(x=>x.text===t&&x.id.startsWith(key()))?.id:dayTaskId(g[3],i,t);let canonical=g[3]+'|'+i+'|'+t;let row=document.createElement('div');row.className='task';let c=document.createElement('input');c.type='checkbox';c.checked=!!state.done[id];if(c.checked){done++}let s=document.createElement('span');s.textContent=t;s.className=c.checked?'done':'';c.onchange=()=>{state.done[id]=c.checked;if(c.checked)state.lastDone[canonical]=key();save();renderToday()};row.append(c,s);sec.appendChild(row)});box.appendChild(sec)
+   visibleTasks.forEach((t,i)=>{total++;let originalIndex=g[2].indexOf(t);let id= g[3].startsWith('extra')?state.todayExtras.find(x=>x.text===t&&x.id.startsWith(key()))?.id:dayTaskId(g[3],originalIndex,t);let canonical=g[3]+'|'+i+'|'+t;let row=document.createElement('div');row.className='task';
+   let bgL=document.createElement('div');bgL.className='swipe-bg left';bgL.innerHTML='<span class="swipe-label">Später ↩</span>';
+   let bgR=document.createElement('div');bgR.className='swipe-bg right';bgR.innerHTML='<span class="swipe-label">✓ Erledigt</span>';
+   let content=document.createElement('div');content.className='task-content';
+   let c=document.createElement('input');c.type='checkbox';c.checked=!!state.done[id];if(c.checked){done++}
+   let s=document.createElement('span');s.textContent=t;s.className=c.checked?'done':'';
+   c.onchange=()=>{state.done[id]=c.checked;if(c.checked)state.lastDone[canonical]=key();save();renderToday()};
+   content.append(c,s);row.append(bgL,bgR,content);sec.appendChild(row);enableSwipe(row,id,canonical)});box.appendChild(sec)
  });
  document.getElementById('bar').style.width=total?(done/total*100)+'%':'0%';document.getElementById('count').textContent=done+' von '+total+' Aufgaben abgehakt';
 }
@@ -250,9 +299,9 @@ function renderWeek(){let box=document.getElementById('weekList');box.innerHTML=
 function renderHistory(){let box=document.getElementById('historyList');box.innerHTML='';let arr=Object.entries(state.lastDone).filter(([k,v])=>v).sort((a,b)=>b[1].localeCompare(a[1]));if(!arr.length){box.innerHTML='<div class="empty">Noch kein Verlauf – das ist völlig okay. ❤️</div>';return}arr.slice(0,80).forEach(([k,v])=>{let p=document.createElement('div');p.className='result';p.innerHTML='<b>'+k.replace(/^rot\\|\\d+\\|/,'Hauspflege · ')+'</b><small>Zuletzt erledigt: '+new Intl.DateTimeFormat('de-AT').format(new Date(v))+'</small>';box.appendChild(p)})}
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
-function allCatalog(){let a=[];catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Hausweit',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',custom:i}));return a}
+function allCatalog(){let a=[];catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Ganzes Haus',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',custom:i}));return a}
 function renderSearch(){let q=document.getElementById('catalogSearch').value.toLowerCase().trim();let res=allCatalog().filter(x=>!q||(x.title+' '+x.room+' '+x.area+' '+x.cat).toLowerCase().includes(q)).slice(0,80);let box=document.getElementById('searchResults');box.innerHTML='<div class="hint">'+res.length+' Treffer im Aufgabenkatalog</div>';res.forEach((x,i)=>{let d=document.createElement('div');d.className='result';d.innerHTML='<b>'+x.title+'</b><small>'+x.room+' · '+x.area+(x.cat?' · '+x.cat:'')+'</small>';let b=document.createElement('button');b.className='small';b.textContent='＋ Heute';b.onclick=()=>addToday(key()+'|catalog|'+i+'|'+x.title,'catalog|'+x.title,x.title,x.room+' · '+x.area);d.appendChild(document.createElement('br'));d.appendChild(b);box.appendChild(d)})}
-function saveCustom(add){let title=document.getElementById('customTitle').value.trim();if(!title){alert('Bitte gib der Aufgabe einen Namen.');return}let x={title,room:document.getElementById('customRoom').value.trim(),place:document.getElementById('customPlace').value.trim(),area:document.getElementById('customArea').value,rec:document.getElementById('customRec').value,start:document.getElementById('customStart').value||key(),cat:document.getElementById('customCat').value.trim()};state.custom.push(x);save();if(add){let i=state.custom.length-1;addToday(key()+'|custom|'+i+'|'+title,'custom|'+i,title,(x.room||'Hausweit')+' · '+x.area+(x.place?' · '+x.place:''))}else{closeModal();toast('Eigene Aufgabe gespeichert ❤️')}}
+function saveCustom(add){let title=document.getElementById('customTitle').value.trim();if(!title){alert('Bitte gib der Aufgabe einen Namen.');return}let x={title,room:document.getElementById('customRoom').value.trim(),place:document.getElementById('customPlace').value.trim(),area:document.getElementById('customArea').value,rec:document.getElementById('customRec').value,start:document.getElementById('customStart').value||key(),cat:document.getElementById('customCat').value.trim()};state.custom.push(x);save();if(add){let i=state.custom.length-1;addToday(key()+'|custom|'+i+'|'+title,'custom|'+i,title,(x.room||'Ganzes Haus')+' · '+x.area+(x.place?' · '+x.place:''))}else{closeModal();toast('Eigene Aufgabe gespeichert ❤️')}}
 document.getElementById('customStart').value=key();
 renderToday();
 </script>
