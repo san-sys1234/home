@@ -127,26 +127,14 @@ const roomsByDay={
   ['Essbereich','EG',['Esstisch abwischen','Stühle kurz abwischen','Sichtbare Krümel entfernen','Boden saugen','Boden wischen']],
   ['Küche','EG',['Arbeitsflächen wischen','Herd wischen','Spüle und Armatur wischen','Fronten bei sichtbaren Flecken wischen','Boden saugen','Boden wischen']]
  ],
- 2:[
-  ['Gäste-WC','EG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Toilette innen reinigen','Toilette außen reinigen','Boden saugen','Boden wischen']],
-  ['Kinderbad','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Badewanne/Dusche kurz reinigen','Toilette reinigen','Boden saugen','Boden wischen']],
-  ['Bad','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Dusche reinigen','Badewanne reinigen','Toilette reinigen','Boden saugen','Boden wischen']],
-  ['WC','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Toilette innen reinigen','Toilette außen reinigen','Boden saugen','Boden wischen']]
- ],
+ 2:[],
  3:[
   ['Schlafzimmer','OG',['Bett machen','Herumliegende Dinge wegräumen','Nachttische abwischen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
   ['Ankleidezimmer','OG',['Kleidung zurückhängen/legen','Oberflächen abstauben','Spiegel bei Bedarf reinigen','Boden saugen','Boden wischen']],
   ['Kinderzimmer 1','OG',['Herumliegende Dinge grob ordnen','Kleidung wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
   ['Kinderzimmer 2','OG',['Herumliegende Dinge grob ordnen','Kleidung wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']]
  ],
- 4:[
-  ['Eingangsbereich','EG',['Schuhe/Jacken/Taschen ordnen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
-  ['Garderobe','EG',['Kleidung zurückhängen','Schuhe ordnen','Ablageflächen freimachen','Spiegel bei Bedarf reinigen','Boden saugen','Boden wischen']],
-  ['Flur','EG',['Herumliegende Dinge wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
-  ['Büro','EG',['Schreibtisch freimachen','Sichtbare Flächen abstauben','Papier/Müll ordnen','Boden saugen','Boden wischen']],
-  ['Abstellraum','EG',['Dinge an ihren Platz stellen','Vorräte/Haushaltsmittel grob prüfen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
-  ['Speis','EG',['Lebensmittel grob ordnen','Abgelaufenes/Offensichtliches prüfen','Regalfronten bei Bedarf abwischen','Boden saugen','Boden wischen']]
- ],
+ 4:[],
  5:[
   ['Waschküche','Keller',['Waschmaschine außen abwischen','Trockner außen abwischen','Arbeitsfläche abwischen','Wäsche ordnen','Boden nur bei sichtbarer Verschmutzung saugen']],
   ['Musikzimmer','Keller',['Herumliegende Dinge grob ordnen','Sichtbaren Staub entfernen','Boden saugen']],
@@ -154,8 +142,40 @@ const roomsByDay={
  ],
  6:[
   ['Waschküche','Keller',['Wäsche sortieren','Wäsche aufhängen/trocknen','Fertige Wäsche zusammenlegen, wenn du möchtest','Boden wischen']]
- ],
+ ]
 };
+
+// Kleine Portionen statt Raum-Marathons: Bäder und Nebenräume wechseln sich wochenweise ab.
+const thursdayA=[
+ ['Eingangsbereich','EG',['Schuhe/Jacken/Taschen ordnen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
+ ['Garderobe','EG',['Kleidung zurückhängen','Schuhe ordnen','Ablageflächen freimachen','Spiegel bei Bedarf reinigen','Boden saugen','Boden wischen']],
+ ['Flur','EG',['Herumliegende Dinge wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']]
+];
+const thursdayB=[
+ ['Büro','EG',['Schreibtisch freimachen','Sichtbare Flächen abstauben','Papier/Müll ordnen','Boden saugen','Boden wischen']],
+ ['Abstellraum','EG',['Dinge an ihren Platz stellen','Vorräte/Haushaltsmittel grob prüfen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
+ ['Speis','EG',['Lebensmittel grob ordnen','Abgelaufenes/Offensichtliches prüfen','Regalfronten bei Bedarf abwischen','Boden saugen','Boden wischen']]
+];
+const bathroomA=[
+ ['Gäste-WC','EG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Toilette innen reinigen','Toilette außen reinigen','Boden saugen','Boden wischen']],
+ ['Kinderbad','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Badewanne/Dusche kurz reinigen','Toilette reinigen','Boden saugen','Boden wischen']]
+];
+const bathroomB=[
+ ['Bad','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Dusche reinigen','Badewanne reinigen','Toilette reinigen','Boden saugen','Boden wischen']],
+ ['WC','OG',['Waschbecken reinigen','Armatur reinigen','Spiegel reinigen','Toilette innen reinigen','Toilette außen reinigen','Boden saugen','Boden wischen']]
+];
+function weekIsA(d=today){
+ const x=new Date(d); x.setHours(12,0,0,0); x.setDate(x.getDate()+4-(x.getDay()||7));
+ const yearStart=new Date(x.getFullYear(),0,1);
+ const week=Math.ceil((((x-yearStart)/86400000)+1)/7);
+ return week%2===0;
+}
+function plannedRoomsForDay(dow,d=today){
+ if(dow===2) return weekIsA(d)?bathroomA:bathroomB;
+ if(dow===4) return weekIsA(d)?thursdayA:thursdayB;
+ return roomsByDay[dow]||[];
+}
+
 const daily=[
  ['☀️ Morgenroutine','Ganzes Haus',['Bett machen','Schlafzimmer kurz lüften','Kleidung wegräumen','Schmutzwäsche in den Wäschekorb','Vorhänge/Raffstores öffnen','Geschirrspüler ausräumen','Frühstücksgeschirr einräumen','Küchenarbeitsfläche abwischen','Esstisch abwischen','Hochstuhl/Essplatz sauber machen','Schuhe, Jacken & Taschen kurz ordnen']],
  ['🍽️ Nach Mahlzeiten','Ganzes Haus',['Geschirr in den Geschirrspüler','Tisch abwischen','Hochstuhl/Essplatz sauber machen','Heruntergefallenes Essen vom Boden entfernen','Arbeitsfläche bei Bedarf abwischen']],
@@ -267,7 +287,13 @@ function renderPostponed(){
   entries.slice().reverse().forEach(([id,x])=>{
     const d=document.createElement('div');d.className='result';
     const b=document.createElement('b');b.textContent=x.text||'Aufgabe';
-    const s=document.createElement('small');s.textContent=(x.room||'Ganzes Haus')+' · verschoben am '+new Intl.DateTimeFormat('de-AT').format(new Date(x.from));
+    const s=document.createElement('small');
+    const parts=[];
+    if(x.room) parts.push(x.room);
+    if(x.area && x.area!==x.room) parts.push(x.area);
+    if(x.place) parts.push(x.place);
+    parts.push('verschoben am '+new Intl.DateTimeFormat('de-AT').format(new Date(x.from)));
+    s.textContent=parts.join(' · ');
     const br=document.createElement('br');
     const restore=document.createElement('button');restore.className='small';restore.textContent='↩ Wieder öffnen';
     restore.onclick=()=>restorePostponed(id);
@@ -301,14 +327,17 @@ function addToday(id,canonical,text,room){state.done[id]=false; state.lastDone[c
 function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.remove('hidden');setTimeout(()=>x.classList.add('hidden'),1800)}
 function renderToday(){
  document.getElementById('todayDate').textContent=dateLabel(today);
- let dow=today.getDay(), themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder & WCs','OG · Schlaf- & Kinderbereiche','EG · Eingang, Garderobe & Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];
- document.getElementById('todayTheme').textContent=state.chaos?'🧸 Heute zählt nur das Nötigste.':themes[dow];
+ let dow=today.getDay(), themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder · kleine Hälfte','OG · Schlaf- & Kinderbereiche','EG · kleine Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];
+ let theme=themes[dow];
+ if(dow===2) theme=weekIsA(today)?'Gäste-WC + Kinderbad · kleine Bäderhälfte':'Bad + WC · kleine Bäderhälfte';
+ if(dow===4) theme=weekIsA(today)?'Eingang + Garderobe + Flur · kleine Hälfte':'Büro + Abstellraum + Speis · kleine Hälfte';
+ document.getElementById('todayTheme').textContent=state.chaos?'🧸 Heute zählt nur das Nötigste.':theme;
  document.getElementById('chaosNote').style.display=state.chaos?'block':'none';
  let box=document.getElementById('tasks');box.innerHTML='';
  let total=0,done=0;
  const groups=[];
  daily.forEach((g,gi)=>groups.push([g[0],g[1],g[2], 'daily'+gi]));
- if(!state.chaos && roomsByDay[dow]) roomsByDay[dow].forEach((r,ri)=>groups.push([r[0],r[1],r[2],'room'+ri]));
+ if(!state.chaos) plannedRoomsForDay(dow,today).forEach((r,ri)=>groups.push([r[0],r[1],r[2],'room'+ri]));
  if(!state.chaos && dow!==0 && dow!==4){let rd=rotationDue(); if(rd)groups.push([rd[0],rd[1],[rd[0]],'rotation'+rd[2]])}
  if(!state.chaos && state.todayExtras) state.todayExtras.filter(x=>x.id.startsWith(key())).forEach((x,i)=>groups.push(['＋ Eigene Aufgabe',x.room||'Ganzes Haus',[x.text],'extra'+i]));
  groups.forEach(g=>{
@@ -340,7 +369,7 @@ function rotationDue(){
 }
 function showTab(x){['today','week','history'].forEach(y=>document.getElementById(y).classList.toggle('hidden',y!==x));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('primary'));document.getElementById('nav'+x[0].toUpperCase()+x.slice(1)).classList.add('primary');if(x==='week')renderWeek();if(x==='history')renderHistory()}
 function toggleChaos(){state.chaos=!state.chaos;save();renderToday()}
-function renderWeek(){let box=document.getElementById('weekList');box.innerHTML='';let start=new Date(today);start.setDate(start.getDate()-start.getDay()+1);for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);let el=document.createElement('div');el.className='card';let themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder & WCs','OG · Schlaf- & Kinderbereiche','EG · Eingang, Garderobe & Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];el.innerHTML='<b>'+new Intl.DateTimeFormat('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'}).format(d)+'</b><div class="subtitle">'+themes[d.getDay()]+'</div>';box.appendChild(el)}}
+function renderWeek(){let box=document.getElementById('weekList');box.innerHTML='';let start=new Date(today);start.setDate(start.getDate()-start.getDay()+1);for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);let dow=d.getDay();let themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder · kleine Hälfte','OG · Schlaf- & Kinderbereiche','EG · kleine Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];if(dow===2)themes[dow]=weekIsA(d)?'Gäste-WC + Kinderbad · kleine Bäderhälfte':'Bad + WC · kleine Bäderhälfte';if(dow===4)themes[dow]=weekIsA(d)?'Eingang + Garderobe + Flur · kleine Hälfte':'Büro + Abstellraum + Speis · kleine Hälfte';let el=document.createElement('div');el.className='card';el.innerHTML='<b>'+new Intl.DateTimeFormat('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'}).format(d)+'</b><div class="subtitle">'+themes[dow]+'</div>';box.appendChild(el)}}
 function renderHistory(){let box=document.getElementById('historyList');box.innerHTML='';let arr=Object.entries(state.lastDone).filter(([k,v])=>v).sort((a,b)=>b[1].localeCompare(a[1]));if(!arr.length){box.innerHTML='<div class="empty">Noch kein Verlauf – das ist völlig okay. ❤️</div>';return}arr.slice(0,80).forEach(([k,v])=>{let p=document.createElement('div');p.className='result';p.innerHTML='<b>'+k.replace(/^rot\\|\\d+\\|/,'Hauspflege · ')+'</b><small>Zuletzt erledigt: '+new Intl.DateTimeFormat('de-AT').format(new Date(v))+'</small>';box.appendChild(p)})}
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
@@ -401,6 +430,29 @@ function renderSearch(){
 }
 function saveCustom(add){let title=document.getElementById('customTitle').value.trim();if(!title){alert('Bitte gib der Aufgabe einen Namen.');return}let x={title,room:document.getElementById('customRoom').value.trim(),place:document.getElementById('customPlace').value.trim(),area:document.getElementById('customArea').value,rec:document.getElementById('customRec').value,start:document.getElementById('customStart').value||key(),cat:document.getElementById('customCat').value.trim()};state.custom.push(x);save();if(add){let i=state.custom.length-1;addToday(key()+'|custom|'+i+'|'+title,'custom|'+i,title,(x.room||'Ganzes Haus')+' · '+x.area+(x.place?' · '+x.place:''))}else{closeModal();toast('Eigene Aufgabe gespeichert ❤️')}}
 document.getElementById('customStart').value=key();
+
+// Einmalige Übernahme der heute bereits erledigten Donnerstag-Aufgaben aus V29.
+// 03.09.2026: alles aus der alten Donnerstag-Gruppe erledigt, nur das Büro blieb offen.
+function migrateToday0309(){
+ if(key()!=='2026-09-03' || state.migrations?.today0309) return;
+ state.migrations=state.migrations||{};
+ const oldRooms=[
+  ['Eingangsbereich','EG',['Schuhe/Jacken/Taschen ordnen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
+  ['Garderobe','EG',['Kleidung zurückhängen','Schuhe ordnen','Ablageflächen freimachen','Spiegel bei Bedarf reinigen','Boden saugen','Boden wischen']],
+  ['Flur','EG',['Herumliegende Dinge wegräumen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
+  ['Abstellraum','EG',['Dinge an ihren Platz stellen','Vorräte/Haushaltsmittel grob prüfen','Sichtbare Flächen abstauben','Boden saugen','Boden wischen']],
+  ['Speis','EG',['Lebensmittel grob ordnen','Abgelaufenes/Offensichtliches prüfen','Regalfronten bei Bedarf abwischen','Boden saugen','Boden wischen']]
+ ];
+ oldRooms.forEach((r,ri)=>r[2].forEach((t,i)=>{
+  const oldRoomIndex=ri<3?ri:ri+1;
+  const id='2026-09-03|room'+oldRoomIndex+'|'+i+'|'+t;
+  state.done[id]=true;
+  state.lastDone['room'+oldRoomIndex+'|'+i+'|'+t]='2026-09-03';
+ }));
+ state.migrations.today0309=true;
+ save();
+}
+migrateToday0309();
 renderToday();
 </script>
 </body></html>
