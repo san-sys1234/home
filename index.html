@@ -30,7 +30,7 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
 .postponed-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer}
 .postponed-head b{font-size:14px}.postponed-list{padding:0 14px 10px}.postponed-list .result{background:#fff}
 .postponed-empty{color:var(--muted);font-size:12px;padding:10px 0}
-.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
+.celebrate{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}.confetti{position:absolute;top:-24px;width:9px;height:15px;animation:fall 1.7s cubic-bezier(.2,.8,.3,1) forwards;transform:rotate(0deg)}@keyframes fall{0%{transform:translate3d(0,0,0) rotate(0deg);opacity:1}100%{transform:translate3d(var(--dx),105vh,0) rotate(var(--rot));opacity:0}}.completion-card{background:#e9f0e8;border-color:#d4e2d2}.completion-card h3{margin:0 0 4px}.calendar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.cal-weekday{text-align:center;color:var(--muted);font-size:11px;font-weight:700;padding:4px 0}.cal-day{min-height:54px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:7px 5px;text-align:center;display:flex;flex-direction:column;justify-content:space-between}.cal-day.empty{background:transparent;border-color:transparent}.cal-day.today{box-shadow:inset 0 0 0 2px var(--accent)}.cal-day.completed{background:#dfeade;border-color:#c8dbc5}.cal-day .num{font-weight:750;font-size:13px}.cal-day .check{font-size:13px}.calendar-legend{font-size:12px;color:var(--muted);margin-top:10px}.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
 /* Swipe */
 .task{position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
 .task .swipe-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-radius:10px;font-weight:700;color:white;opacity:0;transition:.15s;pointer-events:none}
@@ -406,7 +406,7 @@ function enableSwipe(row,id,canonical){
   row.addEventListener('touchend',()=>{
     if(!active)return;active=false;row.classList.remove('swiping');
     if(dx>75){
-      state.done[id]=true;state.lastDone[canonical]=key();save();toast('Erledigt ✓');renderToday();
+      state.done[id]=true;state.lastDone[canonical]=key();save();toast('Erledigt ✓');renderToday();if(dayCompletionStatus().complete)celebrateToday();
     }else if(dx<-75){
       const sec=row.closest('.section');
       const room=(sec?.querySelector('.loc')?.textContent||'').replace(/^ · /,'');
@@ -416,6 +416,25 @@ function enableSwipe(row,id,canonical){
   });
 }
 function addToday(id,canonical,text,room){state.done[id]=false; state.lastDone[canonical]=state.lastDone[canonical]||''; if(!state.todayExtras)state.todayExtras=[]; state.todayExtras.push({id,canonical,text,room});save();closeModal();renderToday();toast('Aufgabe für heute hinzugefügt ❤️')}
+function dayCompletionStatus(){
+  const groups=[];
+  daily.forEach((g,gi)=>groups.push([g[0],g[1],g[2],'daily'+gi]));
+  if(!state.chaos) plannedRoomsForDay(today.getDay(),today).forEach((r,ri)=>groups.push([r[0],r[1],r[2],'room'+ri]));
+  if(!state.chaos && today.getDay()!==0 && today.getDay()!==4){const rd=rotationDue();if(rd)groups.push([rd[0],rd[1],[rd[0]],'rotation'+rd[2]])}
+  if(!state.chaos && state.todayExtras) state.todayExtras.filter(x=>x.id.startsWith(key())).forEach((x,i)=>groups.push(['＋ Eigene Aufgabe',x.room||'Ganzes Haus',[x.text],'extra'+i]));
+  let total=0,done=0;
+  groups.forEach(g=>g[2].forEach((t,i)=>{const id=g[3].startsWith('extra')?state.todayExtras?.find(x=>x.text===t&&x.id.startsWith(key()))?.id:dayTaskId(g[3],i,t);if(id && !state.postponed[id]){total++;if(state.done[id])done++;}}));
+  return {total,done,complete:total>0&&done===total};
+}
+function celebrateToday(){
+  const d=key(); state.completedDays=state.completedDays||{};
+  if(state.completedDays[d]) return;
+  state.completedDays[d]=true; save();
+  const layer=document.createElement('div');layer.className='celebrate';document.body.appendChild(layer);
+  const symbols=['🎉','✨','🥳','🎊'];
+  for(let i=0;i<85;i++){const c=document.createElement('span');c.className='confetti';c.textContent=symbols[Math.floor(Math.random()*symbols.length)];c.style.left=(Math.random()*100)+'vw';c.style.setProperty('--dx',((Math.random()-.5)*180)+'px');c.style.setProperty('--rot',((Math.random()-.5)*900)+'deg');c.style.animationDelay=(Math.random()*.35)+'s';c.style.fontSize=(12+Math.random()*12)+'px';layer.appendChild(c)}
+  toast('🥳 Alles für heute geschafft!'); setTimeout(()=>layer.remove(),2300);
+}
 function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.remove('hidden');setTimeout(()=>x.classList.add('hidden'),1800)}
 function renderToday(){
  document.getElementById('todayDate').textContent=dateLabel(today);
@@ -447,10 +466,12 @@ function renderToday(){
    let content=document.createElement('div');content.className='task-content';
    let c=document.createElement('input');c.type='checkbox';c.checked=!!state.done[id];if(c.checked){done++}
    let s=document.createElement('span');s.textContent=t;s.className=c.checked?'done':'';
-   c.onchange=()=>{state.done[id]=c.checked;if(c.checked)state.lastDone[canonical]=key();save();renderToday()};
+   c.onchange=()=>{state.done[id]=c.checked;if(c.checked)state.lastDone[canonical]=key();else if(state.lastDone[canonical]===key())state.lastDone[canonical]='';save();renderToday();if(c.checked && dayCompletionStatus().complete)celebrateToday()};
    content.append(c,s);row.append(bgL,bgR,content);sec.appendChild(row);enableSwipe(row,id,canonical)});box.appendChild(sec)
  });
  document.getElementById('bar').style.width=total?(done/total*100)+'%':'0%';document.getElementById('count').textContent=done+' von '+total+' Aufgaben abgehakt';
+ const existing=document.getElementById('completionCard');if(existing)existing.remove();
+ if(total>0 && done===total){const card=document.createElement('div');card.id='completionCard';card.className='card completion-card';card.innerHTML='<h3>🥳 Alles geschafft!</h3><div class="subtitle">Heute ist komplett erledigt. Das darf sich gut anfühlen. ❤️</div>';document.getElementById('tasks').after(card);state.completedDays=state.completedDays||{};state.completedDays[key()]=true;save();}
  renderPostponed();
 }
 function dayTaskId(scope,i,t){return key()+'|'+scope+'|'+i+'|'+t}
@@ -463,7 +484,22 @@ function rotationDue(){
 function showTab(x){['today','week','history'].forEach(y=>document.getElementById(y).classList.toggle('hidden',y!==x));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('primary'));document.getElementById('nav'+x[0].toUpperCase()+x.slice(1)).classList.add('primary');if(x==='week')renderWeek();if(x==='history')renderHistory()}
 function toggleChaos(){state.chaos=!state.chaos;save();renderToday()}
 function renderWeek(){let box=document.getElementById('weekList');box.innerHTML='';let start=new Date(today);start.setDate(start.getDate()-start.getDay()+1);for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);let dow=d.getDay();let themes=['🥳 Haushaltsfrei','EG · Wohnen, Essen & Küche','Bäder · kleine Hälfte','OG · Schlaf- & Kinderbereiche','EG · kleine Nebenräume','Keller · klein halten','Wäsche + max. eine Sonderaufgabe'];if(dow===2)themes[dow]=weekIsA(d)?'Gäste-WC + Kinderbad · kleine Bäderhälfte':'Bad + WC · kleine Bäderhälfte';if(dow===4)themes[dow]=weekIsA(d)?'Eingang + Garderobe + Flur · kleine Hälfte':'Büro + Abstellraum + Speis · kleine Hälfte';let el=document.createElement('div');el.className='card';el.innerHTML='<b>'+new Intl.DateTimeFormat('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'}).format(d)+'</b><div class="subtitle">'+themes[dow]+'</div>';box.appendChild(el)}}
-function renderHistory(){let box=document.getElementById('historyList');box.innerHTML='';let arr=Object.entries(state.lastDone).filter(([k,v])=>v).sort((a,b)=>b[1].localeCompare(a[1]));if(!arr.length){box.innerHTML='<div class="empty">Noch kein Verlauf – das ist völlig okay. ❤️</div>';return}arr.slice(0,80).forEach(([k,v])=>{let p=document.createElement('div');p.className='result';p.innerHTML='<b>'+k.replace(/^rot\\|\\d+\\|/,'Hauspflege · ')+'</b><small>Zuletzt erledigt: '+new Intl.DateTimeFormat('de-AT').format(new Date(v))+'</small>';box.appendChild(p)})}
+function renderHistory(){
+  const box=document.getElementById('historyList');box.innerHTML='';
+  const now=new Date(today.getFullYear(),today.getMonth(),1);
+  const y=now.getFullYear(),m=now.getMonth();
+  const first=new Date(y,m,1);let offset=(first.getDay()+6)%7;
+  const days=new Date(y,m+1,0).getDate();
+  const completed=state.completedDays||{};
+  const wrap=document.createElement('div');
+  wrap.innerHTML='<div class="calendar-head"><b>'+new Intl.DateTimeFormat('de-AT',{month:'long',year:'numeric'}).format(now)+'</b><span class="badge">✓ erledigter Tag</span></div>';
+  const grid=document.createElement('div');grid.className='calendar-grid';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(x=>{const d=document.createElement('div');d.className='cal-weekday';d.textContent=x;grid.appendChild(d)});
+  for(let i=0;i<offset;i++){const d=document.createElement('div');d.className='cal-day empty';grid.appendChild(d)}
+  for(let n=1;n<=days;n++){const d=document.createElement('div');d.className='cal-day';const k=y+'-'+String(m+1).padStart(2,'0')+'-'+String(n).padStart(2,'0');if(k===key())d.classList.add('today');if(completed[k])d.classList.add('completed');d.innerHTML='<span class="num">'+n+'</span><span class="check">'+(completed[k]?'✓':'')+'</span>';grid.appendChild(d)}
+  wrap.appendChild(grid);const leg=document.createElement('div');leg.className='calendar-legend';leg.textContent='Grün = alle geplanten Tagesaufgaben an diesem Tag erledigt.';wrap.appendChild(leg);box.appendChild(wrap);
+}
+
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
 function allCatalog(){
