@@ -191,7 +191,7 @@ function findTodayTask(id){
  const m=id.match(/^(\d{4}-\d{2}-\d{2})::(\d+)::(\d+)$/);
  if(!m)return null;
  const dow=new Date(m[1]+"T12:00:00").getDay()||7;
- const rooms = dow===4 ? [
+ const specialRooms = dow===4 ? [
   {title:"Eingangsbereich",subtitle:"EG",tasks:[["Boden saugen / sichtbaren Schmutz entfernen",6],["Spiegel reinigen",4],["Ablageflächen abwischen",4],["Türbereich aufräumen",4]]},
   {title:"Garderobe",subtitle:"EG",tasks:[["Schuhe ordentlich stellen",4],["Jacken und Taschen ordnen",4],["Garderobenbank / Ablage aufräumen",4],["Garderobenflächen abwischen",4],["Spiegel reinigen",4]]},
   {title:"Flur",subtitle:"EG",tasks:[["Herumliegende Dinge wegräumen",3],["Sichtbare Flächen abstauben",4],["Boden saugen",7]]},
@@ -205,7 +205,7 @@ function findTodayTask(id){
   {title:"Abendlicher 10-Minuten-Reset",tasks:[["Spülmaschine beladen und starten",2],["Arbeitsflächen wischen",2],["Herd wischen",2],["Spüle und Armatur wischen",2],["Esstisch wischen",2],["Hanni-Essbereich reinigen",2],["Müll prüfen",1],["Wohnzimmer grob zurücksetzen",3],["Garderobe grob ordnen",2],["Kleidung wegräumen",2]]},
   {title:"Tagescheck",tasks:[["Restmüll / Biomüll prüfen",1],["Wäsche nur bei Bedarf",1],["Toiletten nur bei Bedarf prüfen",1],["Küchenboden bei Essensresten reinigen",2],["Sichtbare Flecken entfernen",2],["Kühlschrank nur bei Bedarf prüfen",1]]}
  ];
- const rooms=[...daily,...todayRoomsFallback(dow)];
+ const rooms=[...daily,...specialRooms];
  const ri=Number(m[2]), ii=Number(m[3]);
  const room=rooms[ri], item=room?.tasks[ii];
  if(!item)return null;
