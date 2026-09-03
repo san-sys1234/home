@@ -388,12 +388,17 @@ async function sendChat(){
  const freshInput=document.getElementById('chatInput'),freshSend=document.getElementById('chatSend'),freshStatus=document.getElementById('chatStatus');
  freshSend.disabled=true;freshInput.disabled=true;freshStatus.textContent='Ich denke kurz nach … 🥰';
  try{
-   const response=await fetch(CHAT_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatState.messages.slice(-20),context:chatContext()})});
+   const controller=new AbortController();
+   const timeout=setTimeout(()=>controller.abort(),30000);
+   let response;
+   try{
+     response=await fetch(CHAT_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chatState.messages.slice(-20),context:chatContext()}),signal:controller.signal});
+   }finally{clearTimeout(timeout)}
    const data=await response.json().catch(()=>({}));
    if(!response.ok||!data.reply)throw new Error(data.error||'Keine Antwort');
    chatState.messages.push({role:'assistant',content:data.reply});chatSave();renderChat();
  }catch(err){
-   const detail=(e && e.message)?e.message:'Unbekannter Fehler';
+   const detail=err?.name==='AbortError'?'Zeitüberschreitung nach 30 Sekunden':((err && err.message)?err.message:'Unbekannter Fehler');
    chatState.messages.push({role:'assistant',content:'Oh 😮‍💨 Der Chat konnte gerade nicht antworten. Technischer Hinweis: '+detail});
    chatSave();renderChat();
  }

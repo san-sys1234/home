@@ -131,19 +131,27 @@ export default {
       : messages;
 
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "gpt-5.6-luna",
-          store: false,
-          instructions: SYSTEM_PROMPT,
-          input
-        })
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      let response;
+      try {
+        response = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "gpt-5.6-luna",
+            store: false,
+            instructions: SYSTEM_PROMPT,
+            input
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       const data = await response.json();
 
@@ -159,9 +167,11 @@ export default {
         reply: data.output_text || "Ich konnte gerade keine Antwort erzeugen."
       }, 200, origin);
 
-    } catch {
+    } catch (err) {
       return json({
-        error: "Verbindung zur KI fehlgeschlagen."
+        error: err?.name === "AbortError"
+          ? "Die KI-Anfrage hat zu lange gedauert."
+          : "Verbindung zur KI fehlgeschlagen."
       }, 502, origin);
     }
   }
