@@ -102,12 +102,103 @@ const tasks = [
  {id:"rotate-lamps",title:"Erreichbare Lampen",kind:"rotation",interval:120,dur:15,details:["nur sicher erreichbare Lampen","trocken/geeignet reinigen"],group:"Licht"}
 ];
 
-const state = JSON.parse(localStorage.getItem("zuhauseState")||'{"done":{},"skipped":{},"lastDone":{},"chaos":false}');
-function save(){localStorage.setItem("zuhauseState",JSON.stringify(state));render()}
+// Jede einzelne Tätigkeit wird zu einer eigenen Karte.
+// So kann wirklich jedes To-do separat nach rechts (erledigt) oder links (später) gewischt werden.
+const locations = {
+  "daily-morning":"OG · Schlafzimmer / Ankleidezimmer / Kinderzimmer · EG · Garderobe / Küche / Essbereich",
+  "daily-meals":"EG · Küche / Essbereich",
+  "daily-evening":"EG · Küche / Essbereich / Wohnzimmer / Garderobe",
+  "daily-check":"EG · Küche / Gäste-WC · gesamtes Haus bei Bedarf",
+  "thu-entry":"EG · Eingangsbereich / Garderobe",
+  "thu-hall":"EG · Flur / Büro",
+  "thu-pantry":"EG · Speis / Abstellraum",
+  "fri-laundry":"Keller · Waschküche",
+  "fri-music":"Keller · Musikzimmer",
+  "fri-training":"Keller · Trainingsraum",
+  "mon-eg":"EG · Wohnzimmer / Essbereich / Küche / Speis",
+  "tue-bath":"EG · Gäste-WC · OG · Kinderbad / Bad / WC / Saunaraum",
+  "wed-og":"OG · Elternbereich / Schlafzimmer / Ankleidezimmer / Kinderzimmer 1 / Kinderzimmer 2",
+  "sat-laundry":"Keller · Waschküche · gesamtes Haus für Wäsche",
+  "rotate-handles":"gesamtes Haus · alle relevanten Türen",
+  "rotate-frames":"gesamtes Haus · Türrahmen / Zargen",
+  "rotate-doors":"gesamtes Haus · Türblätter",
+  "rotate-baseboards":"gesamtes Haus · Sockelleisten",
+  "rotate-corners":"gesamtes Haus · Decken-/Wandecken",
+  "rotate-switches":"gesamtes Haus · Lichtschalter",
+  "rotate-outlets":"gesamtes Haus · Steckdosen",
+  "rotate-stucco":"gesamtes Haus · Stuck",
+  "rotate-windows":"gesamtes Haus · Fenster nach Abschnitt",
+  "rotate-blinds":"gesamtes Haus · Raffstores",
+  "rotate-curtains":"gesamtes Haus · Vorhänge / Schienen",
+  "rotate-fridge":"EG · Küche · Kühlschrank",
+  "rotate-oven":"EG · Küche · Backofen",
+  "rotate-dishwasher":"EG · Küche · Spülmaschine",
+  "rotate-washer":"Keller · Waschküche · Waschmaschine",
+  "rotate-sauna":"OG · Saunaraum",
+  "rotate-mattress":"OG · Schlafzimmer / Kinderzimmer",
+  "rotate-grout":"OG · Kinderbad / Bad / WC · EG · Gäste-WC",
+  "rotate-lamps":"gesamtes Haus · erreichbare Lampen"
+};
+
+const baseTasks = tasks.slice();
+tasks.length = 0;
+baseTasks.forEach(t => {
+  const items = (t.details && t.details.length) ? t.details : [t.title];
+  items.forEach((item, i) => {
+    tasks.push({
+      ...t,
+      id: items.length === 1 ? t.id : `${t.id}-${i}`,
+      title: items.length === 1 ? t.title : item,
+      parentTitle: items.length === 1 ? "" : t.title,
+      location: locations[t.id] || "gesamtes Haus",
+      details: [items.length === 1 ? item : item],
+      dur: Math.max(2, Math.round(t.dur / items.length))
+    });
+  });
+});
+
+
+const STORAGE_KEY="zuhauseStateV3";
+const raw=localStorage.getItem(STORAGE_KEY);
+const state=raw?JSON.parse(raw):{"done":{},"skipped":{},"lastDone":{},"chaos":false};
+function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
 function key(id,date=todayKey()){return id+"@"+date}
 function todayKey(){let d=new Date();return d.toISOString().slice(0,10)}
 function dateDE(s){return new Date(s+"T12:00:00").toLocaleDateString("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"})}
 function daysSince(s){if(!s)return 9999;return Math.floor((new Date(todayKey())-new Date(s))/86400000)}
+function addDays(base,n){let d=new Date(base+"T12:00:00");d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function seedRotation(){
+  if(localStorage.getItem(STORAGE_KEY)) return;
+  // Gentle staggered start: only a few rotation tasks are due on day 1.
+  const seedOffsets={
+    "rotate-handles":0,
+    "rotate-frames":7,
+    "rotate-doors":21,
+    "rotate-baseboards":3,
+    "rotate-corners":14,
+    "rotate-switches":10,
+    "rotate-outlets":35,
+    "rotate-stucco":60,
+    "rotate-windows":90,
+    "rotate-blinds":120,
+    "rotate-curtains":150,
+    "rotate-fridge":0,
+    "rotate-oven":28,
+    "rotate-dishwasher":16,
+    "rotate-washer":0,
+    "rotate-sauna":12,
+    "rotate-mattress":75,
+    "rotate-grout":40,
+    "rotate-lamps":55
+  };
+  Object.entries(seedOffsets).forEach(([id,offset])=>{
+    tasks.filter(x=>x.id===id || x.id.startsWith(id+"-")).forEach(t=>{
+      state.lastDone[t.id]=addDays(todayKey(),-(Math.max(0,t.interval-offset)));
+    });
+  });
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+seedRotation();
 function isDone(t){return !!state.done[key(t.id)]}
 function isSkipped(t){return !!state.skipped[key(t.id)]}
 function complete(t){state.done[key(t.id)]=true;state.lastDone[t.id]=todayKey();delete state.skipped[key(t.id)];save()}
@@ -119,7 +210,7 @@ function taskCard(t,swipe=true){
  return `<div class="card task ${done?"done":""}" data-id="${t.id}">
    <div class="under right">ERLEDIGT ✓</div><div class="under left">SPÄTER</div>
    <div class="body">
-    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">${t.dur} Min · ${t.kind==="rotation"?"Rotation":"heute"}</div></div>
+    <span class="dot"></span><div style="flex:1"><div class="title">${t.title}</div><div class="tag">📍 ${t.location || "gesamtes Haus"}</div><div class="tag">${t.parentTitle ? t.parentTitle+" · " : ""}${t.dur} Min · ${t.kind==="rotation"?"Rotation":"heute"}</div></div>
     <span class="badge">${done?"✓ erledigt":"wischen"}</span>
    </div></div>`
 }
@@ -151,7 +242,7 @@ function renderToday(){
  const active=[...daily,...anchors,...due];
  const done=active.filter(isDone).length, total=active.length;
  let html=`<div class="hint">👉 <b>Nach rechts wischen = erledigt.</b> Nach links = für heute überspringen. Nichts wird morgen automatisch nachgeholt. Deine Rotation richtet sich nach dem letzten echten Erledigungsdatum.</div>
- <div class="grid"><div class="stat"><div class="num">${done}/${total}</div><div class="label">heute erledigt</div></div><div class="stat"><div class="num">${active.reduce((a,t)=>a+t.dur,0)} Min</div><div class="label">wenn du alles machst</div></div></div>
+ <div class="grid"><div class="stat"><div class="num">${done}/${total}</div><div class="label">heute erledigt</div></div><div class="stat"><div class="num">${active.reduce((a,t)=>a+t.dur,0)} Min</div><div class="label">maximal heute geplant</div></div></div>
  <div class="sectionhead"><h2>Heute</h2><button class="smallbtn" onclick="resetToday()">Tag zurücksetzen</button></div>
  <div class="progress"><i style="width:${total?done/total*100:0}%"></i></div>`;
  if(!active.length) html+=`<div class="empty">Heute ist nichts Dringendes geplant. 🥰</div>`;
@@ -172,19 +263,19 @@ function renderWeek(){
 function renderRotation(){
  const groups={};
  tasks.filter(t=>t.kind==="rotation").forEach(t=>{(groups[t.group]??=[]).push(t)});
- let html=`<h2>Hauspflege-Rotation</h2><div class="hint">Hier zählt nicht, ob etwas einmal im Kalender stand, sondern wann du es tatsächlich zuletzt gemacht hast. „Später“ verschiebt die Aufgabe nicht automatisch auf morgen.</div>`;
+ let html=`<h2>Hauspflege-Rotation</h2><div class="hint">Die Rotation ist bewusst verteilt, damit nicht alles auf einmal anfällt. Danach zählt immer das echte Erledigungsdatum. „Später“ verschiebt die Aufgabe nicht automatisch auf morgen.</div>`;
  Object.entries(groups).forEach(([g,arr])=>{
   html+=`<h3 style="margin:18px 4px 8px">${g}</h3>`;
   arr.forEach(t=>{
    let last=state.lastDone[t.id], left=last?Math.max(0,t.interval-daysSince(last)):0;
    let status=!last?"noch nie erledigt":left===0?"jetzt fällig":`in ${left} Tag${left===1?"":"en"}`;
-   html+=`<div class="card day"><strong>${t.title}</strong><div class="sub">${status} · Rhythmus ca. ${t.interval} Tage</div><button class="smallbtn" style="margin-top:9px" onclick="openModal(tasks.find(x=>x.id==='${t.id}'))">Details</button></div>`
+   html+=`<div class="card day"><strong>${t.title}</strong><div class="sub">📍 ${t.location || "gesamtes Haus"} · ${status} · Rhythmus ca. ${t.interval} Tage</div><button class="smallbtn" style="margin-top:9px" onclick="openModal(tasks.find(x=>x.id==='${t.id}'))">Details</button></div>`
   });
  });
  document.getElementById("rotation").innerHTML=html;
 }
 function render(){document.getElementById("date").textContent=dateDE(todayKey());renderToday();renderWeek();renderRotation();if(state.chaos)document.body.classList.add("chaos");else document.body.classList.remove("chaos")}
-function openModal(t){document.getElementById("modalContent").innerHTML=`<h2>${t.title}</h2><p class="sub">${t.dur} Minuten · ${t.kind==="rotation"?"Rotation":"Tages-/Wochenaufgabe"}</p><ul>${t.details.map(x=>`<li style="margin:8px 0">${x}</li>`).join("")}</ul><div class="hint">Heute: <b>${isDone(t)?"erledigt ✓":isSkipped(t)?"übersprungen":"offen"}</b></div>`;document.getElementById("modal").classList.add("show")}
+function openModal(t){document.getElementById("modalContent").innerHTML=`<h2>${t.title}</h2><p class="sub">📍 ${t.location || "gesamtes Haus"}</p><p class="sub">${t.parentTitle ? t.parentTitle+" · " : ""}${t.dur} Minuten · ${t.kind==="rotation"?"Rotation":"Tages-/Wochenaufgabe"}</p><div class="hint">Dieses To-do ist bewusst <b>separat</b> abhackbar.</div><div class="hint">Heute: <b>${isDone(t)?"erledigt ✓":isSkipped(t)?"übersprungen":"offen"}</b></div>`;document.getElementById("modal").classList.add("show")}
 function closeModal(){document.getElementById("modal").classList.remove("show")}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");["today","week","rotation"].forEach(id=>document.getElementById(id).classList.toggle("hidden",id!==b.dataset.tab))});
 document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;document.getElementById("chaosBtn").textContent=state.chaos?"🧸 Chaosmodus AUS":"🧸 Hanni-Chaosmodus";save()};
