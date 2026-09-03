@@ -389,11 +389,22 @@ function renderWeek(){let box=document.getElementById('weekList');box.innerHTML=
 function renderHistory(){let box=document.getElementById('historyList');box.innerHTML='';let arr=Object.entries(state.lastDone).filter(([k,v])=>v).sort((a,b)=>b[1].localeCompare(a[1]));if(!arr.length){box.innerHTML='<div class="empty">Noch kein Verlauf – das ist völlig okay. ❤️</div>';return}arr.slice(0,80).forEach(([k,v])=>{let p=document.createElement('div');p.className='result';p.innerHTML='<b>'+k.replace(/^rot\\|\\d+\\|/,'Hauspflege · ')+'</b><small>Zuletzt erledigt: '+new Intl.DateTimeFormat('de-AT').format(new Date(v))+'</small>';box.appendChild(p)})}
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
-function allCatalog(){let a=[];catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Ganzes Haus',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',custom:i}));return a}
+function allCatalog(){
+  let a=[];
+  catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));
+  state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Ganzes Haus',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',place:x.place||'',custom:i}));
+  return a;
+}
+function normalizeSearch(v){
+  return (v||'').toLocaleLowerCase('de-DE')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ß/g,'ss').replace(/[^\p{L}\p{N}\s-]/gu,' ')
+    .replace(/\s+/g,' ').trim();
+}
 function renderSearch(){
   const input=document.getElementById('catalogSearch');
   const box=document.getElementById('searchResults');
-  const q=(input.value||'').trim().toLocaleLowerCase('de-DE');
+  const q=normalizeSearch(input.value);
   const all=allCatalog();
 
   if(!q){
@@ -403,33 +414,45 @@ function renderSearch(){
 
   const words=q.split(/\s+/).filter(Boolean);
   const results=all.map((x,index)=>{
-    const text=(x.title+' '+x.room+' '+x.area+' '+x.cat+' '+(x.place||'')).toLocaleLowerCase('de-DE');
+    const title=normalizeSearch(x.title), room=normalizeSearch(x.room), area=normalizeSearch(x.area);
+    const cat=normalizeSearch(x.cat), place=normalizeSearch(x.place);
+    const text=[title,room,area,cat,place].join(' ');
     let score=0;
+
     words.forEach(w=>{
-      if(x.title.toLocaleLowerCase('de-DE').startsWith(w)) score+=12;
-      else if(x.title.toLocaleLowerCase('de-DE').includes(w)) score+=8;
-      if(x.room.toLocaleLowerCase('de-DE').includes(w)) score+=5;
-      if(x.area.toLocaleLowerCase('de-DE').includes(w)) score+=3;
-      if(x.cat.toLocaleLowerCase('de-DE').includes(w)) score+=2;
+      if(title===w) score+=30;
+      else if(title.startsWith(w)) score+=20;
+      else if(title.split(/\s+/).some(t=>t.startsWith(w))) score+=16;
+      else if(title.includes(w)) score+=12;
+
+      if(room.includes(w)) score+=7;
+      if(area.includes(w)) score+=5;
+      if(cat.includes(w)) score+=4;
+      if(place.includes(w)) score+=4;
       if(text.includes(w)) score+=1;
     });
+
+    // Bei einem einzelnen Suchwort reichen auch sehr kurze/teilweise Treffer.
+    if(words.length===1 && text.includes(words[0])) score+=8;
+
     return {...x,index,score};
-  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,25);
+  }).filter(x=>x.score>0)
+    .sort((a,b)=>b.score-a.score || a.title.localeCompare(b.title,'de'))
+    .slice(0,25);
 
   if(!results.length){
-    box.innerHTML='<div class="result"><b>Keine passende Katalogaufgabe gefunden.</b><small>Du kannst darunter direkt eine eigene Aufgabe anlegen.</small></div>';
+    box.innerHTML='<div class="result"><b>Keine passende Katalogaufgabe gefunden.</b><small>Versuche z. B. einen allgemeineren Begriff wie „Fenster“, „Tür“, „Bad“ oder „Küche“.</small></div>';
     return;
   }
 
   box.innerHTML='<div class="hint">'+results.length+' passende Vorschläge · tippe bei einem Vorschlag auf „＋ Heute“</div>';
-
   results.forEach(x=>{
     const d=document.createElement('div');
     d.className='result';
     const title=document.createElement('b');
     title.textContent=x.title;
     const meta=document.createElement('small');
-    meta.textContent=(x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.cat?' · '+x.cat:'');
+    meta.textContent=(x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.place?' · '+x.place:'')+(x.cat?' · '+x.cat:'');
     const br=document.createElement('br');
     const b=document.createElement('button');
     b.className='small';
@@ -438,7 +461,7 @@ function renderSearch(){
       key()+'|catalog|'+x.index+'|'+x.title,
       'catalog|'+x.title,
       x.title,
-      (x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')
+      (x.room||'Ganzes Haus')+' · '+(x.area||'Ganzes Haus')+(x.place?' · '+x.place:'')
     );
     d.append(title,meta,br,b);
     box.appendChild(d);
