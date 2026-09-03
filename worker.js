@@ -59,6 +59,15 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET") {
+      if (url.pathname === "/chat") {
+        return json({
+          ok: true,
+          service: "Unser Zuhause Chat",
+          endpoint: "/chat",
+          status: "online",
+          hint: "Der Chat-Endpunkt wartet auf eine POST-Anfrage aus der App."
+        }, 200, origin);
+      }
       return json({
         ok: true,
         service: "Unser Zuhause Chat",

@@ -38,8 +38,8 @@
 </head>
 <body>
 <header><h1>Unser Zuhause 🏡</h1><div class="sub" id="date"></div></header>
-<nav><button class="active" data-tab="today">Heute</button><button data-tab="week">Woche</button><button data-tab="calendar">📅 Verlauf</button><button data-tab="rotation">Rotation</button><button data-tab="chat">🤖 Chat</button></nav>
-<main><section id="today"></section><section id="week" hidden></section><section id="calendar" hidden></section><section id="rotation" hidden></section><section id="chat" hidden></section></main>
+<nav><button class="active" data-tab="today">Heute</button><button data-tab="week">Woche</button><button data-tab="calendar">📅 Verlauf</button><button data-tab="chat">🤖 Chat</button></nav>
+<main><section id="today"></section><section id="week" hidden></section><section id="calendar" hidden></section><section id="chat" hidden></section></main>
 <div class="footer"><button id="chaos">🧸 Hanni-Chaosmodus</button></div>
 <script>
 (function(){
@@ -393,14 +393,15 @@ async function sendChat(){
    if(!response.ok||!data.reply)throw new Error(data.error||'Keine Antwort');
    chatState.messages.push({role:'assistant',content:data.reply});chatSave();renderChat();
  }catch(err){
-   chatState.messages.push({role:'assistant',content:'Oh 😮‍💨 Ich komme gerade nicht zum Chat-Server. Prüfe bitte, ob der neue Worker schon veröffentlicht ist.'});
+   const detail=(e && e.message)?e.message:'Unbekannter Fehler';
+   chatState.messages.push({role:'assistant',content:'Oh 😮‍💨 Der Chat konnte gerade nicht antworten. Technischer Hinweis: '+detail});
    chatSave();renderChat();
  }
 }
-function switchTab(tab){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));['today','week','calendar','rotation','chat'].forEach(id=>document.getElementById(id).hidden=id!==tab)}
+function switchTab(tab){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));['today','week','calendar','chat'].forEach(id=>document.getElementById(id).hidden=id!==tab)}
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 document.getElementById('chaos').addEventListener('click',()=>{state.chaos=!state.chaos;save()});
-function render(){document.getElementById('date').textContent=germanDate();renderToday();renderWeek();renderCalendar();renderRotation();renderChat();document.getElementById('chaos').textContent=state.chaos?'🧸 Chaosmodus AUS':'🧸 Hanni-Chaosmodus'}
+function render(){document.getElementById('date').textContent=germanDate();renderToday();renderWeek();renderCalendar();renderChat();document.getElementById('chaos').textContent=state.chaos?'🧸 Chaosmodus AUS':'🧸 Hanni-Chaosmodus'}
 render();
 })();
 </script>
