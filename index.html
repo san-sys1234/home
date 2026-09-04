@@ -30,7 +30,7 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
 .postponed-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer}
 .postponed-head b{font-size:14px}.postponed-list{padding:0 14px 10px}.postponed-list .result{background:#fff}
 .postponed-empty{color:var(--muted);font-size:12px;padding:10px 0}
-.celebrate{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}.confetti{position:absolute;top:-24px;width:9px;height:15px;animation:fall 1.7s cubic-bezier(.2,.8,.3,1) forwards;transform:rotate(0deg)}@keyframes fall{0%{transform:translate3d(0,0,0) rotate(0deg);opacity:1}100%{transform:translate3d(var(--dx),105vh,0) rotate(var(--rot));opacity:0}}.completion-card{background:#e9f0e8;border-color:#d4e2d2}.completion-card h3{margin:0 0 4px}.calendar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.cal-weekday{text-align:center;color:var(--muted);font-size:11px;font-weight:700;padding:4px 0}.cal-day{min-height:54px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:7px 5px;text-align:center;display:flex;flex-direction:column;justify-content:space-between}.cal-day.empty{background:transparent;border-color:transparent}.cal-day.today{box-shadow:inset 0 0 0 2px var(--accent)}.cal-day.completed{background:#dfeade;border-color:#c8dbc5}.cal-day .num{font-weight:750;font-size:13px}.cal-day .check{font-size:13px}.calendar-legend{font-size:12px;color:var(--muted);margin-top:10px}.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
+.celebrate{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}.confetti{position:absolute;top:-24px;width:9px;height:15px;animation:fall 1.7s cubic-bezier(.2,.8,.3,1) forwards;transform:rotate(0deg)}@keyframes fall{0%{transform:translate3d(0,0,0) rotate(0deg);opacity:1}100%{transform:translate3d(var(--dx),105vh,0) rotate(var(--rot));opacity:0}}.completion-card{background:#e9f0e8;border-color:#d4e2d2}.completion-card h3{margin:0 0 4px}.calendar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.cal-weekday{text-align:center;color:var(--muted);font-size:11px;font-weight:700;padding:4px 0}.cal-day{min-height:54px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:7px 5px;text-align:center;display:flex;flex-direction:column;justify-content:space-between}.cal-day.empty{background:transparent;border-color:transparent}.cal-day.today{box-shadow:inset 0 0 0 2px var(--accent)}.cal-day.completed{background:#dfeade;border-color:#c8dbc5}.cal-day .num{font-weight:750;font-size:13px}.cal-day .check{font-size:13px}.calendar-legend{font-size:12px;color:var(--muted);margin-top:10px}.detail-modal{position:fixed;inset:0;background:#0005;display:flex;align-items:flex-end;justify-content:center;padding:12px;z-index:35}.detail-sheet{background:var(--bg);width:min(760px,100%);max-height:85vh;overflow:auto;border-radius:24px;padding:18px}.detail-sheet ul{margin:10px 0 0;padding-left:22px}.detail-sheet li{margin:7px 0}.cal-day.completed{cursor:pointer}.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#2d2a27;color:#fff;padding:11px 15px;border-radius:14px;z-index:30;font-size:13px}
 /* Swipe */
 .task{position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
 .task .swipe-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-radius:10px;font-weight:700;color:white;opacity:0;transition:.15s;pointer-events:none}
@@ -116,6 +116,14 @@ button.primary{background:var(--accent);color:white;border-color:var(--accent)}b
   </div>
  </div>
 </div>
+<div id="detailModal" class="detail-modal hidden" onclick="if(event.target.id==='detailModal')closeDetail()">
+ <div class="detail-sheet">
+  <div class="sheethead"><div><div class="eyebrow">Aufgabe im Detail</div><h2 id="detailTitle" style="margin:2px 0 0"></h2></div><button onclick="closeDetail()">✕</button></div>
+  <div class="subtitle" id="detailMeta" style="margin-top:6px"></div>
+  <div class="card" style="margin-top:14px"><b>Was genau ist damit gemeint?</b><ul id="detailList"></ul></div>
+  <div class="hint" id="detailNote"></div>
+ </div>
+</div>
 <div id="toast" class="toast hidden"></div>
 
 <script>
@@ -181,18 +189,6 @@ function catalogSearchScore(task, query){
   else score -= (tokens.length - matchedTokens) * 40;
 
   return score;
-}
-
-function searchCatalog(query){
-  const q = String(query ?? "").trim();
-  if(!q) return [];
-
-  return (typeof catalog !== "undefined" ? catalog : [])
-    .map((task, index) => ({task, index, score: catalogSearchScore(task, q)}))
-    .filter(x => x.score > 0)
-    .sort((a,b) => b.score - a.score || String(a.task.title||a.task.name||"").localeCompare(String(b.task.title||b.task.name||""),"de"))
-    .slice(0,25)
-    .map(x => x.task);
 }
 
 
@@ -362,7 +358,7 @@ function restorePostponed(id){
   save(); toast('Aufgabe wieder in die offenen Aufgaben gelegt ❤️'); renderToday();
 }
 function renderPostponed(){
-  const entries=Object.entries(state.postponed||{});
+  const todayKey=key(); const entries=Object.entries(state.postponed||{}).filter(([id,x])=>x.from===todayKey);
   const section=document.getElementById('postponedSection');
   const list=document.getElementById('postponedList');
   const count=document.getElementById('postponedCount');
@@ -467,7 +463,7 @@ function renderToday(){
    let c=document.createElement('input');c.type='checkbox';c.checked=!!state.done[id];if(c.checked){done++}
    let s=document.createElement('span');s.textContent=t;s.className=c.checked?'done':'';
    c.onchange=()=>{state.done[id]=c.checked;if(c.checked)state.lastDone[canonical]=key();else if(state.lastDone[canonical]===key())state.lastDone[canonical]='';save();renderToday();if(c.checked && dayCompletionStatus().complete)celebrateToday()};
-   content.append(c,s);row.append(bgL,bgR,content);sec.appendChild(row);enableSwipe(row,id,canonical)});box.appendChild(sec)
+   content.append(c,s);content.addEventListener('click',e=>{if(e.target.tagName==='INPUT')return;openDetail(t,g[0],g[1])});row.append(bgL,bgR,content);sec.appendChild(row);enableSwipe(row,id,canonical)});box.appendChild(sec)
  });
  document.getElementById('bar').style.width=total?(done/total*100)+'%':'0%';document.getElementById('count').textContent=done+' von '+total+' Aufgaben abgehakt';
  const existing=document.getElementById('completionCard');if(existing)existing.remove();
@@ -480,6 +476,49 @@ function rotationDue(){
  rotations.forEach((r,i)=>{let last=state.lastDone['rot|'+i]||'';let due=!last||((new Date(key())-new Date(last))/86400000>=r[2]);if(due)candidates.push([r[0],r[1],i])});
  if(!candidates.length)return null;
  return candidates[0];
+}
+const TASK_DETAILS={
+ '🚪 Türklinken & häufig berührte Stellen – Ganzes Haus':{
+  items:['Alle Türklinken und Türgriffe der häufig benutzten Türen abwischen.','Lichtschalter in Fluren, Eingangsbereich, Küche, Bädern und häufig genutzten Räumen abwischen.','Fenstergriffe nur dort abwischen, wo sie regelmäßig benutzt werden.','Handläufe und Geländer abwischen.','Griffe von häufig benutzten Schränken und Schubladen (z. B. Küche, Garderobe) abwischen.'],note:'Nicht gemeint sind komplette Türen, Türrahmen, Wände oder sämtliche Schrankoberflächen. Außenflächen von Schaltern und Steckdosen nur trocken bzw. materialgerecht reinigen; nichts öffnen.'},
+ '🚪 Türrahmen / Zargen – Ganzes Haus':{items:['Türrahmen und Zargen rundum trocken entstauben.','Anschließend sichtbare Finger- und Schmutzspuren mit einem materialgeeigneten, leicht feuchten Tuch entfernen.','Besonders den Bereich um die Türklinke und die unteren Ecken kontrollieren.'],note:'Türblätter gehören nicht automatisch dazu – dafür gibt es die eigene Aufgabe.'},
+ '🚪 Türblätter gründlich – Ganzes Haus':{items:['Türblatt auf beiden Seiten abwischen.','Türkanten und den Bereich um die Klinke reinigen.','Sichtbare Flecken entfernen.'],note:'Material und Reinigungsmittel immer an die Türoberfläche anpassen.'},
+ '🕸️ Decken-/Wandecken auf Spinnweben – Ganzes Haus':{items:['Alle gut erreichbaren Decken- und Wandecken des vorgesehenen Bereichs kontrollieren.','Spinnweben vorsichtig mit Staubwedel oder Staubsauger entfernen.','Besonders Ecken hinter Türen, bei Treppen und an hohen Übergängen kontrollieren.'],note:'Keine Leitern auf unsicheren Untergründen verwenden.'},
+ '✨ Lichtschalter außen abwischen – Ganzes Haus':{items:['Schalterabdeckungen außen abwischen.','Den Bereich rund um den Schalter auf Fingerabdrücke prüfen.'],note:'Nur die zugängliche Außenfläche reinigen. Schalter niemals öffnen oder Flüssigkeit hineinbringen.'},
+ '🔌 Steckdosen außen abwischen – Ganzes Haus':{items:['Nur die sichtbare Außenfläche und den Rahmen trocken bzw. sehr sparsam materialgerecht abwischen.','Finger- und Staubspuren entfernen.'],note:'Niemals Steckdosen öffnen und keine Flüssigkeit in Öffnungen bringen.'},
+ '🏛️ Stuck vorsichtig trocken entstauben – Ganzes Haus':{items:['Gut erreichbare Stuckflächen vorsichtig mit weichem, trockenem Staubwedel oder weicher Bürste entstauben.','Ornamente und Vertiefungen besonders vorsichtig bearbeiten.'],note:'Bei empfindlichem/gestrichenem Stuck zuerst Hersteller-/Materialvorgaben beachten.'},
+ '🪟 Fensterrahmen & Falze – Ganzes Haus':{items:['Fensterrahmen innen und außen auf erreichbaren Bereichen abwischen.','Falze öffnen und sichtbaren Staub/Schmutz entfernen.','Dichtungen kontrollieren und nur materialgerecht reinigen.'],note:'Außen nur reinigen, wenn es sicher erreichbar ist.'},
+ '🪟 Vorhangstangen / Schienen – Ganzes Haus':{items:['Vorhangstangen bzw. Schienen auf Staub prüfen.','Staub vorsichtig entfernen.','Vorhänge dafür nicht zwingend abnehmen – deren Reinigung ist eine eigene Aufgabe.'],note:'Bei empfindlichen Schienen materialgerecht arbeiten.'},
+ '💡 Erreichbare Lampen vorsichtig reinigen – Ganzes Haus':{items:['Nur sicher erreichbare Lampen reinigen.','Staub von zugänglichen Außenflächen entfernen.','Bei Bedarf Leuchtenschirme nach Herstellerangabe reinigen.'],note:'Vor der Reinigung ausschalten; keine unsicheren Leitern verwenden.'},
+ '🧼 Fugen & Silikon kontrollieren / materialgerecht reinigen – Bäder & WCs':{items:['Fugen auf Kalk, Seifenreste, Verfärbungen oder auffällige Stellen kontrollieren.','Silikonfugen auf Risse, Ablösungen oder Verfärbungen kontrollieren.','Nur mit einem für das jeweilige Material geeigneten Reiniger reinigen.'],note:'Beschädigtes oder dauerhaft verfärbtes Silikon nicht aggressiv bearbeiten, sondern bei Bedarf erneuern lassen.'},
+ '🔥 Kamin: erkaltete Asche entfernen – Wohnzimmer · EG':{items:['Nur vollständig erkaltete Asche entfernen.','Asche vorsichtig in einen geeigneten, dafür vorgesehenen Behälter geben.','Um den Feuerraum herum auf Aschereste kontrollieren.'],note:'Nur nach Herstellerangaben arbeiten. Heiße oder möglicherweise noch glimmende Asche niemals entfernen.'},
+ '🔥 Kamin: Feuerraum auskehren – Wohnzimmer · EG':{items:['Nur vollständig erkalteten Feuerraum bearbeiten.','Aschereste vorsichtig auskehren und entfernen.','Feuerraum anschließend auf grobe Rückstände kontrollieren.'],note:'Herstellerangaben beachten; fachgerechte Kamin-/Schornsteinkontrolle und Wartung nicht selbst ersetzen.'}
+};
+function detailKey(title,room){ return title+' – '+room; }
+function openDetail(title,room,area){
+ const modal=document.getElementById('detailModal');
+ document.getElementById('detailTitle').textContent=title;
+ document.getElementById('detailMeta').textContent=(room||'')+(area?' · '+area:'');
+ const key=detailKey(title,room); let d=TASK_DETAILS[key];
+ if(!d) d=TASK_DETAILS[title];
+ if(!d){
+   d={items:['Diese Aufgabe bezieht sich ausschließlich auf den genannten Bereich bzw. Ort.','Arbeite die Aufgabe dort vollständig ab und entferne sichtbaren Schmutz bzw. Staub.','Materialien und Reinigungsmittel immer passend zur Oberfläche verwenden.'],note:'Die Aufgabe ist bewusst als einzelne, überschaubare Pflegeaufgabe gedacht – nicht als komplette Grundreinigung des Raumes.'};
+ }
+ document.getElementById('detailList').innerHTML=d.items.map(x=>'<li>'+x+'</li>').join('');
+ document.getElementById('detailNote').textContent=d.note||'';
+ modal.classList.remove('hidden');
+}
+function closeDetail(){document.getElementById('detailModal').classList.add('hidden')}
+function openDayDetails(k){
+ const entries=[];
+ Object.entries(state.done||{}).forEach(([id,v])=>{if(v && id.startsWith(k+'|')){const parts=id.split('|'); entries.push(parts.slice(3).join('|'));}});
+ const unique=[...new Set(entries)];
+ const modal=document.getElementById('detailModal');
+ document.getElementById('detailTitle').textContent=new Intl.DateTimeFormat('de-AT',{day:'2-digit',month:'long',year:'numeric'}).format(new Date(k+'T12:00:00'));
+ document.getElementById('detailMeta').textContent='Tatsächlich erledigte Aufgaben';
+ const list=document.getElementById('detailList');
+ list.innerHTML=unique.length?unique.map(x=>'<li>'+x+'</li>').join(''):'<li>Für diesen Tag sind keine einzelnen Aufgaben gespeichert.</li>';
+ document.getElementById('detailNote').textContent=state.completedDays?.[k]?'🥳 Dieser Tag wurde komplett abgeschlossen.':'Erledigte Aufgaben dieses Tages.';
+ modal.classList.remove('hidden');
 }
 function showTab(x){['today','week','history'].forEach(y=>document.getElementById(y).classList.toggle('hidden',y!==x));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('primary'));document.getElementById('nav'+x[0].toUpperCase()+x.slice(1)).classList.add('primary');if(x==='week')renderWeek();if(x==='history')renderHistory()}
 function toggleChaos(){state.chaos=!state.chaos;save();renderToday()}
@@ -496,17 +535,21 @@ function renderHistory(){
   const grid=document.createElement('div');grid.className='calendar-grid';
   ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(x=>{const d=document.createElement('div');d.className='cal-weekday';d.textContent=x;grid.appendChild(d)});
   for(let i=0;i<offset;i++){const d=document.createElement('div');d.className='cal-day empty';grid.appendChild(d)}
-  for(let n=1;n<=days;n++){const d=document.createElement('div');d.className='cal-day';const k=y+'-'+String(m+1).padStart(2,'0')+'-'+String(n).padStart(2,'0');if(k===key())d.classList.add('today');if(completed[k])d.classList.add('completed');d.innerHTML='<span class="num">'+n+'</span><span class="check">'+(completed[k]?'✓':'')+'</span>';grid.appendChild(d)}
+  for(let n=1;n<=days;n++){const d=document.createElement('div');d.className='cal-day';const k=y+'-'+String(m+1).padStart(2,'0')+'-'+String(n).padStart(2,'0');if(k===key())d.classList.add('today');if(completed[k]){d.classList.add('completed');d.onclick=()=>openDayDetails(k);}d.innerHTML='<span class="num">'+n+'</span><span class="check">'+(completed[k]?'✓':'')+'</span>';grid.appendChild(d)}
   wrap.appendChild(grid);const leg=document.createElement('div');leg.className='calendar-legend';leg.textContent='Grün = alle geplanten Tagesaufgaben an diesem Tag erledigt.';wrap.appendChild(leg);box.appendChild(wrap);
 }
 
 function openCatalog(){document.getElementById('modal').classList.remove('hidden');document.getElementById('catalogSearch').focus();renderSearch()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
 function allCatalog(){
-  let a=[];
-  catalogSeed.forEach(r=>r[2].forEach(t=>a.push({title:t,room:r[0],area:r[1],cat:r[0]})));
+  const a=[];
+  const push=(title,room,area,cat)=>a.push({title,room,area,cat});
+  catalogSeed.forEach(r=>r[2].forEach(t=>push(t,r[0],r[1],r[0])));
+  rotations.forEach(r=>push(r[0],r[1],r[1], 'Pflege-Turnus'));
+  daily.forEach(g=>g[2].forEach(t=>push(t,g[1],g[1],g[0])));
   state.custom.forEach((x,i)=>a.push({title:x.title,room:x.room||'Ganzes Haus',area:x.area||'Sonstiger Ort',cat:x.cat||'Eigene Aufgabe',place:x.place||'',custom:i}));
-  return a;
+  const seen=new Set();
+  return a.filter(x=>{const k=[x.title,x.room,x.area].join('|');if(seen.has(k))return false;seen.add(k);return true;});
 }
 function normalizeSearch(v){
   return (v||'').toLocaleLowerCase('de-DE')
