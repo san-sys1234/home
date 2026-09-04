@@ -21,9 +21,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Bl
 button,input{font:inherit}
 button{cursor:pointer}
 .app{max-width:900px;margin:0 auto;padding:26px 18px 110px}
-.brand{font-size:18px;color:var(--muted);margin:2px 4px 2px}
-h1{font-size:42px;line-height:1.02;margin:0 0 8px;font-weight:800;letter-spacing:-1.3px}
-.subtitle{font-size:18px;color:var(--muted);margin-bottom:24px}
+.brand{font-size:16px;color:var(--muted);margin:2px 4px 2px}
+h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing:-1.3px}
+.subtitle{font-size:16px;color:var(--muted);margin-bottom:24px}
 .tabs{display:flex;gap:10px;margin-bottom:22px}
 .tab{border:1px solid var(--line);background:var(--card);padding:13px 20px;border-radius:22px;font-weight:700}
 .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -40,15 +40,15 @@ h1{font-size:42px;line-height:1.02;margin:0 0 8px;font-weight:800;letter-spacing
 .notice{padding:16px;border-radius:22px;background:var(--green);color:var(--greenInk);line-height:1.45;margin-top:16px}
 .notice.yellow{background:var(--yellow);color:#6c5b2b}
 .notice.red{background:var(--red);color:#75443d}
-.sectionTitle{font-size:22px;font-weight:800;margin:24px 4px 12px}
-.task{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
-.task.done{opacity:.56}
+.sectionTitle{font-size:19px;font-weight:800;margin:24px 4px 12px}
+.task{display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
+.task.done{opacity:.56}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
 .check{width:27px;height:27px;border-radius:50%;border:2px solid #cfc5bc;display:grid;place-items:center;flex:0 0 27px;background:#fff}
 .task.done .check{background:var(--accent);border-color:var(--accent);color:#fff}
 .taskMain{min-width:0;flex:1}
-.taskName{font-weight:700;line-height:1.25}
-.meta{font-size:12px;color:var(--muted);margin-top:3px}
-.taskButtons{display:flex;gap:6px}
+.taskName{font-weight:700;line-height:1.25;font-size:15px}
+.meta{font-size:11px;color:var(--muted);margin-top:3px}
+.taskButtons{display:flex;gap:6px;position:relative;z-index:2}
 .iconBtn{border:0;background:var(--accent2);border-radius:14px;padding:8px 10px}
 .small{font-size:13px;color:var(--muted)}
 .empty{text-align:center;color:var(--muted);padding:30px 12px}
@@ -82,7 +82,7 @@ input[type=text]{min-width:0}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);background:#2d2b29;color:#fff;padding:12px 17px;border-radius:20px;opacity:0;pointer-events:none;transition:.2s;z-index:80}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
-@media(max-width:600px){.app{padding:22px 14px 105px}h1{font-size:38px}.tab{padding:12px 15px}.taskButtons .iconBtn{padding:8px}.historygrid{gap:5px}.cal{border-radius:10px}}
+@media(max-width:600px){.app{padding:22px 14px 105px}h1{font-size:34px}.tab{padding:12px 15px}.taskButtons .iconBtn{padding:8px}.historygrid{gap:5px}.cal{border-radius:10px}}
 </style>
 </head>
 <body>
@@ -259,12 +259,10 @@ function dailyTasks(){
 }
 function plannedTasks(d=today){
  if(d.getDay()===0)return [];
- const coreDaily=["Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Geschirrspüler einräumen & einschalten","Küchenflächen kurz abwischen","Spüle & Herd kurz sauber machen","Müll kontrollieren","Wohnzimmer grob zurücksetzen","Garderobe kurz ordnen","Kleidung wegräumen","Restmüll kontrollieren","Biomüll kontrollieren","Wäsche nur bei Bedarf starten"];
- const out=dailyTasks().filter(x=>coreDaily.includes(x.text));
+ const out=dailyTasks();
  if(state.chaos)return out.filter(x=>["Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"].includes(x.text));
  const plan=planForDate(d);
  for(const [room,tasks] of plan) for(const t of tasks) out.push({id:"plan|"+dayKey(d)+"|"+room+"|"+t,canonical:room+"|"+t,text:t,room,area:SEED_ROOMS[room]?.[1]||"",group:room});
- for(const c of state.custom) out.push({id:c.id,canonical:c.id,text:c.text,room:c.room,area:c.area,group:"⭐ Eigene Aufgaben"});
  return out;
 }
 function isDone(task){return !!state.done[task.id]}
@@ -289,15 +287,34 @@ function updateCompletion(){
  save();
 }
 function swipeRow(el,task){
- let sx=0,sy=0;
- el.addEventListener("touchstart",e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
- el.addEventListener("touchend",e=>{
-   const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
-   if(Math.abs(dx)>65 && Math.abs(dx)>Math.abs(dy)){
-     if(dx>0){state.done[task.id]=true;state.lastDone[task.canonical]=dayKey();save();render();toast("Erledigt ✓")}
-     else postponeTask(task);
+ let sx=0,sy=0,active=false;
+ const start=(x,y)=>{sx=x;sy=y;active=true};
+ const end=(x,y)=>{
+   if(!active)return; active=false;
+   const dx=x-sx,dy=y-sy;
+   if(Math.abs(dx)>=70 && Math.abs(dx)>Math.abs(dy)*1.15){
+     if(dx>0){
+       state.done[task.id]=true;
+       state.lastDone[task.canonical]=dayKey();
+       save(); render(); toast("Erledigt ✓");
+     }else{
+       postponeTask(task);
+     }
    }
+ };
+ el.addEventListener("touchstart",e=>{
+   if(e.touches.length===1) start(e.touches[0].clientX,e.touches[0].clientY);
  },{passive:true});
+ el.addEventListener("touchend",e=>{
+   if(e.changedTouches.length) end(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+ },{passive:true});
+ // Also support trackpad/mouse dragging on devices where pointer events are available.
+ el.addEventListener("pointerdown",e=>{
+   if(e.pointerType==="mouse" || e.pointerType==="pen"){start(e.clientX,e.clientY);}
+ });
+ el.addEventListener("pointerup",e=>{
+   if(e.pointerType==="mouse" || e.pointerType==="pen"){end(e.clientX,e.clientY);}
+ });
 }
 function taskRow(task){
  const el=document.createElement("div");el.className="task"+(isDone(task)?" done":"");
@@ -320,7 +337,7 @@ function renderToday(){
  const tasks=plannedTasks(),done=tasks.filter(isDone).length,pct=Math.round(done/tasks.length*100);
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
- <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div>
+ <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← nach links = später · nach rechts = erledigt →</div>
  <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
