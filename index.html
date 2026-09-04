@@ -42,7 +42,7 @@ h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing
 .notice.red{background:var(--red);color:#75443d}
 .sectionTitle{font-size:19px;font-weight:800;margin:24px 4px 12px}
 .task{display:block;position:relative;overflow:hidden;padding:0;min-height:64px;touch-action:pan-y;user-select:none;-webkit-user-select:none}border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
-.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg.green{justify-content:flex-end}.swipeBg.red{justify-content:flex-start}.swipeLabel{display:block}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
+.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg.green{justify-content:flex-start}.swipeBg.red{justify-content:flex-end}.swipeLabel{display:block}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
 .check{width:27px;height:27px;border-radius:50%;border:2px solid #cfc5bc;display:grid;place-items:center;flex:0 0 27px;background:#fff}
 .task.done .check{background:var(--accent);border-color:var(--accent);color:#fff}
 .taskMain{min-width:0;flex:1}
@@ -196,7 +196,7 @@ let today=new Date(); today.setHours(12,0,0,0);
 function loadState(){
  try{
   const s=JSON.parse(localStorage.getItem(STORAGE)||"null");
-  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false},s||{});
+  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false},s||{});
  }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
 }
 function save(){localStorage.setItem(STORAGE,JSON.stringify(state))}
@@ -275,7 +275,9 @@ function toggleTask(task){
  save(); render();
 }
 function postponeTask(task){
- state.postponed[uid()]={id:task.id,text:task.text,room:task.room,area:task.area,canonical:task.canonical,from:dayKey()};
+ if(!isPostponed(task)){
+   state.postponed[uid()]={id:task.id,text:task.text,room:task.room,area:task.area,canonical:task.canonical,from:dayKey()};
+ }
  save(); render(); toast("Auf später verschoben ↩");
 }
 function restorePostponed(id){delete state.postponed[id];save();render();toast("Wieder geöffnet ❤️")}
@@ -326,7 +328,7 @@ function swipeRow(el,task){
    const dx=x-sx,dy=y-sy;
    if(dragging && Math.abs(dx)>=65 && Math.abs(dx)>Math.abs(dy)*1.1){
      if(dx>0){
-       // RIGHT = GREEN = ERLEDIGT
+       // RECHTS WISCHEN = GRÜN = ERLEDIGT
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(100%,0,0)";
        bg.classList.add("green"); bg.classList.remove("red");
@@ -338,7 +340,7 @@ function swipeRow(el,task){
          save(); render(); toast("Erledigt ✓");
        },150);
      }else{
-       // LEFT = RED = SPÄTER
+       // LINKS WISCHEN = ROT = SPÄTER
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(-100%,0,0)";
        bg.classList.add("red"); bg.classList.remove("green");
@@ -387,20 +389,45 @@ function renderToday(){
   main.innerHTML=`<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn etwas unter der Woche liegen geblieben ist, darf es liegen bleiben. ❤️</p></div>`;
   return;
  }
- const tasks=plannedTasks(),done=tasks.filter(isDone).length,pct=Math.round(done/tasks.length*100);
+ const tasks=plannedTasks().filter(t=>!isPostponed(t)),done=tasks.filter(isDone).length,pct=tasks.length?Math.round(done/tasks.length*100):0;
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
- <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← ROT · Später &nbsp;&nbsp;|&nbsp;&nbsp; Erledigt · GRÜN →</div>
+ <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp;&nbsp; | &nbsp;&nbsp; Erledigt · GRÜN 👉</div>
  <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
  main.innerHTML=html;
+ const openTasks=tasks.filter(t=>!isDone(t));
+ const completedTasks=tasks.filter(t=>isDone(t));
+
+ // Completed tasks are collected into one compact, collapsed section.
+ if(completedTasks.length){
+   const completedCard=document.createElement("div");
+   completedCard.className="card";
+   completedCard.innerHTML=`<div class="topline"><b>✓ Erledigt (${completedTasks.length})</b><button class="btn" id="toggleCompleted">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;
+   if(state.completedOpen){
+     const groupsDone={};
+     for(const t of completedTasks)(groupsDone[t.group]??=[]).push(t);
+     for(const [group,arr] of Object.entries(groupsDone)){
+       const sec=document.createElement("section");
+       sec.innerHTML=`<div class="sectionTitle">${esc(group)}</div>`;
+       for(const t of arr)sec.appendChild(taskRow(t));
+       completedCard.appendChild(sec);
+     }
+   }
+   main.appendChild(completedCard);
+   completedCard.querySelector("#toggleCompleted").onclick=()=>{
+     state.completedOpen=!state.completedOpen; save(); render();
+   };
+ }
+
  const groups={};
- for(const t of tasks)(groups[t.group]??=[]).push(t);
+ for(const t of openTasks)(groups[t.group]??=[]).push(t);
  for(const [group,arr] of Object.entries(groups)){
-  const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(group)}</div>`;
-  for(const t of arr)sec.appendChild(taskRow(t));
-  main.appendChild(sec);
+   const sec=document.createElement("section");
+   sec.innerHTML=`<div class="sectionTitle">${esc(group)}</div>`;
+   for(const t of arr)sec.appendChild(taskRow(t));
+   main.appendChild(sec);
  }
  renderPostponed(main);
  document.getElementById("addBtn").onclick=addCustom;
