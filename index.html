@@ -111,6 +111,13 @@ input[type=text]{min-width:0}
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
 @media(max-width:600px){.app{padding:22px 14px 105px}h1{font-size:34px}.tab{padding:12px 15px}.taskButtons .iconBtn{padding:8px}.historygrid{gap:5px}.cal{border-radius:10px}}
 </style>
+
+<style>
+.specialPlanBox{margin-top:10px;padding:12px 14px;border-radius:16px;background:#fff;border:1px solid var(--line)}
+.specialPlanBox b{display:block;margin-bottom:3px}
+.specialBadge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--bg);font-size:10px}
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -338,12 +345,74 @@ function careDueOn(task,d=today){
  }
  return dayKey(d)===iso(careDateFor(task));
 }
+
+// --- Sinnvolle Jahresverteilung / leichte Tage ---
+const SEASONAL_SPECIALS = [
+ // Herbst 2026 – erste Runde, bewusst klein portioniert
+ {key:"fenster-kg-waschkueche-musik",text:"🪟 Fenster KG · Waschküche + Musikzimmer",room:"Waschküche + Musikzimmer",area:"KG",dates:["2026-09-15","2026-09-17","2026-09-19"]},
+ {key:"fenster-kg-technik-training",text:"🪟 Fenster KG · Technikraum + Trainingsraum",room:"Technikraum + Trainingsraum",area:"KG",dates:["2026-09-22","2026-09-24","2026-09-26"]},
+ {key:"fenster-kg-flur-stiegenhaus",text:"🪟 Fenster KG · Flur + großes Stiegenhausfenster",room:"Flur KG + Stiegenhaus",area:"KG",dates:["2026-09-29","2026-10-01","2026-10-03"]},
+ {key:"fenster-eg-garderobe-buero",text:"🪟 Fenster EG · Garderobe + Büro",room:"Garderobe + Büro",area:"EG",dates:["2026-10-06","2026-10-08","2026-10-10"]},
+ {key:"fenster-eg-wohnen-essen",text:"🪟 Fenster EG · Wohnzimmer + Essbereich",room:"Wohnzimmer + Essbereich",area:"EG",dates:["2026-10-13","2026-10-15","2026-10-17"]},
+ {key:"fenster-eg-kueche-speis-abstell",text:"🪟 Fenster EG · Küche + Speis + Abstellraum + WC",room:"Küche + Speis + Abstellraum + WC",area:"EG",dates:["2026-10-20","2026-10-22","2026-10-24"]},
+ {key:"fenster-og-kinder",text:"🪟 Fenster OG · beide Kinderzimmer",room:"Kinderzimmer 1 + Kinderzimmer 2",area:"OG",dates:["2026-10-27","2026-10-29","2026-10-31"]},
+ {key:"fenster-og-schlaf-ankleide",text:"🪟 Fenster OG · Schlafzimmer + Ankleide",room:"Schlafzimmer + Ankleide",area:"OG",dates:["2026-11-03","2026-11-05","2026-11-07"]},
+ {key:"fenster-og-baeder-wc-sauna",text:"🪟 Fenster OG · Kinderbad + Eltern-WC + Sauna",room:"Kinderbad + Eltern-WC + Sauna",area:"OG",dates:["2026-11-10","2026-11-12","2026-11-14"]},
+ {key:"fenster-og-bad",text:"🪟 Fenster OG · großes Bad",room:"Bad",area:"OG",dates:["2026-11-17","2026-11-19","2026-11-21"]},
+
+ // Ab Frühjahr 2027 derselbe Rhythmus, nochmals mit kleinen Portionen.
+ {key:"fenster-kg-waschkueche-musik",text:"🪟 Fenster KG · Waschküche + Musikzimmer",room:"Waschküche + Musikzimmer",area:"KG",dates:["2027-04-06","2027-04-08","2027-04-10"]},
+ {key:"fenster-kg-technik-training",text:"🪟 Fenster KG · Technikraum + Trainingsraum",room:"Technikraum + Trainingsraum",area:"KG",dates:["2027-04-13","2027-04-15","2027-04-17"]},
+ {key:"fenster-kg-flur-stiegenhaus",text:"🪟 Fenster KG · Flur + großes Stiegenhausfenster",room:"Flur KG + Stiegenhaus",area:"KG",dates:["2027-04-20","2027-04-22","2027-04-24"]},
+ {key:"fenster-eg-garderobe-buero",text:"🪟 Fenster EG · Garderobe + Büro",room:"Garderobe + Büro",area:"EG",dates:["2027-04-27","2027-04-29","2027-05-01"]},
+ {key:"fenster-eg-wohnen-essen",text:"🪟 Fenster EG · Wohnzimmer + Essbereich",room:"Wohnzimmer + Essbereich",area:"EG",dates:["2027-05-04","2027-05-06","2027-05-08"]},
+ {key:"fenster-eg-kueche-speis-abstell",text:"🪟 Fenster EG · Küche + Speis + Abstellraum + WC",room:"Küche + Speis + Abstellraum + WC",area:"EG",dates:["2027-05-11","2027-05-13","2027-05-15"]},
+ {key:"fenster-og-kinder",text:"🪟 Fenster OG · beide Kinderzimmer",room:"Kinderzimmer 1 + Kinderzimmer 2",area:"OG",dates:["2027-05-18","2027-05-20","2027-05-22"]},
+ {key:"fenster-og-schlaf-ankleide",text:"🪟 Fenster OG · Schlafzimmer + Ankleide",room:"Schlafzimmer + Ankleide",area:"OG",dates:["2027-05-25","2027-05-27","2027-05-29"]},
+ {key:"fenster-og-baeder-wc-sauna",text:"🪟 Fenster OG · Kinderbad + Eltern-WC + Sauna",room:"Kinderbad + Eltern-WC + Sauna",area:"OG",dates:["2027-06-01","2027-06-03","2027-06-05"]},
+ {key:"fenster-og-bad",text:"🪟 Fenster OG · großes Bad",room:"Bad",area:"OG",dates:["2027-06-08","2027-06-10","2027-06-12"]},
+
+ // Herbst 2027
+ {key:"fenster-kg-waschkueche-musik",text:"🪟 Fenster KG · Waschküche + Musikzimmer",room:"Waschküche + Musikzimmer",area:"KG",dates:["2027-09-07","2027-09-09","2027-09-11"]},
+ {key:"fenster-kg-technik-training",text:"🪟 Fenster KG · Technikraum + Trainingsraum",room:"Technikraum + Trainingsraum",area:"KG",dates:["2027-09-14","2027-09-16","2027-09-18"]},
+ {key:"fenster-kg-flur-stiegenhaus",text:"🪟 Fenster KG · Flur + großes Stiegenhausfenster",room:"Flur KG + Stiegenhaus",area:"KG",dates:["2027-09-21","2027-09-23","2027-09-25"]},
+ {key:"fenster-eg-garderobe-buero",text:"🪟 Fenster EG · Garderobe + Büro",room:"Garderobe + Büro",area:"EG",dates:["2027-09-28","2027-09-30","2027-10-02"]},
+ {key:"fenster-eg-wohnen-essen",text:"🪟 Fenster EG · Wohnzimmer + Essbereich",room:"Wohnzimmer + Essbereich",area:"EG",dates:["2027-10-05","2027-10-07","2027-10-09"]},
+ {key:"fenster-eg-kueche-speis-abstell",text:"🪟 Fenster EG · Küche + Speis + Abstellraum + WC",room:"Küche + Speis + Abstellraum + WC",area:"EG",dates:["2027-10-12","2027-10-14","2027-10-16"]},
+ {key:"fenster-og-kinder",text:"🪟 Fenster OG · beide Kinderzimmer",room:"Kinderzimmer 1 + Kinderzimmer 2",area:"OG",dates:["2027-10-19","2027-10-21","2027-10-23"]},
+ {key:"fenster-og-schlaf-ankleide",text:"🪟 Fenster OG · Schlafzimmer + Ankleide",room:"Schlafzimmer + Ankleide",area:"OG",dates:["2027-10-26","2027-10-28","2027-10-30"]},
+ {key:"fenster-og-baeder-wc-sauna",text:"🪟 Fenster OG · Kinderbad + Eltern-WC + Sauna",room:"Kinderbad + Eltern-WC + Sauna",area:"OG",dates:["2027-11-02","2027-11-04","2027-11-06"]},
+ {key:"fenster-og-bad",text:"🪟 Fenster OG · großes Bad",room:"Bad",area:"OG",dates:["2027-11-09","2027-11-11","2027-11-13"]}
+];
+function seasonalSpecialForDate(d){
+ const k=dayKey(d);
+ const exact=SEASONAL_SPECIALS.filter(x=>x.dates.includes(k));
+ return exact[0]||null;
+}
+function isMajorSpecial(t){
+ const x=(t?.text||"").toLowerCase();
+ return /fenster|raffstore|kamin|stuck|vorhangstangen|matratzen|teppich|polster/.test(x);
+}
+function lightweightDayPlan(d, base){
+ if(!base)return [];
+ const essentialPatterns=/geschirrspüler|küchenarbeitsfläche|esstisch|hochstuhl|essplatz|heruntergefallen|müll|wäsche nur bei bedarf|sichtbare bodenflecken/i;
+ const keep=[];
+ for(const [room,tasks] of base){
+   const filtered=tasks.filter(t=>essentialPatterns.test(t));
+   if(filtered.length)keep.push([room,filtered]);
+ }
+ return keep;
+}
+
 function careCandidateForDate(d=today){
  if(d.getDay()===0)return null;
+ const seasonal=seasonalSpecialForDate(d);
+ if(seasonal){
+   return {id:"care|seasonal|"+seasonal.key,canonical:"care|seasonal|"+seasonal.key,
+           text:seasonal.text,room:seasonal.room,area:seasonal.area,interval:180,seed:0,seasonal:true};
+ }
  const due=CARE_POOL.filter(t=>careDueOn(t,d));
  if(!due.length)return null;
- // Pro Tag höchstens eine Hauspflege-Aufgabe. Priorität: am längsten fällig,
- // damit nichts überladen wird und seltene Aufgaben nicht verloren gehen.
  due.sort((a,b)=>{
    const age=x=>{const l=careLastDone(x);const base=l?new Date(l):careDateFor(x);return d-base};
    return age(b)-age(a);
@@ -359,6 +428,8 @@ function dailyTasks(){
  return out;
 }
 function plannedTasks(d=today){
+ const _special=seasonalSpecialForDate(d);
+
  const _isSunday=d.getDay()===0;
  if(_isSunday){
    if(sundayOptionalEnabled()){
@@ -383,7 +454,15 @@ function plannedTasks(d=today){
      out.push({id:x.id,canonical:x.canonical||("extra|"+x.room+"|"+x.text),text:x.text,room:x.room||"Ganzes Haus",area:x.area||"",group:"＋ Heute hinzugefügt"});
    }
  }
- return out;
+ 
+ if(_special){
+   const pruned=lightweightDayPlan(d,out);
+   out.length=0;
+   for(const x of pruned) out.push(x);
+   const care=careCandidateForDate(d);
+   if(care) out.push({id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Hauspflege",group:"🔄 Hauspflege · Schwerpunkt"});
+ }
+return out;
 }
 function isDone(task){return !!state.done[task.id]}
 function isPostponed(task){
@@ -719,6 +798,15 @@ function allCatalog(){
  return out;
 }
 function definition(title,room="",area=""){
+ if(/Fenster/.test(title)){
+   return {
+    what:"Nur den genannten Fenster-Abschnitt gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank; bei Bedarf Rahmen/Falz im jeweiligen Abschnitt.",
+    belongs:[room||"genannter Fensterbereich"],
+    not:["Keine anderen Fenster des Hauses zusätzlich","Keine Leiter-/Höhenarbeiten ohne sichere Ausstattung"],
+    care:["Fensterpflege in kleine Abschnitte aufteilen; an einem Fenster-Schwerpunkt-Tag entfallen normale Hauspflege-Sonderaufgaben."]
+   };
+ }
+
  const t=title.toLowerCase();
  let what=title, belongs=[],not=[],care=[];
  if(/saugen|absaugen/.test(t)){what="Den genannten Bereich gründlich absaugen, inklusive Kanten und sichtbarer Ecken.";belongs=["gut zugängliche Flächen","Ecken und Kanten","sichtbare Krümel/Staubnester"];not=["Möbel komplett verrücken","unzugängliche Bereiche erzwingen"];care=["Bei Möbeln/Teppichen Material und Saugstufe beachten."]}
