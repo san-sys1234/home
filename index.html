@@ -118,6 +118,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
 .specialBadge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--bg);font-size:10px}
 </style>
 
+
+<style>
+.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin-bottom:12px}
+.intelBox b{font-size:15px}
+.intelMeta{font-size:11px;color:var(--muted);margin-top:4px}
+.taskReason{font-size:10px;color:var(--muted);margin-top:3px}
+</style>
 </head>
 <body>
 <div class="app">
@@ -428,7 +435,7 @@ function dailyTasks(){
  return out;
 }
 function plannedTasks(d=today){
- const _special=seasonalSpecialForDate(d);
+ const _special=intelligentSpecialForDate(d);
 
  const _isSunday=d.getDay()===0;
  if(_isSunday){
@@ -931,8 +938,53 @@ function setupSundayOptional(){
  };
 }
 
+
+// ===== Intelligenter Tagesplan =====
+// Tatsächliche Erledigungen steuern die nächsten Fälligkeiten.
+// Große Aufgaben verbrauchen mehr Tagesbudget; auf Schwerpunkt-Tagen
+// werden normale Sonderaufgaben automatisch reduziert.
+const TASK_WEIGHT_RULES=[
+ [/fenster|raffstore|kamin|stuck|vorhangstange|matratze|teppich|polster/i,3],
+ [/bad|dusche|wanne|wc.*gründlich|toilette.*gründlich/i,2],
+ [/sockelleisten|türblätter|türrahmen|zargen|schubladen|regalböden|lampen/i,1],
+ [/saugen|wischen|abwischen|abstauben|reinigen|ordnen|prüfen/i,1]
+];
+function taskWeight(text){
+ for(const [re,w] of TASK_WEIGHT_RULES) if(re.test(text)) return w;
+ return 1;
+}
+function todayWorkBudget(d=today){
+ if(d.getDay()===0)return 0;
+ const dow=d.getDay();
+ // Samstag bleibt bewusst leicht; Mittwoch ist ebenfalls moderat.
+ if(dow===6)return 3;
+ if(dow===3)return 4;
+ return 5;
+}
+function lastActualFor(t){
+ return state.lastDone?.[t] || state.lastDone?.['care|'+t.room+'|'+t.text] || "";
+}
+function intelligentSpecialForDate(d){
+ if(d.getDay()===0)return null;
+ // A fixed seasonal priority always wins: this is the reason for special-day pruning.
+ const seasonal=seasonalSpecialForDate(d);
+ if(seasonal)return {...seasonal, weight:3, seasonal:true};
+ return careCandidateForDate(d);
+}
+function recentRoomLoad(room,d=today){
+ const cutoff=new Date(d); cutoff.setDate(cutoff.getDate()-7);
+ const keys=Object.keys(state.done||{});
+ return keys.some(k=>state.done[k] && k.toLowerCase().includes(String(room||"").toLowerCase()));
+}
+function shouldSuppressRegularSpecial(d){
+ const sp=intelligentSpecialForDate(d);
+ return !!sp && isMajorSpecial(sp);
+}
+
 function render(){
  setupSundayOptional();
+ const _oldMain=document.getElementById("main");
+
  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
  if(selectedTab==="today")renderToday();
  else if(selectedTab==="week")renderWeek();
@@ -943,6 +995,36 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.datase
 document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");
 document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
+
+(function(){
+ const root=document.getElementById("main");
+ if(!root)return;
+ const obs=new MutationObserver(()=>{ 
+   clearTimeout(window.__intelTimer);
+   window.__intelTimer=setTimeout(renderIntelligentInfo,0);
+ });
+ obs.observe(root,{childList:true,subtree:false});
+ setTimeout(renderIntelligentInfo,0);
+})();
+
+
+function renderIntelligentInfo(){
+ const main=document.getElementById("main");
+ if(!main || state.tab && state.tab!=="today")return;
+ const d=today;
+ const sp=intelligentSpecialForDate(d);
+ const box=document.createElement("div");
+ box.className="intelBox";
+ if(d.getDay()===0){
+   box.innerHTML="<b>💤 Heute ist Sonntag – haushaltsfrei ❤️</b><div class='intelMeta'>Nur wenn du den Sonntag freiwillig freischaltest, kommt eine optionale Aufgabe dazu.</div>";
+ }else if(sp){
+   box.innerHTML=`<b>🎯 Heute hat einen Schwerpunkt</b><div class="intelMeta">${esc(sp.text)} · ${esc(sp.room||"")}</div><div class="intelMeta">Der normale Sonderaufgaben-Turnus wird heute bewusst reduziert.</div>`;
+ }else{
+   box.innerHTML=`<b>🧠 Heute passend dosiert</b><div class="intelMeta">Arbeitsbudget: ${todayWorkBudget(d)} Punkte. Erledigte Aufgaben werden bei der nächsten Planung berücksichtigt.</div>`;
+ }
+ main.prepend(box);
+}
+
 </script>
 </body>
 </html>
