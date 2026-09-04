@@ -312,8 +312,8 @@ function swipeRow(el,task){
    if(e && e.cancelable)e.preventDefault();
    const limited=Math.max(-145,Math.min(145,dx));
    content.style.transform=`translate3d(${limited}px,0,0)`;
-   bg.classList.toggle("green",dx>0);
-   bg.classList.toggle("red",dx<0);
+   bg.classList.toggle("green",dx>0); // rechts = grün / erledigt
+   bg.classList.toggle("red",dx<0);   // links = rot / später
    bg.style.opacity=String(Math.min(1,Math.abs(dx)/45));
  }
  function finish(x,y){
@@ -380,7 +380,7 @@ function renderToday(){
  const tasks=plannedTasks(),done=tasks.filter(isDone).length,pct=Math.round(done/tasks.length*100);
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
- <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← nach links = später · nach rechts = erledigt →</div>
+ <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← nach links = rot · nach rechts = grün →</div>
  <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
