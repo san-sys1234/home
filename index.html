@@ -42,7 +42,7 @@ h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing
 .notice.red{background:var(--red);color:#75443d}
 .sectionTitle{font-size:19px;font-weight:800;margin:24px 4px 12px}
 .task{display:block;position:relative;overflow:hidden;padding:0;min-height:64px;touch-action:pan-y;user-select:none;-webkit-user-select:none}border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
-.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg .rightLabel{margin-left:auto}.swipeBg .leftLabel{margin-right:auto}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
+.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg.green{justify-content:flex-end}.swipeBg.red{justify-content:flex-start}.swipeLabel{display:block}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
 .check{width:27px;height:27px;border-radius:50%;border:2px solid #cfc5bc;display:grid;place-items:center;flex:0 0 27px;background:#fff}
 .task.done .check{background:var(--accent);border-color:var(--accent);color:#fff}
 .taskMain{min-width:0;flex:1}
@@ -298,6 +298,7 @@ function swipeRow(el,task){
    content.style.transform="translateX(0)";
    bg.style.opacity="0";
    bg.classList.remove("green","red");
+   bg.querySelector(".swipeLabel").textContent="✓ Erledigt";
    setTimeout(()=>content.style.transition="",190);
  }
  function start(x,y){
@@ -328,7 +329,9 @@ function swipeRow(el,task){
        // RIGHT = GREEN = ERLEDIGT
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(100%,0,0)";
-       bg.classList.add("green"); bg.classList.remove("red"); bg.style.opacity="1";
+       bg.classList.add("green"); bg.classList.remove("red");
+       bg.querySelector(".swipeLabel").textContent="✓ Erledigt";
+       bg.style.opacity="1";
        setTimeout(()=>{
          state.done[task.id]=true;
          state.lastDone[task.canonical]=dayKey();
@@ -338,7 +341,9 @@ function swipeRow(el,task){
        // LEFT = RED = SPÄTER
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(-100%,0,0)";
-       bg.classList.add("red"); bg.classList.remove("green"); bg.style.opacity="1";
+       bg.classList.add("red"); bg.classList.remove("green");
+       bg.querySelector(".swipeLabel").textContent="↩ Später";
+       bg.style.opacity="1";
        setTimeout(()=>postponeTask(task),150);
      }
    }else reset();
@@ -365,7 +370,7 @@ function swipeRow(el,task){
 }
 function taskRow(task){
  const el=document.createElement("div");el.className="task"+(isDone(task)?" done":"");
- el.innerHTML=`<div class="swipeBg"><span class="leftLabel">↩ Später</span><span class="rightLabel">✓ Erledigt</span></div>
+ el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div>
  <div class="taskContent"><button class="check" aria-label="Erledigt">${isDone(task)?"✓":""}</button>
  <div class="taskMain"><div class="taskName">${esc(task.text)}</div><div class="meta">${esc(task.room)}${task.area?" · "+esc(task.area):""}</div></div>
  <div class="taskButtons"><button class="iconBtn info" aria-label="Details">ⓘ</button><button class="iconBtn later" aria-label="Verschieben">↩</button></div></div>`;
