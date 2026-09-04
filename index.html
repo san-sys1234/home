@@ -118,14 +118,15 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
 .specialBadge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--bg);font-size:10px}
 </style>
 
-
 <style>
-.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin-bottom:12px}
+.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin:0 0 12px}
 .intelBox b{font-size:15px}
 .intelMeta{font-size:11px;color:var(--muted);margin-top:4px}
-.taskReason{font-size:10px;color:var(--muted);margin-top:3px}
 </style>
-</head>
+<style>
+.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin:0 0 12px}
+.intelBox b{font-size:15px}.intelMeta{font-size:11px;color:var(--muted);margin-top:4px}
+</style></head>
 <body>
 <div class="app">
   <div class="brand">🌿 Unser Zuhause</div>
@@ -434,43 +435,114 @@ function dailyTasks(){
  for(const [group,tasks] of DAILY) for(const t of tasks) out.push({id:"daily|"+t,canonical:t,text:t,room:"Ganzes Haus",area:"Alltag",group});
  return out;
 }
-function plannedTasks(d=today){
- const _special=intelligentSpecialForDate(d);
 
- const _isSunday=d.getDay()===0;
- if(_isSunday){
-   if(sundayOptionalEnabled()){
-     const care=careCandidateForDate(d);
-     if(care) out.push({id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"});
-   }
+// ===== Intelligenter Tagesplan V70 =====
+const TASK_WEIGHT_RULES=[
+ [/fenster|raffstore|kamin|stuck|vorhangstange|matratze|teppich|polster/i,3],
+ [/bad|dusche|wanne|wc.*gründlich|toilette.*gründlich/i,2],
+ [/sockelleisten|türblätter|türrahmen|zargen|schubladen|regalböden|lampen/i,1],
+ [/saugen|wischen|abwischen|abstauben|reinigen|ordnen|prüfen/i,1]
+];
+function taskWeight(text){
+ for(const [re,w] of TASK_WEIGHT_RULES)if(re.test(text))return w;
+ return 1;
+}
+function dayBudget(d=today){
+ if(d.getDay()===0)return 0;
+ if(d.getDay()===6)return 3;
+ if(d.getDay()===3)return 5;
+ return 5;
+}
+function taskLastDone(t){
+ return state.lastDone?.[t.canonical] || state.lastDone?.[t.id] || "";
+}
+function taskAgeScore(t,d=today){
+ const last=taskLastDone(t);
+ if(!last)return 999999;
+ return Math.max(0,Math.round((d-new Date(last+"T12:00:00"))/86400000));
+}
+function weeklyRoomsForDate(d){
+ const dow=d.getDay();
+ if(dow===1)return ["Wohnzimmer","Essbereich","Küche"];
+ if(dow===2)return weekA(d)?BATH_A:BATH_B;
+ if(dow===3)return ["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"];
+ if(dow===4)return weekA(d)?["Eingangsbereich","Garderobe","Flur"]:["Büro","Abstellraum","Speis"];
+ if(dow===5)return [basementRoom(d)];
+ if(dow===6)return ["Waschküche"];
+ return [];
+}
+function weeklyCandidateTasks(room,d){
+ return roomTasks(room).filter(text=>{
+   if(WEEKLY_CORE.has(text))return true;
+   if(/^(Boden saugen|Boden wischen|Fensterbank reinigen)$/.test(text))return false;
+   return true;
+ }).map(text=>({id:"plan|"+dayKey(d)+"|"+room+"|"+text,canonical:room+"|"+text,text,room,area:SEED_ROOMS[room]?.[1]||"",group:room}));
+}
+function adaptiveWeeklyPlan(d){
+ const rooms=weeklyRoomsForDate(d),budget=dayBudget(d),chosen=[];let used=0;
+ for(const room of rooms){
+   const c=weeklyCandidateTasks(room,d).sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+   const pick=c.find(x=>used+taskWeight(x.text)<=budget);
+   if(pick){chosen.push(pick);used+=taskWeight(pick.text);}
+ }
+ const all=rooms.flatMap(r=>weeklyCandidateTasks(r,d))
+   .filter(x=>!chosen.some(y=>y.canonical===x.canonical))
+   .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+ for(const x of all){
+   const w=taskWeight(x.text);
+   if(used+w>budget)continue;
+   chosen.push(x);used+=w;
+   if(used>=budget)break;
+ }
+ return chosen;
+}
+function intelligentSpecialForDate(d=today){
+ if(d.getDay()===0)return null;
+ const seasonal=seasonalSpecialForDate(d);
+ if(seasonal)return {...seasonal,weight:3,seasonal:true};
+ return careCandidateForDate(d);
+}
+function isMajorSpecialTask(t){return !!t&&(t.seasonal||isMajorSpecial(t));}
+function buildIntelligentToday(d=today){
+ if(d.getDay()===0)return [];
+ if(state.chaos)return dailyTasks().filter(x=>[
+  "Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen",
+  "Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"
+ ].includes(x.text));
+ const out=[...dailyTasks()],special=intelligentSpecialForDate(d);
+ if(special&&isMajorSpecialTask(special)){
+   out.push({id:"care|"+special.room+"|"+special.text,canonical:"care|"+special.room+"|"+special.text,
+     text:special.text,room:special.room,area:special.area||"Hauspflege",group:"🔄 Hauspflege · Schwerpunkt"});
    return out;
  }
-
- if(d.getDay()===0)return [];
- const out=dailyTasks();
- if(state.chaos)return out.filter(x=>["Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"].includes(x.text));
- const plan=planForDate(d);
- for(const [room,tasks] of plan) for(const t of tasks) out.push({id:"plan|"+dayKey(d)+"|"+room+"|"+t,canonical:room+"|"+t,text:t,room,area:SEED_ROOMS[room]?.[1]||"",group:room});
+ out.push(...adaptiveWeeklyPlan(d));
  const care=careCandidateForDate(d);
- if(care){
-   out.push({id:"care|"+care.room+"|"+care.text,canonical:"care|"+care.room+"|"+care.text,text:care.text,room:care.room,area:care.area,group:"🔄 Hauspflege · heute nur eine Sonderaufgabe"});
+ if(care&&!out.some(x=>x.canonical===care.canonical)){
+   const cost=out.filter(x=>x.group&&x.group!=="Ganzes Haus"&&x.group!=="Alltag")
+     .reduce((a,x)=>a+taskWeight(x.text),0);
+   if(cost+taskWeight(care.text)<=dayBudget(d))
+     out.push({id:"care|"+care.room+"|"+care.text,canonical:"care|"+care.room+"|"+care.text,text:care.text,room:care.room,area:care.area,group:"🔄 Hauspflege · heute nur eine Sonderaufgabe"});
  }
- // Aufgaben aus dem Katalog, die ausdrücklich für HEUTE hinzugefügt wurden.
- if(dayKey(d)===dayKey(today) && Array.isArray(state.todayExtras)){
+ return out;
+}
+function plannedTasks(d=today){
+ if(d.getDay()===0){
+   if(d.getFullYear()===today.getFullYear()&&dayKey(d)===dayKey(today)&&sundayOptionalEnabled()){
+     const care=careCandidateForDate(d);
+     return care?[{id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"}]:[];
+   }
+   return [];
+ }
+ const out=buildIntelligentToday(d);
+ if(dayKey(d)===dayKey(today)&&Array.isArray(state.todayExtras)){
    for(const x of state.todayExtras.filter(x=>x.date===dayKey(today))){
-     out.push({id:x.id,canonical:x.canonical||("extra|"+x.room+"|"+x.text),text:x.text,room:x.room||"Ganzes Haus",area:x.area||"",group:"＋ Heute hinzugefügt"});
+     if(!out.some(t=>t.canonical===x.canonical||(t.text===x.text&&t.room===x.room)))
+       out.push({id:x.id,canonical:x.canonical||("extra|"+x.room+"|"+x.text),text:x.text,room:x.room||"Ganzes Haus",area:x.area||"",group:"＋ Heute hinzugefügt"});
    }
  }
- 
- if(_special){
-   const pruned=lightweightDayPlan(d,out);
-   out.length=0;
-   for(const x of pruned) out.push(x);
-   const care=careCandidateForDate(d);
-   if(care) out.push({id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Hauspflege",group:"🔄 Hauspflege · Schwerpunkt"});
- }
-return out;
+ return out;
 }
+
 function isDone(task){return !!state.done[task.id]}
 function isPostponed(task){
  return Object.values(state.postponed||{}).some(x=>x.id===task.id || x.canonical===task.canonical);
@@ -614,6 +686,15 @@ function renderToday(){
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
  main.innerHTML=html;
+ const plannerBox=document.createElement("div");
+ plannerBox.className="intelBox";
+ const special=intelligentSpecialForDate(today);
+ if(special&&isMajorSpecialTask(special)){
+   plannerBox.innerHTML=`<b>🎯 Heute ist ein Schwerpunkt</b><div class="intelMeta">${esc(special.text)} · ${esc(special.room||"")}</div><div class="intelMeta">Der normale Wochen- und Sonderturnus pausiert heute bewusst. ❤️</div>`;
+ }else{
+   plannerBox.innerHTML=`<b>🧠 Heute passend dosiert</b><div class="intelMeta">Die Wochenaufgaben werden nach Aufwand und tatsächlicher Erledigung ausgewählt.</div>`;
+ }
+ main.appendChild(plannerBox);
  const openTasks=tasks.filter(t=>!isDone(t));
  const completedTasks=tasks.filter(t=>isDone(t));
 
@@ -938,84 +1019,18 @@ function setupSundayOptional(){
  };
 }
 
-
-// ===== Intelligenter Tagesplan =====
-// Tatsächliche Erledigungen steuern die nächsten Fälligkeiten.
-// Große Aufgaben verbrauchen mehr Tagesbudget; auf Schwerpunkt-Tagen
-// werden normale Sonderaufgaben automatisch reduziert.
-const TASK_WEIGHT_RULES=[
- [/fenster|raffstore|kamin|stuck|vorhangstange|matratze|teppich|polster/i,3],
- [/bad|dusche|wanne|wc.*gründlich|toilette.*gründlich/i,2],
- [/sockelleisten|türblätter|türrahmen|zargen|schubladen|regalböden|lampen/i,1],
- [/saugen|wischen|abwischen|abstauben|reinigen|ordnen|prüfen/i,1]
-];
-function taskWeight(text){
- for(const [re,w] of TASK_WEIGHT_RULES) if(re.test(text)) return w;
- return 1;
-}
-function todayWorkBudget(d=today){
- if(d.getDay()===0)return 0;
- const dow=d.getDay();
- // Samstag bleibt bewusst leicht; Mittwoch ist ebenfalls moderat.
- if(dow===6)return 3;
- if(dow===3)return 4;
- return 5;
-}
-function lastActualFor(t){
- return state.lastDone?.[t] || state.lastDone?.['care|'+t.room+'|'+t.text] || "";
-}
-function intelligentSpecialForDate(d){
- if(d.getDay()===0)return null;
- // A fixed seasonal priority always wins: this is the reason for special-day pruning.
- const seasonal=seasonalSpecialForDate(d);
- if(seasonal)return {...seasonal, weight:3, seasonal:true};
- return careCandidateForDate(d);
-}
-function recentRoomLoad(room,d=today){
- const cutoff=new Date(d); cutoff.setDate(cutoff.getDate()-7);
- const keys=Object.keys(state.done||{});
- return keys.some(k=>state.done[k] && k.toLowerCase().includes(String(room||"").toLowerCase()));
-}
-function shouldSuppressRegularSpecial(d){
- const sp=intelligentSpecialForDate(d);
- return !!sp && isMajorSpecial(sp);
-}
-
 function render(){
+ setupSundayOptional();
  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
  if(selectedTab==="today")renderToday();
  else if(selectedTab==="week")renderWeek();
  else if(selectedTab==="history")renderHistory();
  else renderCatalog();
- if(selectedTab==="today"){
-   setupSundayOptional();
-   renderIntelligentInfo();
- }
 }
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});
 document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");
 document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
-
-
-
-function renderIntelligentInfo(){
- const main=document.getElementById("main");
- if(!main || selectedTab!=="today")return;
- const d=today;
- const sp=intelligentSpecialForDate(d);
- const box=document.createElement("div");
- box.className="intelBox";
- if(d.getDay()===0){
-   box.innerHTML="<b>💤 Heute ist Sonntag – haushaltsfrei ❤️</b><div class='intelMeta'>Nur wenn du den Sonntag freiwillig freischaltest, kommt eine optionale Aufgabe dazu.</div>";
- }else if(sp){
-   box.innerHTML=`<b>🎯 Heute hat einen Schwerpunkt</b><div class="intelMeta">${esc(sp.text)} · ${esc(sp.room||"")}</div><div class="intelMeta">Der normale Sonderaufgaben-Turnus wird heute bewusst reduziert.</div>`;
- }else{
-   box.innerHTML=`<b>🧠 Heute passend dosiert</b><div class="intelMeta">Arbeitsbudget: ${todayWorkBudget(d)} Punkte. Erledigte Aufgaben werden bei der nächsten Planung berücksichtigt.</div>`;
- }
- main.prepend(box);
-}
-
 </script>
 </body>
 </html>
