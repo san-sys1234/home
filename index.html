@@ -266,18 +266,21 @@ function plannedTasks(d=today){
  return out;
 }
 function isDone(task){return !!state.done[task.id]}
+function isPostponed(task){
+ return Object.values(state.postponed||{}).some(x=>x.id===task.id || x.canonical===task.canonical);
+}
 function toggleTask(task){
  state.done[task.id]=!state.done[task.id];
  if(state.done[task.id])state.lastDone[task.canonical]=dayKey();
  save(); render();
 }
 function postponeTask(task){
- state.postponed[uid()]={text:task.text,room:task.room,area:task.area,canonical:task.canonical,from:dayKey()};
+ state.postponed[uid()]={id:task.id,text:task.text,room:task.room,area:task.area,canonical:task.canonical,from:dayKey()};
  save(); render(); toast("Auf später verschoben ↩");
 }
 function restorePostponed(id){delete state.postponed[id];save();render();toast("Wieder geöffnet ❤️")}
 function completedToday(){
- const tasks=plannedTasks();
+ const tasks=plannedTasks().filter(t=>!isPostponed(t));
  return tasks.length>0 && tasks.every(isDone);
 }
 function updateCompletion(){
@@ -322,7 +325,7 @@ function swipeRow(el,task){
    const dx=x-sx,dy=y-sy;
    if(dragging && Math.abs(dx)>=65 && Math.abs(dx)>Math.abs(dy)*1.1){
      if(dx>0){
-       // RIGHT = GREEN = DONE
+       // RIGHT = GREEN = ERLEDIGT
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(100%,0,0)";
        bg.classList.add("green"); bg.classList.remove("red"); bg.style.opacity="1";
@@ -332,7 +335,7 @@ function swipeRow(el,task){
          save(); render(); toast("Erledigt ✓");
        },150);
      }else{
-       // LEFT = RED = LATER
+       // LEFT = RED = SPÄTER
        content.style.transition="transform .16s ease";
        content.style.transform="translate3d(-100%,0,0)";
        bg.classList.add("red"); bg.classList.remove("green"); bg.style.opacity="1";
@@ -382,7 +385,7 @@ function renderToday(){
  const tasks=plannedTasks(),done=tasks.filter(isDone).length,pct=Math.round(done/tasks.length*100);
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
- <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← nach links = später · nach rechts = erledigt →</div>
+ <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">← ROT · Später &nbsp;&nbsp;|&nbsp;&nbsp; Erledigt · GRÜN →</div>
  <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
