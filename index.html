@@ -366,6 +366,20 @@ function careDueOn(task,d=today){
 }
 
 // --- Sinnvolle Jahresverteilung / leichte Tage ---
+const WINDOW_INVENTORY = [
+ ["KG","Waschküche",2],["KG","Musikzimmer",2],["KG","Technikraum",2],["KG","Trainingsraum",2],["KG","Flur KG",2],["KG","Stiegenhaus",1],
+ ["EG","Garderobe",1],["EG","Büro",3],["EG","Wohnzimmer",1],["EG","Essbereich",2],["EG","Küche",2],["EG","Speis",1],["EG","Abstellraum",1],["EG","WC",1],
+ ["OG","Kinderzimmer 1",2],["OG","Kinderzimmer 2",3],["OG","Kinderbad",1],["OG","Schlafzimmer",1],["OG","Ankleide",1],["OG","Eltern-WC",1],["OG","Saunaraum",1],["OG","Bad",2]
+];
+function windowCatalogEntries(){
+ const out=[];
+ for(const [area,room,count] of WINDOW_INVENTORY) for(let i=1;i<=count;i++){
+   const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);
+   out.push({text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room:`Fenster ${area} · ${room}`,area,window:true,windowKey:`${area}|${room}|${i}`});
+ }
+ return out;
+}
+
 const SEASONAL_SPECIALS = [
  // Herbst 2026 – erste Runde, bewusst klein portioniert
  {key:"fenster-kg-waschkueche-musik",text:"🪟 Fenster KG · Waschküche + Musikzimmer",room:"Waschküche + Musikzimmer",area:"KG",dates:["2026-09-15","2026-09-17","2026-09-19"]},
@@ -723,7 +737,7 @@ function renderToday(){
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
  <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp;&nbsp; | &nbsp;&nbsp; Erledigt · GRÜN 👉</div>
- <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
+ <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
  main.innerHTML=html;
@@ -736,6 +750,11 @@ function renderToday(){
    plannerBox.innerHTML=`<b>🧠 Heute passend dosiert</b><div class="intelMeta">Die Wochenaufgaben werden nach Aufwand und tatsächlicher Erledigung ausgewählt.</div>`;
  }
  main.appendChild(plannerBox);
+ const energyBox=document.createElement("div");
+ energyBox.className="card";
+ energyBox.id="energyBox";
+ energyBox.style.display="none";
+ main.appendChild(energyBox);
  const openTasks=tasks.filter(t=>!isDone(t));
  const completedTasks=tasks.filter(t=>isDone(t));
 
@@ -770,9 +789,53 @@ function renderToday(){
  }
  renderPostponed(main);
  document.getElementById("addBtn").onclick=addCustom;
+ document.getElementById("energyBtn").onclick=showEnergyChoices;
  document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;save();render()};
  document.getElementById("catalogBtn").onclick=()=>{selectedTab="catalog";render()};
 }
+function energyCandidates(){
+ const planned=new Set(plannedTasks().map(x=>x.canonical));
+ const recentCutoff=new Date(today);recentCutoff.setDate(recentCutoff.getDate()-7);
+ return allCatalog()
+  .filter(x=>x.area!=="Alltag")
+  .filter(x=>!planned.has(x.room+"|"+x.text))
+  .filter(x=>!Object.values(state.postponed||{}).some(p=>p.canonical===x.room+"|"+x.text))
+  .map(x=>({...x,canonical:x.room+"|"+x.text,next:catalogNextDate(x)}))
+  .filter(x=>{
+    const last=state.lastDone?.[x.canonical];
+    if(!last)return true;
+    return new Date(last+"T12:00:00")<recentCutoff;
+  })
+  .sort((a,b)=>{
+    const ad=a.next?Math.round((today-a.next)/86400000):-999999;
+    const bd=b.next?Math.round((today-b.next)/86400000):-999999;
+    if(bd!==ad)return bd-ad;
+    return taskWeight(b.text)-taskWeight(a.text);
+  })
+  .slice(0,3);
+}
+function showEnergyChoices(){
+ const box=document.getElementById("energyBox");
+ if(!box)return;
+ const arr=energyCandidates();
+ box.style.display="block";
+ box.innerHTML=`<div class="topline"><div><b>⚡ Heute habe ich Energie</b><div class="small">Such dir höchstens eine Aufgabe aus. Sie ersetzt nichts – sie wird einfach vorgezogen. ❤️</div></div><button class="btn" id="closeEnergy">Schließen</button></div>`;
+ if(!arr.length){box.innerHTML+=`<div class="empty" style="margin-top:12px">Gerade gibt es keine sinnvolle Zusatzaufgabe. Dann ist heute einfach genug. 🥰</div>`;}
+ arr.forEach(x=>{
+   const row=document.createElement("div");row.className="result";row.style.marginTop="10px";
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta">Nächster regulärer Termin: <b>${esc(formatCatalogNextDate(x.next))}</b></div></div><button class="btn primary">Heute vorziehen</button>`;
+   row.querySelector("button").onclick=()=>{
+     addCatalogToToday(x);
+     box.style.display="none";
+     render();
+     toast("Für heute vorgezogen ❤️");
+   };
+   box.appendChild(row);
+ });
+ box.querySelector("#closeEnergy").onclick=()=>box.style.display="none";
+ box.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
 function renderPostponed(main){
  const ids=Object.keys(state.postponed);
  if(!ids.length)return;
@@ -984,6 +1047,8 @@ function allCatalog(){
  for(const [t] of ROTATIONS)out.push({text:t,room:"Rotationsaufgabe",area:"Turnus"});
  for(const [,tasks] of DAILY)for(const t of tasks)out.push({text:t,room:"Ganzes Haus",area:"Alltag"});
  for(const c of state.custom)out.push({text:c.text,room:c.room,area:c.area,start:c.start||c.date||"",rec:c.rec||c.repeat||""});
+ for(const w of windowCatalogEntries())out.push(w);
+ for(const x of SEASONAL_SPECIALS)out.push({text:x.text,room:x.room,area:x.area,seasonal:true,seasonalKey:x.key});
  return out;
 }
 function openDetail(title,room="",area=""){
@@ -1011,49 +1076,35 @@ function addCatalogToToday(x){
  save();
  toast("Heute hinzugefügt ❤️");
 }
+function nextWeekdayOnOrAfter(d,dow){const out=new Date(d);out.setDate(out.getDate()+((dow-out.getDay()+7)%7));return out;}
+function catalogInterval(x){
+ const t=(x.text||"").toLowerCase();
+ if(x.window||/fenster/.test(t))return 180;
+ if(/kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;
+ if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;
+ if(/sockelleiste|fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;
+ if(/bettwäsche|handtücher/.test(t))return 14;
+ if(/vorhang|teppich|polster|matratze|stuck|lampe|türblätter|türrahmen|zargen|fugen|silikon|backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 90;
+ if(/sortieren|ordnen|aussortieren|vorräte|schubladen|regal|schrank|kabel|papierstapel/.test(t))return 90;
+ return 60;
+}
 function catalogNextDate(x){
- const todayKey=dayKey(today);
- // Alltag: fällt grundsätzlich heute an.
- if(x.area==="Alltag") return today;
- // Sonder-/Rotationsaufgaben: tatsächlichen Turnus berücksichtigen.
+ const todayDate=new Date(today);
+ if(x.area==="Alltag")return todayDate;
+ if(x.window){
+   const idx=windowCatalogEntries().findIndex(w=>w.windowKey===x.windowKey);
+   const dates=["2026-09-15","2026-09-17","2026-09-19","2026-09-22","2026-09-24","2026-09-26","2026-09-29","2026-10-01","2026-10-03","2026-10-06","2026-10-08","2026-10-10","2026-10-13","2026-10-15","2026-10-17","2026-10-20","2026-10-22","2026-10-24","2026-10-27","2026-10-29","2026-10-31","2026-11-03","2026-11-05","2026-11-07","2026-11-10","2026-11-12","2026-11-14","2026-11-17","2026-11-19","2026-11-21"];
+   let d=new Date(dates[Math.max(0,idx)%dates.length]+"T12:00:00");while(d<todayDate)d.setFullYear(d.getFullYear()+1);return d;
+ }
+ if(x.seasonal){const dates=SEASONAL_SPECIALS.filter(s=>s.key===x.seasonalKey).flatMap(s=>s.dates||[]).sort();for(const ds of dates){const d=new Date(ds+"T12:00:00");if(d>=todayDate)return d;}return dates.length?new Date(dates[0]+"T12:00:00"):todayDate;}
  const rot=ROTATIONS.find(r=>r[0]===x.text);
- if(rot){
-   const last=state.lastDone?.["care|"+x.room+"|"+x.text]||state.lastDone?.["care|Rotationsaufgabe|"+x.text]||state.lastDone?.[x.text]||"";
-   let d=last?new Date(last+"T12:00:00"):new Date(CARE_START);
-   if(last) d.setDate(d.getDate()+rot[1]);
-   else {
-     const item=CARE_POOL.find(t=>t.text===x.text);
-     d=item?careDateFor(item):new Date(CARE_START);
-   }
-   while(d<today){ d.setDate(d.getDate()+rot[1]); }
-   return d;
- }
- // Für alle Raumaufgaben zeigt der Katalog den nächsten vom intelligenten
- // Jahres-/Wochenplan vorgesehenen Termin. Bereits erledigte Aufgaben werden
- // dadurch automatisch erst wieder berücksichtigt, wenn sie sinnvoll dran sind.
- for(let i=0;i<=370;i++){
-   const d=new Date(today); d.setDate(today.getDate()+i);
-   const planned=plannedTasks(d);
-   if(planned.some(t=>t.text===x.text && t.room===x.room)) return d;
- }
- // Jede Katalogaufgabe bekommt einen konkreten nächsten Termin.
- // Wenn sie im intelligenten Vorschaufenster nicht ausgewählt wird,
- // nehmen wir den nächsten regulären Wochentag dieses Raums.
- const care=CARE_POOL.find(t=>t.text===x.text && t.room===x.room);
- if(care){
-   for(let i=0;i<=370;i++){ const d=new Date(today); d.setDate(today.getDate()+i); if(careDueOn(care,d)) return d; }
- }
- for(let i=0;i<=370;i++){
-   const d=new Date(today); d.setDate(today.getDate()+i);
-   if(d.getDay()!==0 && weeklyRoomsForDate(d).includes(x.room)) return d;
- }
- // Für individuelle Aufgaben ohne Raum-Turnus gilt das Startdatum,
- // andernfalls heute als konkrete nächste Bezugsgröße.
- if(x.start){
-   const d=new Date(x.start+"T12:00:00");
-   if(!isNaN(d)) return d<today?today:d;
- }
- return today;
+ if(rot){const last=state.lastDone?.["care|"+x.room+"|"+x.text]||state.lastDone?.["care|Rotationsaufgabe|"+x.text]||state.lastDone?.[x.text]||"";let d=last?new Date(last+"T12:00:00"):new Date(CARE_START);if(last)d.setDate(d.getDate()+rot[1]);else{const item=CARE_POOL.find(t=>t.text===x.text);d=item?careDateFor(item):d;}while(d<todayDate)d.setDate(d.getDate()+rot[1]);return d;}
+ const canonical=x.room+"|"+x.text,last=state.lastDone?.[canonical]||"",interval=catalogInterval(x);
+ if(last){let d=new Date(last+"T12:00:00");d.setDate(d.getDate()+interval);while(d<todayDate)d.setDate(d.getDate()+interval);return d;}
+ const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Waschküche:6,Musikzimmer:5,Trainingsraum:5,Technikraum:5,Lagerraum:5,"Keller allgemein":5,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ if(dowByRoom[x.room]!==undefined){const items=allCatalog().filter(y=>y.room===x.room&&!y.window);const idx=Math.max(0,items.findIndex(y=>y.text===x.text));let d=nextWeekdayOnOrAfter(todayDate,dowByRoom[x.room]);d.setDate(d.getDate()+Math.floor(idx/2)*7);while(d<todayDate)d.setDate(d.getDate()+Math.max(7,interval));return d;}
+ if(x.start){const d=new Date(x.start+"T12:00:00");if(!isNaN(d))return d<todayDate?todayDate:d;}
+ const idx=Math.max(0,allCatalog().findIndex(y=>y.text===x.text&&y.room===x.room));let d=new Date(todayDate);d.setDate(d.getDate()+Math.min(365,(idx*3)%365));while(d.getDay()===0)d.setDate(d.getDate()+1);return d;
 }
 function formatCatalogNextDate(d){
  if(!d)return formatCatalogNextDate(today);
