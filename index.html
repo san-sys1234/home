@@ -238,7 +238,7 @@ let today=new Date(); today.setHours(12,0,0,0);
 function loadState(){
  try{
   const s=JSON.parse(localStorage.getItem(STORAGE)||"null");
-  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false},s||{});
+  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
  }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
 }
 
@@ -602,6 +602,7 @@ function toggleTask(task){
  if(state.done[task.id]){
    state.lastDone[task.canonical]=dayKey();
    if(task.id.startsWith("care|"))state.lastDone[task.canonical]=dayKey();
+   if(task.id.startsWith("extra|"))state.lastDone[task.room+"|"+task.text]=dayKey();
    if(task.room && task.room!=="Ganzes Haus" && task.group===task.room){
      const sameRoom=plannedTasks().filter(x=>x.room===task.room && x.group===task.room);
      if(sameRoom.length && sameRoom.every(x=>state.done[x.id]))markRoomCompleted(task.room);
@@ -671,9 +672,8 @@ function swipeRow(el,task){
        bg.querySelector(".swipeLabel").textContent="✓ Erledigt";
        bg.style.opacity="1";
        setTimeout(()=>{
-         state.done[task.id]=true;
-         state.lastDone[task.canonical]=dayKey();
-         save(); render(); toast("Erledigt ✓");
+         toggleTask(task);
+         toast("Erledigt ✓");
        },150);
      }else{
        // LINKS WISCHEN = ROT = SPÄTER
@@ -706,11 +706,21 @@ function swipeRow(el,task){
  });
  el.addEventListener("pointercancel",()=>{if(active){active=false;reset();}});
 }
+function nextDueForTask(task){
+ const x=allCatalog().find(c=>c.text===task.text && c.room===task.room);
+ return x?catalogNextDate(x):null;
+}
+function nextDueLabelForTask(task){
+ const d=nextDueForTask(task);
+ if(!d || task.room==="Ganzes Haus" || task.area==="Alltag")return "";
+ return `Nächster Termin: <b>${esc(formatCatalogNextDate(d))}</b>`;
+}
 function taskRow(task){
  const el=document.createElement("div");el.className="task"+(isDone(task)?" done":"");
+ const due=isDone(task)?nextDueLabelForTask(task):"";
  el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div>
  <div class="taskContent"><button class="check" aria-label="Erledigt">${isDone(task)?"✓":""}</button>
- <div class="taskMain"><div class="taskName">${esc(task.text)}</div><div class="meta">${esc(task.room)}${task.area?" · "+esc(task.area):""}</div></div>
+ <div class="taskMain"><div class="taskName">${esc(task.text)}</div><div class="meta">${esc(task.room)}${task.area?" · "+esc(task.area):""}</div>${due?`<div class="meta nextDue">${due}</div>`:""}</div>
  <div class="taskButtons"><button class="iconBtn info" aria-label="Details">ⓘ</button><button class="iconBtn later" aria-label="Verschieben">↩</button></div></div>`;
  el.querySelector(".check").onclick=()=>toggleTask(task);
  el.querySelector(".info").onclick=()=>openDetail(task.text,task.room,task.area);
@@ -790,15 +800,16 @@ function renderToday(){
  renderPostponed(main);
  document.getElementById("addBtn").onclick=addCustom;
  document.getElementById("energyBtn").onclick=showEnergyChoices;
+ if(state.energyOpen) showEnergyChoices(false);
  document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;save();render()};
  document.getElementById("catalogBtn").onclick=()=>{selectedTab="catalog";render()};
 }
 function energyCandidates(){
- const planned=new Set(plannedTasks().map(x=>x.canonical));
+ const planned=plannedTasks().filter(t=>!isPostponed(t));
  const recentCutoff=new Date(today);recentCutoff.setDate(recentCutoff.getDate()-7);
  return allCatalog()
   .filter(x=>x.area!=="Alltag")
-  .filter(x=>!planned.has(x.room+"|"+x.text))
+  .filter(x=>!planned.some(t=>t.room===x.room && t.text===x.text))
   .filter(x=>!Object.values(state.postponed||{}).some(p=>p.canonical===x.room+"|"+x.text))
   .map(x=>({...x,canonical:x.room+"|"+x.text,next:catalogNextDate(x)}))
   .filter(x=>{
@@ -811,29 +822,28 @@ function energyCandidates(){
     const bd=b.next?Math.round((today-b.next)/86400000):-999999;
     if(bd!==ad)return bd-ad;
     return taskWeight(b.text)-taskWeight(a.text);
-  })
-  .slice(0,3);
+  });
 }
-function showEnergyChoices(){
+function showEnergyChoices(scroll=true){
  const box=document.getElementById("energyBox");
  if(!box)return;
- const arr=energyCandidates();
+ state.energyOpen=true;
+ const arr=energyCandidates().slice(0,3);
  box.style.display="block";
- box.innerHTML=`<div class="topline"><div><b>⚡ Heute habe ich Energie</b><div class="small">Such dir höchstens eine Aufgabe aus. Sie ersetzt nichts – sie wird einfach vorgezogen. ❤️</div></div><button class="btn" id="closeEnergy">Schließen</button></div>`;
+ box.innerHTML=`<div class="topline"><div><b>⚡ Heute habe ich Energie</b><div class="small">Wähle so viele passende Aufgaben aus, wie du möchtest. Nach jeder Erledigung rückt automatisch eine neue nach. ❤️</div></div><button class="btn" id="closeEnergy">Schließen</button></div>`;
  if(!arr.length){box.innerHTML+=`<div class="empty" style="margin-top:12px">Gerade gibt es keine sinnvolle Zusatzaufgabe. Dann ist heute einfach genug. 🥰</div>`;}
  arr.forEach(x=>{
    const row=document.createElement("div");row.className="result";row.style.marginTop="10px";
    row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta">Nächster regulärer Termin: <b>${esc(formatCatalogNextDate(x.next))}</b></div></div><button class="btn primary">Heute vorziehen</button>`;
    row.querySelector("button").onclick=()=>{
      addCatalogToToday(x);
-     box.style.display="none";
-     render();
+     showEnergyChoices(false);
      toast("Für heute vorgezogen ❤️");
    };
    box.appendChild(row);
  });
- box.querySelector("#closeEnergy").onclick=()=>box.style.display="none";
- box.scrollIntoView({behavior:"smooth",block:"nearest"});
+ box.querySelector("#closeEnergy").onclick=()=>{state.energyOpen=false;save();box.style.display="none"};
+ if(scroll)box.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
 
 function renderPostponed(main){
