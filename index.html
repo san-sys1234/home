@@ -1011,6 +1011,44 @@ function addCatalogToToday(x){
  save();
  toast("Heute hinzugefügt ❤️");
 }
+function catalogNextDate(x){
+ const todayKey=dayKey(today);
+ // Alltag: fällt grundsätzlich heute an.
+ if(x.area==="Alltag") return today;
+ // Sonder-/Rotationsaufgaben: tatsächlichen Turnus berücksichtigen.
+ const rot=ROTATIONS.find(r=>r[0]===x.text);
+ if(rot){
+   const last=state.lastDone?.["care|"+x.room+"|"+x.text]||state.lastDone?.["care|Rotationsaufgabe|"+x.text]||state.lastDone?.[x.text]||"";
+   let d=last?new Date(last+"T12:00:00"):new Date(CARE_START);
+   if(last) d.setDate(d.getDate()+rot[1]);
+   else {
+     const item=CARE_POOL.find(t=>t.text===x.text);
+     d=item?careDateFor(item):new Date(CARE_START);
+   }
+   while(d<today){ d.setDate(d.getDate()+rot[1]); }
+   return d;
+ }
+ // Für alle Raumaufgaben zeigt der Katalog den nächsten vom intelligenten
+ // Jahres-/Wochenplan vorgesehenen Termin. Bereits erledigte Aufgaben werden
+ // dadurch automatisch erst wieder berücksichtigt, wenn sie sinnvoll dran sind.
+ for(let i=0;i<=370;i++){
+   const d=new Date(today); d.setDate(today.getDate()+i);
+   const planned=plannedTasks(d);
+   if(planned.some(t=>t.text===x.text && t.room===x.room)) return d;
+ }
+ // Falls die Aufgabe im aktuellen Planungsfenster nicht ausgewählt wird,
+ // verwende den nächsten sinnvollen Turnustermin aus dem Pflegepool.
+ const care=CARE_POOL.find(t=>t.text===x.text && t.room===x.room);
+ if(care){
+   for(let i=0;i<=370;i++){ const d=new Date(today); d.setDate(today.getDate()+i); if(careDueOn(care,d)) return d; }
+ }
+ return null;
+}
+function formatCatalogNextDate(d){
+ if(!d)return "noch nicht festgelegt";
+ return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+
 function renderCatalog(){
  const main=document.getElementById("main");
  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Jede einzelne Aufgabe hat eigene Details.</div></div><button class="btn" id="backToday">Heute</button></div>
@@ -1024,7 +1062,7 @@ function renderCatalog(){
   arr.slice(0,80).forEach(x=>{
    const planned=catalogPlannedToday(x);
    const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
    row.children[1].onclick=()=>openDetail(x.text,x.room,x.area);
    row.children[2].onclick=()=>addCatalogToToday(x);
    if(planned){
