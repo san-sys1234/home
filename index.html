@@ -480,12 +480,19 @@ function weeklyCandidateTasks(room,d){
 }
 function adaptiveWeeklyPlan(d){
  const rooms=weeklyRoomsForDate(d),budget=dayBudget(d),chosen=[];let used=0;
+ const recentDays=7;
+ const candidatesForRoom=room=>weeklyCandidateTasks(room,d)
+   .filter(x=>taskAgeScore(x,d)>=recentDays)
+   .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+
+ // If a room was actually worked on very recently, don't force that room again.
+ // This is especially important for Saturday's Waschküche.
  for(const room of rooms){
-   const c=weeklyCandidateTasks(room,d).sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+   const c=roomRecentlyDone(room,d,7)?[]:candidatesForRoom(room);
    const pick=c.find(x=>used+taskWeight(x.text)<=budget);
    if(pick){chosen.push(pick);used+=taskWeight(pick.text);}
  }
- const all=rooms.flatMap(r=>weeklyCandidateTasks(r,d))
+ const all=rooms.flatMap(r=>candidatesForRoom(r))
    .filter(x=>!chosen.some(y=>y.canonical===x.canonical))
    .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
  for(const x of all){
@@ -547,11 +554,26 @@ function isDone(task){return !!state.done[task.id]}
 function isPostponed(task){
  return Object.values(state.postponed||{}).some(x=>x.id===task.id || x.canonical===task.canonical);
 }
+
+function markRoomCompleted(room){
+ state.roomLastDone=state.roomLastDone||{};
+ state.roomLastDone[room]=dayKey();
+}
+function roomRecentlyDone(room,d=today,days=7){
+ const k=state.roomLastDone?.[room];
+ if(!k)return false;
+ return Math.round((d-new Date(k+"T12:00:00"))/86400000)<days;
+}
+
 function toggleTask(task){
  state.done[task.id]=!state.done[task.id];
  if(state.done[task.id]){
    state.lastDone[task.canonical]=dayKey();
    if(task.id.startsWith("care|"))state.lastDone[task.canonical]=dayKey();
+   if(task.room && task.room!=="Ganzes Haus" && task.group===task.room){
+     const sameRoom=plannedTasks().filter(x=>x.room===task.room && x.group===task.room);
+     if(sameRoom.length && sameRoom.every(x=>state.done[x.id]))markRoomCompleted(task.room);
+   }
  }
  save(); render();
 }
