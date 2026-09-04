@@ -241,6 +241,17 @@ function loadState(){
   return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false},s||{});
  }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
 }
+
+function purgeExpiredPostponements(){
+ const todayKey=dayKey();
+ const p=state.postponed||{};
+ let changed=false;
+ for(const [id,x] of Object.entries(p)){
+   if(x.from && x.from<todayKey){ delete p[id]; changed=true; }
+ }
+ if(changed)save();
+}
+
 function save(){localStorage.setItem(STORAGE,JSON.stringify(state))}
 function pad(n){return String(n).padStart(2,"0")}
 function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
@@ -480,15 +491,12 @@ function weeklyCandidateTasks(room,d){
 }
 function adaptiveWeeklyPlan(d){
  const rooms=weeklyRoomsForDate(d),budget=dayBudget(d),chosen=[];let used=0;
- const recentDays=7;
- const candidatesForRoom=room=>weeklyCandidateTasks(room,d)
-   .filter(x=>taskAgeScore(x,d)>=recentDays)
-   .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+ const candidatesForRoom=room=>roomRecentlyDone(room,d,7)?[]:
+   weeklyCandidateTasks(room,d).filter(x=>taskAgeScore(x,d)>=7)
+     .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
 
- // If a room was actually worked on very recently, don't force that room again.
- // This is especially important for Saturday's Waschküche.
  for(const room of rooms){
-   const c=roomRecentlyDone(room,d,7)?[]:candidatesForRoom(room);
+   const c=candidatesForRoom(room);
    const pick=c.find(x=>used+taskWeight(x.text)<=budget);
    if(pick){chosen.push(pick);used+=taskWeight(pick.text);}
  }
@@ -561,8 +569,18 @@ function markRoomCompleted(room){
 }
 function roomRecentlyDone(room,d=today,days=7){
  const k=state.roomLastDone?.[room];
- if(!k)return false;
- return Math.round((d-new Date(k+"T12:00:00"))/86400000)<days;
+ if(k && Math.round((d-new Date(k+"T12:00:00"))/86400000)<days)return true;
+ // Fallback for data created before roomLastDone existed:
+ // any task in this room completed within the last 'days' is enough to avoid
+ // immediately forcing the room back into the weekly plan.
+ const cutoff=new Date(d);cutoff.setDate(cutoff.getDate()-days);
+ for(const [canonical,date] of Object.entries(state.lastDone||{})){
+   if(canonical.startsWith(room+"|")){
+     const dd=new Date(date+"T12:00:00");
+     if(dd>=cutoff && dd<=d)return true;
+   }
+ }
+ return false;
 }
 
 function toggleTask(task){
@@ -575,7 +593,8 @@ function toggleTask(task){
      if(sameRoom.length && sameRoom.every(x=>state.done[x.id]))markRoomCompleted(task.room);
    }
  }
- save(); render();
+ save(); purgeExpiredPostponements();
+render();
 }
 function postponeTask(task){
  if(!isPostponed(task)){
