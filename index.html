@@ -49,7 +49,7 @@ h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing
 .taskName{font-weight:700;line-height:1.25;font-size:15px}
 .meta{font-size:11px;color:var(--muted);margin-top:3px}
 .taskButtons{display:flex;gap:6px;position:relative;z-index:2}
-.iconBtn{border:0;background:var(--accent2);border-radius:14px;padding:8px 10px}
+.iconBtn.plannedToday{font-weight:800;opacity:.85}.iconBtn{border:0;background:var(--accent2);border-radius:14px;padding:8px 10px}
 .small{font-size:13px;color:var(--muted)}
 .empty{text-align:center;color:var(--muted);padding:30px 12px}
 .celebrate{background:var(--green);border:1px solid #d8e6da;color:var(--greenInk);font-size:19px;font-weight:800;padding:17px;border-radius:22px;margin-bottom:16px}
@@ -63,6 +63,33 @@ h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing
 .cal.done{background:var(--green);color:var(--greenInk);border-color:#d8e6da;font-weight:800}
 .cal.today{outline:2px solid var(--accent)}
 .cal small{display:block;margin-top:3px}
+.yearIntro{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.yearNav{display:flex;gap:8px;align-items:center}
+.yearNav button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:8px 12px;font-weight:700}
+.yearTitle{font-size:22px;font-weight:800}
+.monthGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.monthCard{border:1px solid var(--line);border-radius:22px;padding:13px;background:#fff}
+.monthName{font-weight:800;font-size:16px;margin:2px 2px 10px}
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.weekdays span{font-size:9px;color:var(--muted);text-align:center;font-weight:700}
+.monthDays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.yearDay{position:relative;min-width:0;aspect-ratio:1;border:1px solid var(--line);border-radius:9px;background:#fff;padding:4px 2px;text-align:center;font-size:10px;cursor:pointer}
+.yearDay:hover{border-color:var(--accent)}
+.yearDay.free{background:var(--green)}
+.yearDay.today{outline:2px solid var(--accent);z-index:1}
+.yearDay.completed{background:var(--green);color:var(--greenInk);font-weight:800}
+.yearDay .dayNum{font-size:11px;font-weight:800}
+.yearDay .dayMark{display:block;font-size:9px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yearDay .careMark{display:block;font-size:9px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.calendarLegend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.calendarLegend span{font-size:12px;color:var(--muted)}
+.yearDetail{margin-top:16px;background:var(--bg);border-radius:22px;padding:16px}
+.yearDetail h3{margin:0 0 5px;font-size:19px}
+.yearDetail .detailTasks{display:grid;gap:5px;margin-top:10px}
+.yearDetail .detailTask{padding:8px 10px;border-radius:12px;background:#fff;border:1px solid var(--line);font-size:12px}
+@media(max-width:760px){.monthGrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:500px){.monthGrid{grid-template-columns:1fr 1fr;gap:8px}.monthCard{padding:9px;border-radius:17px}.monthName{font-size:14px}.monthDays{gap:3px}.yearDay{border-radius:7px;padding:3px 1px}.yearDay .dayMark,.yearDay .careMark{font-size:7px}.yearDay .dayNum{font-size:10px}.weekdays{gap:3px}.weekdays span{font-size:8px}}
+
 .search{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:18px;background:#fff;outline:none}
 .search:focus{border-color:var(--accent)}
 .result{padding:13px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
@@ -94,7 +121,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
   <div class="tabs">
     <button class="tab active" data-tab="today">Heute</button>
     <button class="tab" data-tab="week">Woche</button>
-    <button class="tab" data-tab="history">📅 Verlauf</button>
+    <button class="tab" data-tab="history">📅 Kalender</button>
   </div>
 
   <main id="main"></main>
@@ -237,17 +264,91 @@ function planForDate(d=today){
  const dow=d.getDay();
  if(dow===0)return [];
  if(dow===1)return [["Wohnzimmer",roomTasks("Wohnzimmer").slice(0,5)],["Essbereich",roomTasks("Essbereich").slice(0,4)],["Küche",roomTasks("Küche").slice(0,6)]];
- if(dow===2){
-   const rooms=weekA(d)?BATH_A:BATH_B;
-   return rooms.map(r=>[r,roomTasks(r).slice(0,5)]);
- }
+ if(dow===2){ const rooms=weekA(d)?BATH_A:BATH_B; return rooms.map(r=>[r,roomTasks(r).slice(0,5)]); }
  if(dow===3)return [["Schlafzimmer",roomTasks("Schlafzimmer").slice(0,5)],["Ankleidezimmer",roomTasks("Ankleidezimmer").slice(0,4)],["Kinderzimmer 1",roomTasks("Kinderzimmer 1").slice(0,4)],["Kinderzimmer 2",roomTasks("Kinderzimmer 2").slice(0,4)]];
- if(dow===4){
-   const rooms=weekA(d)?["Eingangsbereich","Garderobe","Flur"]:["Büro","Abstellraum","Speis"];
-   return rooms.map(r=>[r,roomTasks(r).slice(0,4)]);
- }
- if(dow===5){const r=basementRoom(d);return [[r,BASEMENT_TASKS[r]]]}
+ if(dow===4){ const rooms=weekA(d)?["Eingangsbereich","Garderobe","Flur"]:["Büro","Abstellraum","Speis"]; return rooms.map(r=>[r,roomTasks(r).slice(0,4)]); }
+ if(dow===5){ const r=basementRoom(d); return [[r,BASEMENT_TASKS[r]]]; }
  return [["Waschküche",["Wäsche sammeln/sortieren","Waschmaschine nach Bedarf laufen lassen","Arbeitsfläche kurz reinigen","Boden bei Bedarf saugen"]]];
+}
+
+// Der gesamte Katalog ist jetzt auch Teil der Jahresrotation.
+// Häufige Wochenaufgaben bleiben im Wochenanker; alles darüber hinaus bekommt
+// einen eigenen, kleinen Turnus. So muss die Nutzerin nicht selbst mitdenken.
+const WEEKLY_CORE=new Set([
+ "Polster absaugen","Sofaritze absaugen","Sofakissen ausschütteln","Teppich gründlich absaugen",
+ "Esstischoberseite reinigen","Stuhlsitze reinigen","Krümel aus Tischritzen entfernen",
+ "Arbeitsplatten gründlich reinigen","Herd gründlich reinigen","Spüle entkalken",
+ "Schuhe paarweise ordnen","Ablageflächen leeren","Schreibtischfläche reinigen","Papierkorb leeren",
+ "Waschmaschine außen reinigen","Arbeitsflächen reinigen","Boden saugen","Boden wischen",
+ "Instrumente materialgerecht entstauben","Trainingsgeräte abwischen","Handtücher einsammeln",
+ "Nach Nutzung lüften","Bänke reinigen","Fensterbank reinigen"
+]);
+function careInterval(text){
+ const t=text.toLowerCase();
+ if(/fachgerechte|wartung|kontrolle.*schornstein/.test(t))return 365;
+ if(/fenster.*außen|fenster.*innen|fensterrahmen|falze|raffstore|vorhangstange|vorhang.*pflege/.test(t))return 180;
+ if(/matratze|teppich|polster|decke|vorhang/.test(t))return 180;
+ if(/stuck|lampe|leuchte|dunstabzugfilter|gefrierfach|vorratsschrank|schuhschrank innen|schubladen innen|regalböden|regalböden|unter.*bett/.test(t))return 120;
+ if(/backofen|dunstabzug außen|fronten gründlich|türblätter|türblatt|türkanten|kabel|papierstapel|kleidung aussortieren|jacken nach saison|schuhe.*sohlen|keller.*zone|kartons ordnen/.test(t))return 90;
+ if(/fugen|silikon|duschglas|duschrinne|armatur entkalken|mülleimer|wc-bürstenhalter|spiegel gründlich|schrankfronten|sideboardfronten|tischbeine|stuhllehnen|garderobenhaken/.test(t))return 60;
+ if(/türrahmen|zargen|lichtschalter|steckdosen|sockelleisten|spinnweben|deko|bilderrahmen|fensterbank|kühlschrank|geschirrspüler|waschmittelschublade|türdichtung|sauna|kamin|holzablage/.test(t))return 30;
+ if(/ordnen|sortieren|prüfen|regale abstauben|oberflächen reinigen|schrankgriffe|notizen|bücher|spielzeug|kleidung ordnen|vorräte/.test(t))return 60;
+ return 90;
+}
+function stableHash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function buildCarePool(){
+ const out=[];
+ for(const r of catalogSeed){
+   const room=r[0],area=r[1],tasks=r[2];
+   for(const text of tasks){
+     if(WEEKLY_CORE.has(text))continue;
+     // Keine doppelte Tages-/Wochenbasis; diese Einträge werden dort bereits abgebildet.
+     if(/^(Boden saugen|Boden wischen|Fensterbank reinigen)$/.test(text))continue;
+     out.push({text,room,area,interval:careInterval(text),seed:stableHash(room+'|'+text)});
+   }
+ }
+ // Die expliziten Spezialaufgaben (Kamin, Fenster etc.) kommen zusätzlich hinein.
+ for(const [text,interval] of ROTATIONS){
+   let room='Ganzes Haus',area='Hauspflege';
+   if(/Kamin/.test(text)) {room='Wohnzimmer';area='EG';}
+   if(/Fenster OG/.test(text)) {room='Fenster OG';area='OG';}
+   if(/Fenster EG/.test(text)) {room='Fenster EG';area='EG';}
+   out.push({text,room,area,interval,seed:stableHash('rot|'+text)});
+ }
+ return out.filter((x,i,a)=>i===a.findIndex(y=>y.text===x.text));
+}
+const CARE_POOL=buildCarePool();
+const CARE_START=new Date(2026,7,31,12);
+function careDateFor(task){
+ const idx=Math.max(0,CARE_POOL.indexOf(task));
+ // Gleichmäßig über das Jahr verteilen; Sonntage bleiben frei.
+ let d=new Date(CARE_START);
+ d.setDate(d.getDate()+((idx*2)%365));
+ while(d.getDay()===0)d.setDate(d.getDate()+1);
+ return d;
+}
+function careLastDone(task){
+ return state.lastDone['care|'+task.room+'|'+task.text]||'';
+}
+function careDueOn(task,d=today){
+ const last=careLastDone(task);
+ if(last){
+   const due=new Date(last); due.setDate(due.getDate()+task.interval);
+   return dayKey(d)===iso(due);
+ }
+ return dayKey(d)===iso(careDateFor(task));
+}
+function careCandidateForDate(d=today){
+ if(d.getDay()===0)return null;
+ const due=CARE_POOL.filter(t=>careDueOn(t,d));
+ if(!due.length)return null;
+ // Pro Tag höchstens eine Hauspflege-Aufgabe. Priorität: am längsten fällig,
+ // damit nichts überladen wird und seltene Aufgaben nicht verloren gehen.
+ due.sort((a,b)=>{
+   const age=x=>{const l=careLastDone(x);const base=l?new Date(l):careDateFor(x);return d-base};
+   return age(b)-age(a);
+ });
+ return due[0];
 }
 function chaosPlan(){
  return [["Hanni-Modus",["Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"]]];
@@ -258,11 +359,30 @@ function dailyTasks(){
  return out;
 }
 function plannedTasks(d=today){
+ const _isSunday=d.getDay()===0;
+ if(_isSunday){
+   if(sundayOptionalEnabled()){
+     const care=careCandidateForDate(d);
+     if(care) out.push({id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"});
+   }
+   return out;
+ }
+
  if(d.getDay()===0)return [];
  const out=dailyTasks();
  if(state.chaos)return out.filter(x=>["Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"].includes(x.text));
  const plan=planForDate(d);
  for(const [room,tasks] of plan) for(const t of tasks) out.push({id:"plan|"+dayKey(d)+"|"+room+"|"+t,canonical:room+"|"+t,text:t,room,area:SEED_ROOMS[room]?.[1]||"",group:room});
+ const care=careCandidateForDate(d);
+ if(care){
+   out.push({id:"care|"+care.room+"|"+care.text,canonical:"care|"+care.room+"|"+care.text,text:care.text,room:care.room,area:care.area,group:"🔄 Hauspflege · heute nur eine Sonderaufgabe"});
+ }
+ // Aufgaben aus dem Katalog, die ausdrücklich für HEUTE hinzugefügt wurden.
+ if(dayKey(d)===dayKey(today) && Array.isArray(state.todayExtras)){
+   for(const x of state.todayExtras.filter(x=>x.date===dayKey(today))){
+     out.push({id:x.id,canonical:x.canonical||("extra|"+x.room+"|"+x.text),text:x.text,room:x.room||"Ganzes Haus",area:x.area||"",group:"＋ Heute hinzugefügt"});
+   }
+ }
  return out;
 }
 function isDone(task){return !!state.done[task.id]}
@@ -271,7 +391,10 @@ function isPostponed(task){
 }
 function toggleTask(task){
  state.done[task.id]=!state.done[task.id];
- if(state.done[task.id])state.lastDone[task.canonical]=dayKey();
+ if(state.done[task.id]){
+   state.lastDone[task.canonical]=dayKey();
+   if(task.id.startsWith("care|"))state.lastDone[task.canonical]=dayKey();
+ }
  save(); render();
 }
 function postponeTask(task){
@@ -386,7 +509,15 @@ function renderToday(){
  updateCompletion();
  const main=document.getElementById("main");
  if(today.getDay()===0){
-  main.innerHTML=`<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn etwas unter der Woche liegen geblieben ist, darf es liegen bleiben. ❤️</p></div>`;
+  main.innerHTML=`<div class="card" id="sundayOptionalCard" style="display:none">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+    <div><b>☀️ Sonntag optional</b>
+      <div class="small">Der Sonntag bleibt grundsätzlich haushaltsfrei. Wenn du heute Lust hast, kannst du freiwillig eine Hauspflege-Aufgabe freischalten.</div>
+    </div>
+    <button class="btn" id="sundayOptionalBtn">☀️ Sonntag nutzen</button>
+  </div>
+</div>
+<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn etwas unter der Woche liegen geblieben ist, darf es liegen bleiben. ❤️</p></div>`;
   return;
  }
  const tasks=plannedTasks().filter(t=>!isPostponed(t)),done=tasks.filter(isDone).length,pct=tasks.length?Math.round(done/tasks.length*100):0;
@@ -466,13 +597,93 @@ function renderWeek(){
 }
 function renderHistory(){
  const main=document.getElementById("main");
- const y=today.getFullYear(),m=today.getMonth();
- const days=new Date(y,m+1,0).getDate();
- let html=`<div class="card"><h2 style="margin-top:0">Verlauf</h2><p class="small">Grün bedeutet: Die für diesen Tag geplanten Aufgaben wurden vollständig erledigt.</p><div class="historygrid">`;
- for(let d=1;d<=days;d++){const x=new Date(y,m,d,12),k=dayKey(x);html+=`<div class="cal ${state.completedDays[k]?"done ":""}${k===dayKey()?"today":""}">${d}<small>${state.completedDays[k]?"✓":""}</small></div>`}
- html+="</div></div>";
- html+=`<div class="card"><b>Me-Time</b><p class="small">10–20 Minuten mehrmals pro Woche · 30–60 Minuten wöchentlich · 1–2 Stunden monatlich. Nicht streichen, nur weil eine Aufgabe offen ist. ❤️</p></div>`;
- main.innerHTML=html;
+ if(!state.calendarYear)state.calendarYear=today.getFullYear();
+ const year=state.calendarYear;
+ const monthNames=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+ const weekdayNames=["Mo","Di","Mi","Do","Fr","Sa","So"];
+
+ function shortTheme(d){
+   if(d.getDay()===0)return "frei";
+   if(d.getDay()===1)return "EG";
+   if(d.getDay()===2)return weekA(d)?"Bad A":"Bad B";
+   if(d.getDay()===3)return "OG";
+   if(d.getDay()===4)return weekA(d)?"EG A":"EG B";
+   if(d.getDay()===5)return basementRoom(d);
+   return "Wäsche";
+ }
+ function showDay(d){
+   const k=dayKey(d);
+   const plan=planForDate(d);
+   const care=careCandidateForDate(d);
+   const isToday=k===dayKey(today);
+   const details=[];
+   if(d.getDay()===0) details.push("Haushaltsfrei ❤️");
+   else {
+     plan.forEach(([room,tasks])=>{
+       details.push(`<div class="detailTask"><b>${esc(room)}</b> · ${tasks.length} geplante Aufgaben</div>`);
+     });
+     if(care)details.push(`<div class="detailTask"><b>🔄 Sonderaufgabe</b> · ${esc(care.text)} <span class="small">(${esc(care.room)})</span></div>`);
+   }
+   const dateLabel=new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"}).format(d);
+   const el=document.getElementById("yearDetail");
+   el.innerHTML=`<h3>${esc(dateLabel)}${isToday?" · heute":""}</h3>
+     <div class="small">${esc(themeFor(d))}</div>
+     <div class="detailTasks">${details.length?details.join(""):`<div class="detailTask">Keine Hausarbeit geplant. ❤️</div>`}</div>`;
+ }
+
+ main.innerHTML=`<div class="card">
+   <div class="yearIntro">
+    <div><div class="yearTitle">📅 Jahreskalender ${year}</div>
+      <div class="small">Alle Tage auf einen Blick – mit Wochenanker, hausfreier Sonntagen und den automatisch eingeplanten Sonderaufgaben.</div></div>
+    <div class="yearNav"><button id="prevYear">‹</button><button id="thisYear">Heute</button><button id="nextYear">›</button></div>
+   </div>
+   <div class="calendarLegend">
+    <span>🟢 = vollständig erledigt</span><span>♡ = heute</span><span>🔄 = Sonderaufgabe</span><span>So = haushaltsfrei</span>
+   </div>
+   <div class="monthGrid" id="monthGrid" style="margin-top:16px"></div>
+   <div class="yearDetail" id="yearDetail"></div>
+ </div>
+ <div class="card"><b>Me-Time ❤️</b><p class="small">10–20 Minuten mehrmals pro Woche · 30–60 Minuten wöchentlich · 1–2 Stunden monatlich. Nicht streichen, nur weil eine Aufgabe offen ist.</p></div>`;
+
+ const grid=main.querySelector("#monthGrid");
+ for(let m=0;m<12;m++){
+   const card=document.createElement("div");card.className="monthCard";
+   let inner=`<div class="monthName">${monthNames[m]}</div><div class="weekdays">${weekdayNames.map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays">`;
+   const first=new Date(year,m,1,12);
+   const offset=(first.getDay()+6)%7;
+   for(let i=0;i<offset;i++)inner+=`<div></div>`;
+   const days=new Date(year,m+1,0).getDate();
+   for(let day=1;day<=days;day++){
+     const d=new Date(year,m,day,12),k=dayKey(d);
+     const care=careCandidateForDate(d);
+     const free=d.getDay()===0;
+     const done=!!state.completedDays[k];
+     const classes=["yearDay"];
+     if(free)classes.push("free");
+     if(done)classes.push("completed");
+     if(k===dayKey(today))classes.push("today");
+     inner+=`<button class="${classes.join(" ")}" data-date="${k}" title="${esc(themeFor(d))}">
+       <span class="dayNum">${day}</span>
+       <span class="dayMark">${esc(shortTheme(d))}</span>
+       ${care?`<span class="careMark">🔄</span>`:""}
+       ${done?`<span class="careMark">✓</span>`:""}
+     </button>`;
+   }
+   inner+="</div>";
+   card.innerHTML=inner;
+   grid.appendChild(card);
+ }
+ grid.querySelectorAll(".yearDay").forEach(btn=>{
+   btn.onclick=()=>{
+     const [y,m,d]=btn.dataset.date.split("-").map(Number);
+     showDay(new Date(y,m-1,d,12));
+     document.getElementById("yearDetail").scrollIntoView({behavior:"smooth",block:"nearest"});
+   };
+ });
+ main.querySelector("#prevYear").onclick=()=>{state.calendarYear=year-1;save();render()};
+ main.querySelector("#nextYear").onclick=()=>{state.calendarYear=year+1;save();render()};
+ main.querySelector("#thisYear").onclick=()=>{state.calendarYear=today.getFullYear();save();render()};
+ showDay(new Date(year,today.getFullYear()===year?today.getMonth():0,today.getFullYear()===year?today.getDate():1,12));
 }
 
 const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen']};
@@ -569,6 +780,20 @@ function openDetail(title,room="",area=""){
   <div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`;
  document.getElementById("detailOverlay").classList.add("open");
 }
+function catalogPlannedToday(x){
+ const planned=plannedTasks();
+ return planned.find(t=>t.text===x.text && t.room===x.room && !isPostponed(t));
+}
+function addCatalogToToday(x){
+ const existing=catalogPlannedToday(x);
+ if(existing){ toast(isDone(existing)?"Ist heute bereits erledigt ✓":"Ist heute bereits im Plan ❤️"); return; }
+ state.todayExtras=Array.isArray(state.todayExtras)?state.todayExtras:[];
+ const id="extra|"+dayKey()+"|"+uid();
+ state.todayExtras.push({id,date:dayKey(),text:x.text,room:x.room,area:x.area,canonical:"extra|"+x.room+"|"+x.text});
+ state.done[id]=false;
+ save();
+ toast("Heute hinzugefügt ❤️");
+}
 function renderCatalog(){
  const main=document.getElementById("main");
  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Jede einzelne Aufgabe hat eigene Details.</div></div><button class="btn" id="backToday">Heute</button></div>
@@ -580,10 +805,15 @@ function renderCatalog(){
   const arr=allCatalog().filter(x=>!q || [x.text,x.room,x.area].join(" ").toLowerCase().includes(q));
   results.innerHTML=`<div class="small" style="padding:5px">${arr.length} Treffer</div>`;
   arr.slice(0,80).forEach(x=>{
+   const planned=catalogPlannedToday(x);
    const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">＋</button>`;
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
    row.children[1].onclick=()=>openDetail(x.text,x.room,x.area);
-   row.children[2].onclick=()=>{const id="customcatalog|"+uid();state.custom.push({id,text:x.text,room:x.room,area:x.area});state.done[id]=false;save();toast("Heute hinzugefügt");};
+   row.children[2].onclick=()=>addCatalogToToday(x);
+   if(planned){
+     row.children[2].classList.add("plannedToday");
+     row.children[2].title=isDone(planned)?"Heute bereits erledigt":"Heute bereits im Tagesplan";
+   }
    results.appendChild(row);
   });
   if(!arr.length)results.innerHTML+=`<div class="empty">Nichts gefunden. ❤️</div>`;
@@ -592,7 +822,29 @@ function renderCatalog(){
  main.querySelector("#backToday").onclick=()=>{selectedTab="today";render()};
  input.focus();
 }
+
+function sundayOptionalEnabled(){
+ return !!(state.sundayOptional && state.sundayOptional[dayKey(today)]);
+}
+function setupSundayOptional(){
+ const card=document.getElementById("sundayOptionalCard");
+ const btn=document.getElementById("sundayOptionalBtn");
+ if(!card||!btn)return;
+ const isSunday=today.getDay()===0;
+ card.style.display=isSunday?"block":"none";
+ if(!isSunday)return;
+ const enabled=sundayOptionalEnabled();
+ btn.textContent=enabled?"✓ Sonntag genutzt":"☀️ Sonntag nutzen";
+ btn.disabled=enabled;
+ btn.onclick=()=>{
+   state.sundayOptional=state.sundayOptional||{};
+   state.sundayOptional[dayKey(today)]=true;
+   save(); render(); toast("Sonntag freigeschaltet ❤️");
+ };
+}
+
 function render(){
+ setupSundayOptional();
  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
  if(selectedTab==="today")renderToday();
  else if(selectedTab==="week")renderWeek();
