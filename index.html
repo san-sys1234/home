@@ -982,35 +982,26 @@ function shouldSuppressRegularSpecial(d){
 }
 
 function render(){
- setupSundayOptional();
- const _oldMain=document.getElementById("main");
-
  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
  if(selectedTab==="today")renderToday();
  else if(selectedTab==="week")renderWeek();
  else if(selectedTab==="history")renderHistory();
  else renderCatalog();
+ if(selectedTab==="today"){
+   setupSundayOptional();
+   renderIntelligentInfo();
+ }
 }
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});
 document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");
 document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
 
-(function(){
- const root=document.getElementById("main");
- if(!root)return;
- const obs=new MutationObserver(()=>{ 
-   clearTimeout(window.__intelTimer);
-   window.__intelTimer=setTimeout(renderIntelligentInfo,0);
- });
- obs.observe(root,{childList:true,subtree:false});
- setTimeout(renderIntelligentInfo,0);
-})();
 
 
 function renderIntelligentInfo(){
  const main=document.getElementById("main");
- if(!main || state.tab && state.tab!=="today")return;
+ if(!main || selectedTab!=="today")return;
  const d=today;
  const sp=intelligentSpecialForDate(d);
  const box=document.createElement("div");
