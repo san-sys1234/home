@@ -983,7 +983,7 @@ function allCatalog(){
  }
  for(const [t] of ROTATIONS)out.push({text:t,room:"Rotationsaufgabe",area:"Turnus"});
  for(const [,tasks] of DAILY)for(const t of tasks)out.push({text:t,room:"Ganzes Haus",area:"Alltag"});
- for(const c of state.custom)out.push({text:c.text,room:c.room,area:c.area});
+ for(const c of state.custom)out.push({text:c.text,room:c.room,area:c.area,start:c.start||c.date||"",rec:c.rec||c.repeat||""});
  return out;
 }
 function openDetail(title,room="",area=""){
@@ -1036,16 +1036,27 @@ function catalogNextDate(x){
    const planned=plannedTasks(d);
    if(planned.some(t=>t.text===x.text && t.room===x.room)) return d;
  }
- // Falls die Aufgabe im aktuellen Planungsfenster nicht ausgewählt wird,
- // verwende den nächsten sinnvollen Turnustermin aus dem Pflegepool.
+ // Jede Katalogaufgabe bekommt einen konkreten nächsten Termin.
+ // Wenn sie im intelligenten Vorschaufenster nicht ausgewählt wird,
+ // nehmen wir den nächsten regulären Wochentag dieses Raums.
  const care=CARE_POOL.find(t=>t.text===x.text && t.room===x.room);
  if(care){
    for(let i=0;i<=370;i++){ const d=new Date(today); d.setDate(today.getDate()+i); if(careDueOn(care,d)) return d; }
  }
- return null;
+ for(let i=0;i<=370;i++){
+   const d=new Date(today); d.setDate(today.getDate()+i);
+   if(d.getDay()!==0 && weeklyRoomsForDate(d).includes(x.room)) return d;
+ }
+ // Für individuelle Aufgaben ohne Raum-Turnus gilt das Startdatum,
+ // andernfalls heute als konkrete nächste Bezugsgröße.
+ if(x.start){
+   const d=new Date(x.start+"T12:00:00");
+   if(!isNaN(d)) return d<today?today:d;
+ }
+ return today;
 }
 function formatCatalogNextDate(d){
- if(!d)return "noch nicht festgelegt";
+ if(!d)return formatCatalogNextDate(today);
  return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"});
 }
 
