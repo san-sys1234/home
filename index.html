@@ -41,8 +41,8 @@ h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing
 .notice.yellow{background:var(--yellow);color:#6c5b2b}
 .notice.red{background:var(--red);color:#75443d}
 .sectionTitle{font-size:19px;font-weight:800;margin:24px 4px 12px}
-.task{display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
-.task.done{opacity:.56}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
+.task{display:block;position:relative;overflow:hidden;padding:0;min-height:64px;touch-action:pan-y;user-select:none;-webkit-user-select:none}border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
+.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg .rightLabel{margin-left:auto}.swipeBg .leftLabel{margin-right:auto}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
 .check{width:27px;height:27px;border-radius:50%;border:2px solid #cfc5bc;display:grid;place-items:center;flex:0 0 27px;background:#fff}
 .task.done .check{background:var(--accent);border-color:var(--accent);color:#fff}
 .taskMain{min-width:0;flex:1}
@@ -287,40 +287,83 @@ function updateCompletion(){
  save();
 }
 function swipeRow(el,task){
- let sx=0,sy=0,active=false;
- const start=(x,y)=>{sx=x;sy=y;active=true};
- const end=(x,y)=>{
-   if(!active)return; active=false;
+ let sx=0,sy=0,active=false,dragging=false;
+ const content=el.querySelector(".taskContent"), bg=el.querySelector(".swipeBg");
+
+ function reset(){
+   content.style.transition="transform .18s ease";
+   content.style.transform="translateX(0)";
+   bg.style.opacity="0";
+   bg.classList.remove("green","red");
+   setTimeout(()=>content.style.transition="",190);
+ }
+ function start(x,y){
+   sx=x; sy=y; active=true; dragging=false;
+   content.style.transition="none";
+ }
+ function move(x,y,e){
+   if(!active)return;
    const dx=x-sx,dy=y-sy;
-   if(Math.abs(dx)>=70 && Math.abs(dx)>Math.abs(dy)*1.15){
-     if(dx>0){
-       state.done[task.id]=true;
-       state.lastDone[task.canonical]=dayKey();
-       save(); render(); toast("Erledigt ✓");
-     }else{
-       postponeTask(task);
-     }
+   if(!dragging){
+     if(Math.abs(dx)<8 && Math.abs(dy)<8)return;
+     if(Math.abs(dy)>Math.abs(dx)*1.15){ active=false; return; }
+     dragging=true;
    }
- };
+   if(e && e.cancelable)e.preventDefault();
+   const limited=Math.max(-145,Math.min(145,dx));
+   content.style.transform=`translate3d(${limited}px,0,0)`;
+   bg.classList.toggle("green",dx>0);
+   bg.classList.toggle("red",dx<0);
+   bg.style.opacity=String(Math.min(1,Math.abs(dx)/45));
+ }
+ function finish(x,y){
+   if(!active)return;
+   active=false;
+   const dx=x-sx,dy=y-sy;
+   if(dragging && Math.abs(dx)>=65 && Math.abs(dx)>Math.abs(dy)*1.1){
+     if(dx>0){
+       content.style.transition="transform .16s ease";
+       content.style.transform="translate3d(100%,0,0)";
+       bg.classList.add("green"); bg.classList.remove("red"); bg.style.opacity="1";
+       setTimeout(()=>{
+         state.done[task.id]=true;
+         state.lastDone[task.canonical]=dayKey();
+         save(); render(); toast("Erledigt ✓");
+       },150);
+     }else{
+       content.style.transition="transform .16s ease";
+       content.style.transform="translate3d(-100%,0,0)";
+       bg.classList.add("red"); bg.classList.remove("green"); bg.style.opacity="1";
+       setTimeout(()=>postponeTask(task),150);
+     }
+   }else reset();
+ }
  el.addEventListener("touchstart",e=>{
-   if(e.touches.length===1) start(e.touches[0].clientX,e.touches[0].clientY);
+   if(e.touches.length===1)start(e.touches[0].clientX,e.touches[0].clientY);
  },{passive:true});
+ el.addEventListener("touchmove",e=>{
+   if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY,e);
+ },{passive:false});
  el.addEventListener("touchend",e=>{
-   if(e.changedTouches.length) end(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+   if(e.changedTouches.length)finish(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
  },{passive:true});
- // Also support trackpad/mouse dragging on devices where pointer events are available.
  el.addEventListener("pointerdown",e=>{
-   if(e.pointerType==="mouse" || e.pointerType==="pen"){start(e.clientX,e.clientY);}
+   if(e.pointerType==="mouse" || e.pointerType==="pen")start(e.clientX,e.clientY);
+ });
+ el.addEventListener("pointermove",e=>{
+   if(e.pointerType==="mouse" || e.pointerType==="pen")move(e.clientX,e.clientY,e);
  });
  el.addEventListener("pointerup",e=>{
-   if(e.pointerType==="mouse" || e.pointerType==="pen"){end(e.clientX,e.clientY);}
+   if(e.pointerType==="mouse" || e.pointerType==="pen")finish(e.clientX,e.clientY);
  });
+ el.addEventListener("pointercancel",()=>{if(active){active=false;reset();}});
 }
 function taskRow(task){
  const el=document.createElement("div");el.className="task"+(isDone(task)?" done":"");
- el.innerHTML=`<button class="check" aria-label="Erledigt">${isDone(task)?"✓":""}</button>
+ el.innerHTML=`<div class="swipeBg"><span class="leftLabel">↩ Später</span><span class="rightLabel">✓ Erledigt</span></div>
+ <div class="taskContent"><button class="check" aria-label="Erledigt">${isDone(task)?"✓":""}</button>
  <div class="taskMain"><div class="taskName">${esc(task.text)}</div><div class="meta">${esc(task.room)}${task.area?" · "+esc(task.area):""}</div></div>
- <div class="taskButtons"><button class="iconBtn info" aria-label="Details">ⓘ</button><button class="iconBtn later" aria-label="Verschieben">↩</button></div>`;
+ <div class="taskButtons"><button class="iconBtn info" aria-label="Details">ⓘ</button><button class="iconBtn later" aria-label="Verschieben">↩</button></div></div>`;
  el.querySelector(".check").onclick=()=>toggleTask(task);
  el.querySelector(".info").onclick=()=>openDetail(task.text,task.room,task.area);
  el.querySelector(".later").onclick=()=>postponeTask(task);
