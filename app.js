@@ -1,5 +1,5 @@
 /* Unser Zuhause – V109 · raumweise Türrahmen */
-const STORAGE="unser-zuhause-v132";
+const STORAGE="unser-zuhause-v133";
 const LEGACY_STORAGE="unser-zuhause-v120";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
@@ -175,7 +175,7 @@ function loadState(){
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  try{localStorage.setItem(STORAGE,JSON.stringify(s))}catch{}
@@ -501,7 +501,57 @@ function swipeRow(el,x){
 }
 function taskRow(x){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div><div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(nextDueLabel(x))}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
 
-function renderToday(){purgePostponed();const main=document.getElementById("main");if(today.getDay()===0&&!state.sundayOptional[dayKey(today)]){main.innerHTML=`<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn du möchtest, kannst du freiwillig einen Sonntagsschwerpunkt freischalten.</p><button class="btn primary" id="sun">☀️ Sonntag nutzen</button></div>`;main.querySelector("#sun").onclick=()=>{state.sundayOptional[dayKey(today)]=true;save();render()};return}const tasks=plannedToday(),done=tasks.filter(isDone).length;main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":"Normal"}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;const groups={};for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}const completed=tasks.filter(isDone);if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}renderPostponed(main);main.querySelector("#energy").onclick=showEnergy;main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()}}
+function roomFocusTasks(room,d=today){
+  if(!room)return [];
+  const k=dayKey(d);
+  return CATALOG
+    .filter(x=>x.room===room && !x.window && x.area!=="Alltag" && x.source!=="rotation" && !isPostponed(x))
+    .filter(x=>!recent(x,d,7))
+    .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
+}
+function renderRoomFocus(main, tasks){
+  const card=document.createElement("div");
+  card.className="card roomFocus";
+  const rooms=[...new Set(CATALOG.filter(x=>!x.window&&x.area!=="Alltag"&&x.source!=="rotation").map(x=>x.room).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"de"));
+  const day=dayKey(today), selected=state.roomFocus?.[day]||"";
+  card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh seine offenen Aufgaben – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
+  main.appendChild(card);
+  const select=card.querySelector("#roomSelect");
+  const renderSelected=()=>{
+    const room=select.value;
+    const old=main.querySelector(".roomFocusTasks"); if(old)old.remove();
+    if(!room)return;
+    state.roomFocus=state.roomFocus||{};state.roomFocus[day]=room;save();
+    const open=roomFocusTasks(room,today);
+    const sec=document.createElement("section");sec.className="roomFocusTasks";
+    sec.innerHTML=`<div class="sectionTitle">${esc(room)} · heute freiwillig</div>`;
+    if(!open.length){const empty=document.createElement("div");empty.className="card empty";empty.textContent="In diesem Raum ist gerade nichts Sinnvolles offen. 🥰";sec.appendChild(empty)}
+    else open.forEach(x=>sec.appendChild(taskRow(x)));
+    main.appendChild(sec);
+  };
+  select.onchange=renderSelected;
+  if(selected)renderSelected();
+}
+
+function renderToday(){
+  purgePostponed();
+  const main=document.getElementById("main");
+  const sunday=today.getDay()===0;
+  const tasks=plannedToday(),done=tasks.filter(isDone).length;
+  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal")}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;
+  if(sunday){
+    const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
+  }
+  const groups={};
+  for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
+  for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
+  const completed=tasks.filter(isDone);
+  if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
+  renderRoomFocus(main,tasks);
+  renderPostponed(main);
+  main.querySelector("#energy").onclick=showEnergy;
+  main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()};
+}
 function renderPostponed(main){const arr=Object.entries(state.postponed||{}).filter(([,x])=>isPostponed(x));if(!arr.length)return;const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="topline"><b>↩ Später (${arr.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.postponedOpen)arr.forEach(([id,x])=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)} · neu fällig ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn">Wieder öffnen</button>`;r.querySelector("button").onclick=()=>restorePostponed(id);c.appendChild(r)});main.appendChild(c);c.querySelector("#po").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()}}
 function showEnergy(){
   const main=document.getElementById("main");
