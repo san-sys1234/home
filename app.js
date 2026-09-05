@@ -146,7 +146,7 @@ let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
 function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()}}
-function save(){localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
+function save(){localStorage.setItem(STORAGE,JSON.stringify(state));state.__planRevision=(state.__planRevision||0)+1;invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
@@ -191,8 +191,15 @@ function windowDate(x,ref=today){
  return d;
 }
 
-function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:e.start??meta.start??"",interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){if(room==="Fenster / Ganzes Haus")continue;for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}for(const [text,interval] of ROTATIONS)add(text,"Rotationsaufgabe","Turnus",{key:`rotation|${text}`,editable:false,source:"rotation",interval});for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
-function refreshCatalog(){CATALOG=buildCatalog();invalidatePlans()}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:e.start??meta.start??"",interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){if(room==="Fenster / Ganzes Haus"||room==="Türen / Ganzes Haus"||room==="Ganzes Haus – Allgemein")continue;for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}for(const [text,interval] of ROTATIONS)add(text,"Rotationsaufgabe","Turnus",{key:`rotation|${text}`,editable:false,source:"rotation",interval});for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
+function refreshCatalog(){
+ CATALOG=buildCatalog().filter(x=>{
+   const t=String(x.text||"").toLowerCase();
+   const r=String(x.room||"").toLowerCase();
+   return !(t.includes("türrahmen") && (r.includes("ganzes haus")||r.includes("gesamtes haus")));
+ });
+ invalidatePlans();
+}
 refreshCatalog();
 
 function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&x.source!=="rotation"&&x.area!=="Alltag")}
@@ -238,7 +245,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return JSON.stringify({ed:state.catalogEdits,del:state.catalogDeleted,custom:state.custom,done:state.lastDone,sunday:state.sundayOptional})}
+function plannerKey(){return String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -283,8 +290,14 @@ function buildIntelligentPlan(){
    if(chosen)days.get(chosen).push(occ.x);
  }
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
- plannerCache={key,days,next:new Map()};
- for(const x of CATALOG){let found=null;for(const [k,arr] of days){if(arr.some(y=>taskId(y)===taskId(x))){const d=fromKey(k);if(d>=today&&!found)found=d;}}if(found)plannerCache.next.set(taskId(x),found)}
+ const next=new Map();
+ for(const [k,arr] of days){
+   for(const y of arr){
+     const id=taskId(y);
+     if(!next.has(id)){const d=fromKey(k);if(d>=today)next.set(id,d);}
+   }
+ }
+ plannerCache={key,days,next};
  return plannerCache;
 }
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
