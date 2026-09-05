@@ -134,10 +134,10 @@ function roomTasks(room){
  return allCatalog().filter(x=>x.room===room && x.area!=="Alltag" && !x.window && !x.seasonal && x.room!=="Rotationsaufgabe").map(x=>x.text);
 }
 function calendarTasksForDate(d){
- const k=dayKey(d), out=[];
- for(const x of allCatalog()){
+ const k=dayKey(d), out=[], catalog=allCatalog();
+ for(const x of catalog){
    if(x.area==="Alltag" || x.seasonal) continue;
-   const nd=catalogNextDate(x,d);
+   const nd=catalogNextDate(x,d,catalog);
    if(nd && dayKey(nd)===k) out.push({text:x.text,room:x.room,area:x.area});
  }
  return out;
@@ -981,7 +981,7 @@ function nextBasementOccurrence(room, start){
  }
  return d;
 }
-function catalogNextDate(x, referenceDate=today){
+function catalogNextDate(x, referenceDate=today, catalogList=null){
  const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
  if(x.area==="Alltag")return ref;
  if(x.window){
@@ -1024,7 +1024,7 @@ function catalogNextDate(x, referenceDate=today){
  const last=state.lastDone?.[x.room+"|"+x.text]||"";
  if(last){let d=new Date(last+"T12:00:00");d.setDate(d.getDate()+catalogInterval(x));while(d<ref)d.setDate(d.getDate()+catalogInterval(x));return d;}
  if(dowByRoom[x.room]!==undefined){
-   const items=allCatalog().filter(y=>y.room===x.room&&!y.window);
+   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window);
    const idx=Math.max(0,items.findIndex(y=>y.text===x.text));
    let d=nextWeekdayOnOrAfter(ref,dowByRoom[x.room]);
    d.setDate(d.getDate()+Math.floor(idx/2)*7);
