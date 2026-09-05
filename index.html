@@ -16,3 +16,22 @@
 <div class="detailOverlay" id="detailOverlay"><div class="sheet"><div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div><div id="detailContent"></div></div></div><div class="toast" id="toast"></div>
 <script src="app.js"></script>
 </body></html>
+
+
+/* V117 fallback: any completion button immediately resyncs its task. */
+document.addEventListener('click', function(e){
+  const b = e.target.closest && e.target.closest('[data-complete-task-id]');
+  if (!b) return;
+  const id = b.getAttribute('data-complete-task-id');
+  setTimeout(function(){
+    try{
+      const t = typeof getTaskById === 'function' ? getTaskById(id) :
+        (typeof buildCatalog === 'function' ? buildCatalog().find(x=>String(x.id)===String(id)) : null);
+      if(t){
+        const today = new Date().toISOString().slice(0,10);
+        v117SyncAfterCompletion(t, today);
+        v117RefreshAllViews();
+      }
+    }catch(err){}
+  }, 0);
+});
