@@ -1,5 +1,5 @@
 /* Unser Zuhause – V109 · raumweise Türrahmen */
-const STORAGE="unser-zuhause-v112";
+const STORAGE="unser-zuhause-v120";
 const LEGACY_STORAGE="unser-zuhause-v109";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
@@ -28,6 +28,8 @@ const catalogSeed=[
 ['Garderobe','EG',['Jacken nach Saison ordnen','Schuhe paarweise ordnen','Schuhsohlen bei Bedarf reinigen','Schuhschrank außen reinigen','Schuhschrank innen auswischen','Ablageflächen leeren','Taschen ordnen','Schlüsselplatz reinigen','Spiegel gründlich reinigen','Garderobenhaken abwischen','Türklinken reinigen']],
 ['Eingangsbereich','EG',['Fußmatte ausschütteln/absaugen','Fußmatte nach Hersteller reinigen','Tür innen abwischen','Tür außen bei Bedarf reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Boden gründlich saugen','Boden wischen','Ecken kontrollieren']],
 ['Flur','EG',['Bilderrahmen abstauben','Lichtschalter außen reinigen','Türklinken reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Ecken absaugen','Boden saugen','Boden wischen']],
+['Flur OG','OG',['Bilderrahmen/Dekoration abstauben','Lichtschalter außen reinigen','Türklinken reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Ecken absaugen','Boden saugen','Boden wischen']],
+['Flur KG','Keller',['Lichtschalter außen reinigen','Türklinken reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Ecken absaugen','Boden saugen','Boden wischen']],
 ['Büro','EG',['Schreibtisch komplett leeren','Schreibtischfläche reinigen','Monitor außen reinigen','Tastatur reinigen','Maus reinigen','Kabel grob ordnen','Papierstapel sortieren','Papierkorb leeren','Regale abstauben','Bücheroberseiten entstauben','Fensterbank reinigen','Boden saugen','Boden wischen']],
 ['Abstellraum','EG',['Vorräte prüfen','Reinigungsmittelbestand prüfen','Regale abstauben','Regalböden auswischen','Schubladen auswischen','Besen/Staubsaugerbereich reinigen','Mülltrennung ordnen','Boden gründlich saugen','Boden wischen']],
 ['Speis','EG',['Vorräte nach Kategorien ordnen','Mindesthaltbarkeit prüfen','Angebrochene Packungen prüfen','Regale abstauben','Regalböden auswischen','Schubladen auswischen','Behälter außen reinigen','Boden unter Regalen reinigen','Boden saugen','Boden wischen']],
@@ -71,8 +73,8 @@ const SEED_ROOMS = {
  "Eingangsbereich":["Eingangsbereich","EG"],"Flur":["Flur","EG"],"Büro":["Büro","EG"],"Abstellraum":["Abstellraum","EG"],
  "Speis":["Speis","EG"],"Gäste-WC":["Gäste-WC","EG"],"Kinderbad":["Kinderbad","OG"],"Bad":["Bad","OG"],"WC":["WC","OG"],
  "Schlafzimmer":["Schlafzimmer","OG"],"Ankleidezimmer":["Ankleidezimmer","OG"],"Kinderzimmer 1":["Kinderzimmer 1","OG"],
- "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
- "Trainingsraum":["Trainingsraum","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],"Flur KG":["Flur KG","Keller"],
+ "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Flur OG":["Flur OG","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
+ "Trainingsraum":["Trainingsraum","Keller"],"Flur KG":["Flur KG","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],
  "Keller allgemein":["Keller allgemein","Keller"],"Saunaraum":["Saunaraum","OG"],"Treppenhaus":["Treppenhaus","Ganzes Haus"],
  "Fenster / Ganzes Haus":["Fenster / Ganzes Haus","Ganzes Haus"],"Türen / Ganzes Haus":["Türen / Ganzes Haus","Ganzes Haus"],
  "Kamin / Wohnzimmer":["Kamin / Wohnzimmer","EG"],"Ganzes Haus – Textilien":["Ganzes Haus – Textilien","Ganzes Haus"],
@@ -122,7 +124,7 @@ const SEASONAL_SPECIALS = [
 ];
 
 const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
-const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,"Flur OG":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
 const DAY_THEME={1:"EG · Wohnen, Essen & Küche",2:"Bäder & WCs",3:"OG · Schlafen, Kinder & Sauna",4:"EG · Nebenräume",5:"Keller · nur ein Raum",6:"Wäsche + maximal eine Sonderaufgabe",0:"Haushaltsfrei ❤️"};
 
 function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
@@ -131,6 +133,7 @@ function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate
 function fromKey(k){return new Date(k+"T12:00:00")}
 function dayKey(d=new Date()){return iso(d)}
 function sameDay(a,b){return iso(a)===iso(b)}
+function formatDateKey(k){const d=fromKey(k);return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function addDays(d,n){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+n);return x}
 function nextDow(d,dow){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+((dow-x.getDay()+7)%7));return x}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
@@ -191,10 +194,10 @@ function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
 function unmarkDone(x){delete state.done[doneKey(x)]}
-function isPostponed(x){return !!state.postponed[taskId(x)]}
-function postponeTask(x){state.postponed[taskId(x)]={...x,from:dayKey()};save();render();toast("Für heute verschoben ❤️")}
+function isPostponed(x){const p=state.postponed[taskId(x)];return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
+function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);state.postponed[taskId(x)]={...x,from:dayKey(),postponedUntil:until};save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
 function restorePostponed(id){delete state.postponed[id];save();render()}
-function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k)delete state.postponed[id]}
+function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
 function syncCompletedDay(d=today){
  const k=dayKey(d), tasks=plannedTodayForDate(d);
  if(tasks.length && tasks.every(isDone)) state.completedDays[k]=true; else delete state.completedDays[k];
@@ -241,6 +244,8 @@ function weeklyDate(x){const dow=WEEKDAYS[x.room];if(dow===undefined)return null
 function rotationAnchor(x){const idx=Math.max(0,ROTATIONS.findIndex(r=>r[0]===x.text));return addDays(fromKey("2026-09-07"),(idx*5)%150)}
 function explicitNext(x,ref){const start=/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")?fromKey(x.start):ref;const interval=catalogInterval(x);let d=new Date(start),last=lastDone(x);if(last&&fromKey(last)>=d)d=fromKey(last);while(d<ref)d=addDays(d,interval);if(last&&sameDay(d,fromKey(last)))d=addDays(d,interval);return d}
 function rawNextDue(x,ref=today){
+ const postponed=state.postponed?.[taskId(x)];
+ if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  if(x.window)return windowDate(x,ref)||ref;
  if(x.start)return explicitNext(x,ref);
  if(x.source==="rotation"){const interval=catalogInterval(x),last=lastDone(x);let d=last?addDays(fromKey(last),interval):rotationAnchor(x);while(d<ref)d=addDays(d,interval);return d}
@@ -253,6 +258,8 @@ function rawNextDue(x,ref=today){
  return d;
 }
 function rawDueOn(x,d){
+ const postponed=state.postponed?.[taskId(x)];
+ if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(d<pd)return false;if(sameDay(pd,d))return true;}
  if(x.area==="Alltag")return false;
  if(x.window)return sameDay(windowDate(x,d),d);
  if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}
@@ -278,7 +285,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v112|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v120|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -374,7 +381,7 @@ function swipeRow(el,x){
 function taskRow(x){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div><div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(nextDueLabel(x))}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
 
 function renderToday(){purgePostponed();const main=document.getElementById("main");if(today.getDay()===0&&!state.sundayOptional[dayKey(today)]){main.innerHTML=`<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn du möchtest, kannst du freiwillig einen Sonntagsschwerpunkt freischalten.</p><button class="btn primary" id="sun">☀️ Sonntag nutzen</button></div>`;main.querySelector("#sun").onclick=()=>{state.sundayOptional[dayKey(today)]=true;save();render()};return}const tasks=plannedToday(),done=tasks.filter(isDone).length;main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":"Normal"}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp; | &nbsp; Erledigt · GRÜN 👉</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div><div class="notice">Nichts wird automatisch auf morgen gestapelt. Große Aufgaben bekommen Vorrang und verdrängen kleinere Pflegepunkte. Fälligkeiten werden dabei möglichst gleichmäßig verteilt. ❤️</div></div>`;const groups={};for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}const completed=tasks.filter(isDone);if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}renderPostponed(main);main.querySelector("#energy").onclick=showEnergy;main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()}}
-function renderPostponed(main){const arr=Object.entries(state.postponed||{});if(!arr.length)return;const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="topline"><b>↩ Später (${arr.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.postponedOpen)arr.forEach(([id,x])=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)}</div></div><button class="btn">Wieder öffnen</button>`;r.querySelector("button").onclick=()=>restorePostponed(id);c.appendChild(r)});main.appendChild(c);c.querySelector("#po").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()}}
+function renderPostponed(main){const arr=Object.entries(state.postponed||{}).filter(([,x])=>isPostponed(x));if(!arr.length)return;const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="topline"><b>↩ Später (${arr.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.postponedOpen)arr.forEach(([id,x])=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)} · neu fällig ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn">Wieder öffnen</button>`;r.querySelector("button").onclick=()=>restorePostponed(id);c.appendChild(r)});main.appendChild(c);c.querySelector("#po").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()}}
 function showEnergy(){
   const main=document.getElementById("main");
   let box=document.getElementById("energyBox");
