@@ -259,7 +259,7 @@ function rawNextDue(x,ref=today){
 }
 function rawDueOn(x,d){
  const postponed=state.postponed?.[taskId(x)];
- if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(d<pd)return false;if(sameDay(pd,d))return true;}
+ if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);return sameDay(pd,d);}
  if(x.area==="Alltag")return false;
  if(x.window)return sameDay(windowDate(x,d),d);
  if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}
@@ -285,7 +285,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v120|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v123|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -306,6 +306,24 @@ function buildIntelligentPlan(){
  const maxLook=120;
  for(const occ of flex){
    let chosen=null;
+   const postponedUntil=state.postponed?.[taskId(occ.x)]?.postponedUntil;
+   if(postponedUntil){
+     const pd=fromKey(postponedUntil),pk=dayKey(pd);
+     if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
+       const arr=days.get(pk);
+       const weight=taskWeight(occ.x);
+       const used=arr._weight||0;
+       const hasMighty=arr.some(y=>y.window||taskWeight(y)>=5);
+       const hasLarge=arr.some(y=>taskWeight(y)>=3);
+       const cap=dayBudget(pd);
+       const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
+       const roomLimit=(weight>=5||hasMighty)?1:6;
+       if(!arr.some(y=>taskId(y)===taskId(occ.x)) && !(hasMighty&&weight>1) && !(weight>=5&&arr.length) && !(hasLarge&&weight>=3) && used+weight<=cap && sameRoomWeight+weight<=roomLimit){
+         chosen=pk;
+       }
+     }
+   }
+   if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);continue;}
    for(let delta=0;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
@@ -344,6 +362,11 @@ function buildIntelligentPlan(){
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
 function scheduledForDate(d){return plannedForDate(d)}
 function nextDue(x,ref=today){
+ const postponed=state.postponed?.[taskId(x)];
+ if(postponed?.postponedUntil){
+   const pd=fromKey(postponed.postponedUntil);
+   if(pd>=ref)return pd;
+ }
  const p=buildIntelligentPlan().next.get(taskId(x));
  if(p&&p>=ref)return p;
  return rawNextDue(x,ref);
