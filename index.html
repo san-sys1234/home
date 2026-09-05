@@ -159,11 +159,13 @@ const ROOM_PLAN={
   4:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"]
 };
 const BATH_A=["Gäste-WC","Kinderbad"], BATH_B=["Bad","WC"];
-const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum"];
+const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum"];
 const BASEMENT_TASKS={
  "Waschküche":["Waschmaschine außen reinigen","Arbeitsflächen reinigen","Wäschekörbe auswischen","Boden saugen"],
  "Musikzimmer":["Instrumente materialgerecht entstauben","Noten ordnen","Regale abstauben","Boden saugen"],
- "Trainingsraum":["Trainingsgeräte abwischen","Matten reinigen","Ablageflächen ordnen","Boden saugen"]
+ "Trainingsraum":["Trainingsgeräte abwischen","Matten reinigen","Ablageflächen ordnen","Boden saugen"],
+ "Technikraum":["Sichtbaren Staub entfernen","Zugänge freihalten","Boden bei Bedarf reinigen"],
+ "Lagerraum":["Kartons ordnen","Vorräte prüfen","Regale abstauben","Boden saugen"]
 };
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
@@ -657,6 +659,8 @@ function swipeRow(el,task){
    content.style.transform=`translate3d(${limited}px,0,0)`;
    bg.classList.toggle("green",dx>0);
    bg.classList.toggle("red",dx<0);
+   // Während des Wischens muss die Beschriftung die Richtung sofort anzeigen.
+   bg.querySelector(".swipeLabel").textContent = dx<0 ? "↩ Später" : "✓ Erledigt";
    bg.style.opacity=String(Math.min(1,Math.abs(dx)/45));
  }
  function finish(x,y){
@@ -1098,6 +1102,14 @@ function catalogInterval(x){
  if(/sortieren|ordnen|aussortieren|vorräte|schubladen|regal|schrank|kabel|papierstapel/.test(t))return 90;
  return 60;
 }
+function nextBasementOccurrence(room, start){
+ let d=new Date(start); d.setHours(12,0,0,0);
+ for(let i=0;i<370;i++){
+   if(d.getDay()===5 && basementRoom(d)===room)return d;
+   d.setDate(d.getDate()+1);
+ }
+ return d;
+}
 function catalogNextDate(x){
  const todayDate=new Date(today);
  if(x.area==="Alltag")return todayDate;
@@ -1112,6 +1124,12 @@ function catalogNextDate(x){
  const canonical=x.room+"|"+x.text,last=state.lastDone?.[canonical]||"",interval=catalogInterval(x);
  if(last){let d=new Date(last+"T12:00:00");d.setDate(d.getDate()+interval);while(d<todayDate)d.setDate(d.getDate()+interval);return d;}
  const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Waschküche:6,Musikzimmer:5,Trainingsraum:5,Technikraum:5,Lagerraum:5,"Keller allgemein":5,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ if(BASEMENT.includes(x.room)){
+   let d=nextBasementOccurrence(x.room,todayDate);
+   const last=state.lastDone?.[x.room+"|"+x.text]||state.lastDone?.[x.room+"|Kartons prüfen"]||state.lastDone?.[x.room+"|Kartons ordnen"]||"";
+   if(last){ const after=new Date(last+"T12:00:00"); after.setDate(after.getDate()+1); d=nextBasementOccurrence(x.room,after); }
+   return d;
+ }
  if(dowByRoom[x.room]!==undefined){const items=allCatalog().filter(y=>y.room===x.room&&!y.window);const idx=Math.max(0,items.findIndex(y=>y.text===x.text));let d=nextWeekdayOnOrAfter(todayDate,dowByRoom[x.room]);d.setDate(d.getDate()+Math.floor(idx/2)*7);while(d<todayDate)d.setDate(d.getDate()+Math.max(7,interval));return d;}
  if(x.start){const d=new Date(x.start+"T12:00:00");if(!isNaN(d))return d<todayDate?todayDate:d;}
  const idx=Math.max(0,allCatalog().findIndex(y=>y.text===x.text&&y.room===x.room));let d=new Date(todayDate);d.setDate(d.getDate()+Math.min(365,(idx*3)%365));while(d.getDay()===0)d.setDate(d.getDate()+1);return d;
