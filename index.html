@@ -188,10 +188,10 @@ const ROTATIONS=[
  ["🚪 Türklinken & häufig berührte Stellen",7],["🚪 Türrahmen / Zargen",30],["🚪 Türblätter gründlich",75],
  ["🧹 Sockelleisten",42],["🕸️ Decken-/Wandecken auf Spinnweben",30],["✨ Lichtschalter außen abwischen",30],
  ["🔌 Steckdosen außen abwischen",75],["🏛️ Stuck vorsichtig trocken entstauben",120],["🪟 Fenster EG – Abschnitt",180],
- ["🪟 Fenster OG – Abschnitt",180],["☀️ Raffstores / Sonnenschutz nach Herstellerangabe",180],["🪟 Fensterrahmen & Falze",180],
+ ["🪟 Fenster OG – Abschnitt",180],["☀️ Raffstores / Sonnenschutz nach Herstellerangabe",180],
  ["🪟 Vorhangstangen / Schienen",180],["💡 Erreichbare Lampen vorsichtig reinigen",120],["🧊 Kühlschrank prüfen und bei Bedarf reinigen",30],
  ["🔥 Backofen gründlich reinigen",75],["🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller",30],
- ["🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",30],["🧖 Sauna reinigen / pflegen",30],
+ ["🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",30],["🧖 Saunaraum – gründliche Reinigung & Pflege",30],
  ["🛏️ Matratzen wenden/pflegen nach Herstellerangabe",180],["🧼 Fugen & Silikon kontrollieren / materialgerecht reinigen",90],
  ["🔥 Kamin: erkaltete Asche entfernen",30],["🔥 Kamin: Feuerraum auskehren",60],["🔥 Kaminrost reinigen",60],
  ["🔥 Kaminbesteck abwischen",30],["🔥 Kaminholz schlichten",14],["🔥 Holzablage reinigen",30],
@@ -227,7 +227,7 @@ const catalogSeed=[
 ['Keller allgemein','Keller',['Spinnweben entfernen','Sichtbare Ablagerungen entfernen','Boden saugen','Boden wischen','Ecken kontrollieren']],
 ['Saunaraum','OG',['Nach Nutzung lüften','Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
 ['Treppenhaus','Ganzes Haus',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
-['Fenster / Ganzes Haus','Ganzes Haus',['Fenster innen reinigen','Fenster außen reinigen, wenn sicher','Fensterrahmen reinigen','Falze reinigen','Fensterbänke reinigen','Dichtungen kontrollieren','Vorhangstangen reinigen','Vorhänge nach Pflegeetikett reinigen','Raffstores nach Herstellerangabe reinigen']],
+['Fenster / Ganzes Haus','Ganzes Haus',['Fenster innen reinigen','Fenster außen reinigen, wenn sicher','Fensterbänke reinigen','Dichtungen kontrollieren','Vorhangstangen reinigen','Vorhänge nach Pflegeetikett reinigen','Raffstores nach Herstellerangabe reinigen']],
 ['Türen / Ganzes Haus','Ganzes Haus',['Türklinken reinigen','Türrahmen/Zargen reinigen','Türblätter abwischen','Türkanten reinigen','Lichtschalter außen reinigen','Steckdosen außen abwischen','Spinnweben über Türen entfernen']],
 ['Kamin / Wohnzimmer','EG',['Erkaltete Asche aus Feuerraum entfernen','Feuerraum auskehren','Kaminrost reinigen','Kaminbesteck abwischen','Kaminholz schlichten','Holzablage reinigen','Bereich direkt vor Kamin gründlich absaugen','Ruß-/Aschespuren entfernen','Kaminverkleidung materialgerecht reinigen','Kaminglas, falls vorhanden, reinigen','Fachgerechte Kontrolle/Wartung nach Vorgabe']],
 ['Ganzes Haus – Textilien','Ganzes Haus',['Bettwäsche wechseln','Handtücher wechseln','Decken nach Pflegeetikett reinigen','Teppiche nach Pflegehinweisen reinigen','Vorhänge nach Pflegeetikett reinigen','Polster nach Pflegehinweisen reinigen']],
@@ -1039,7 +1039,7 @@ function allCatalog(){
 function definition(title,room="",area=""){
  if(/Fenster/.test(title)){
    return {
-    what:"Nur den genannten Fenster-Abschnitt gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank; bei Bedarf Rahmen/Falz im jeweiligen Abschnitt.",
+    what:"Nur den genannten Fenster-Abschnitt gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falze dieses Abschnitts.",
     belongs:[room||"genannter Fensterbereich"],
     not:["Keine anderen Fenster des Hauses zusätzlich","Keine Leiter-/Höhenarbeiten ohne sichere Ausstattung"],
     care:["Fensterpflege in kleine Abschnitte aufteilen; an einem Fenster-Schwerpunkt-Tag entfallen normale Hauspflege-Sonderaufgaben."]
@@ -1064,7 +1064,7 @@ function definition(title,room="",area=""){
  if(/sockelleiste/.test(t)){what="Sockelleisten entlang des genannten Bereichs von Staub und sichtbaren Verschmutzungen befreien.";belongs=["Oberkante","Vorderseite","Ecken"];not=["Wandfarbe abschrubben"];care=["Nur leicht feucht reinigen, wenn Material das zulässt."]}
  if(/spinnweb/.test(t)){what="Sichtbare Spinnweben an Decken-, Wand- und Türbereichen entfernen.";belongs=["sichtbare Spinnweben","Ecken"];not=["Wände komplett reinigen"];care=["Sanft arbeiten, besonders bei empfindlichem Stuck."]}
  if(/lampe|leuchten/.test(t)){what="Erreichbare Leuchten außen vorsichtig entstauben/reinigen.";belongs=["zugängliche Außenflächen"];not=["Leuchte zerlegen","unsicher auf Leitern arbeiten"];care=["Stromsicherheit und Herstellerhinweise beachten."]}
- if(/sauna/.test(t)){what="Saunaraum nach Nutzung bzw. im Turnus reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Ofen zerlegen"];care=["Holz und Ofen ausschließlich nach Herstellerangaben behandeln."]}
+ if(/sauna/.test(t)){what="Saunaraum als eigenen Bereich reinigen: nach Nutzung kurz lüften und bei Bedarf nachwischen; die gründliche Reinigung erfolgt etwa monatlich.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Ofen zerlegen"];care=["Holz und Ofen ausschließlich nach Herstellerangaben behandeln."]}
  if(/backofen/.test(t)){what="Backofen bzw. die ausdrücklich genannten Teile von Fett- und Speiseresten befreien.";belongs=["Innenraum","Tür/Bleche nur wenn genannt"];not=["technische Teile zerlegen"];care=["Herstellerhinweise und Materialverträglichkeit beachten."]}
  if(/geschirrspüler/.test(t)){what="Geschirrspüler im genannten Pflegeumfang reinigen und pflegen.";belongs=["Filter","Dichtung","Pflegeprogramm, wenn genannt"];not=["Maschine zerlegen"];care=["Herstellerangaben beachten."]}
  if(/kühlschrank/.test(t)){what="Kühlschrank im genannten Umfang ausräumen, reinigen und wieder ordentlich einräumen.";belongs=["genannte Fächer/Dichtungen","sichtbare Verschmutzungen"];not=["Lebensmittel unnötig wegwerfen"];care=["Lebensmittel kühl halten und nur wirklich Verdorbenes entsorgen."]}
