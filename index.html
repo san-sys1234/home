@@ -305,9 +305,8 @@ function calendarTasksForDate(d){
  if(Object.prototype.hasOwnProperty.call(calendarCache.days,k))return calendarCache.days[k];
  const out=[], catalog=allCatalog();
  for(const x of catalog){
-   if(x.area==="Alltag" || x.seasonal) continue;
-   const nd=catalogNextDate(x,d,catalog);
-   if(nd && dayKey(nd)===k) out.push({text:x.text,room:x.room,area:x.area});
+   if(x.area==="Alltag") continue;
+   if(taskIsDueOnDate(x,d,catalog)) out.push({text:x.text,room:x.room,area:x.area});
  }
  calendarCache.days[k]=out;
  return out;
@@ -1116,7 +1115,8 @@ function addCatalogToToday(x){
 }
 function nextWeekdayOnOrAfter(d,dow){const out=new Date(d);out.setDate(out.getDate()+((dow-out.getDay()+7)%7));return out;}
 function catalogInterval(x){
- const t=(x.text||"").toLowerCase();
+ const t=(x.text||'').toLowerCase();
+ if(Number(x.interval)>0)return Number(x.interval);
  if(x.window||/fenster/.test(t))return 180;
  if(/kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;
  if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;
@@ -1126,69 +1126,98 @@ function catalogInterval(x){
  if(/sortieren|ordnen|aussortieren|vorräte|schubladen|regal|schrank|kabel|papierstapel/.test(t))return 90;
  return 60;
 }
-function nextBasementOccurrence(room, start){
- let d=new Date(start); d.setHours(12,0,0,0);
- for(let i=0;i<370;i++){
-   if(d.getDay()===5 && basementRoom(d)===room)return d;
-   d.setDate(d.getDate()+1);
- }
- return d;
+function scheduleAnchor(x){
+ const explicit=String(x.start||'');
+ if(explicit && /^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
+ return '';
 }
-function catalogNextDate(x, referenceDate=today, catalogList=null){
+function dateFromKey(k){ return new Date(k+'T12:00:00'); }
+function isSameDay(a,b){ return dayKey(a)===dayKey(b); }
+function scheduledDateFor(x, referenceDate=today, catalogList=null){
  const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
- if(x.area==="Alltag")return ref;
+ if(x.area==='Alltag')return ref;
  if(x.window){
    const group=SEASONAL_SPECIALS.find(s=>s.key===x.windowSeasonalKey);
-   if(group){
-     const ds=(group.dates||[]).slice().sort();
-     for(const date of ds){const d=new Date(date+"T12:00:00");if(d>=ref)return d;}
-     if(ds.length)return new Date(ds[0]+"T12:00:00");
-   }
-   return ref;
+   const ds=(group?.dates||[]).slice().sort();
+   for(const date of ds){const d=dateFromKey(date);if(d>=ref)return d;}
+   return ds.length?dateFromKey(ds[0]):ref;
  }
  if(x.seasonal){
-   const dates=SEASONAL_SPECIALS.filter(s=>s.key===x.seasonalKey).flatMap(s=>s.dates||[]).sort();
-   for(const ds of dates){const d=new Date(ds+"T12:00:00");if(d>=ref)return d;}
-   return dates.length?new Date(dates[0]+"T12:00:00"):ref;
+   const ds=SEASONAL_SPECIALS.filter(s=>s.key===x.seasonalKey).flatMap(s=>s.dates||[]).sort();
+   for(const date of ds){const d=dateFromKey(date);if(d>=ref)return d;}
+   return ds.length?dateFromKey(ds[0]):ref;
  }
- if(x.interval>0){
-   const last=state.lastDone?.[x.room+"|"+x.text]||state.lastDone?.[x.canonical]||"";
-   let d=last?new Date(last+"T12:00:00"):new Date((x.start||"")+"T12:00:00");
-   if(isNaN(d)){d=new Date(ref);}
-   if(last)d.setDate(d.getDate()+x.interval);
-   else while(d<ref)d.setDate(d.getDate()+x.interval);
+ // Explicitly edited/custom tasks: their start date + interval is authoritative.
+ const anchor=scheduleAnchor(x);
+ if(anchor && Number(x.interval)>0){
+   let d=dateFromKey(anchor);
+   const last=state.lastDone?.[x.room+'|'+x.text]||state.lastDone?.[x.canonical]||'';
+   if(last){
+     const ld=dateFromKey(last);
+     // A completed task starts its next cycle from the actual completion date,
+     // but never creates a phantom date before the configured anchor.
+     d=ld>=d?ld:d;
+   }
+   while(d<ref)d.setDate(d.getDate()+Number(x.interval));
+   if(last && isSameDay(d,dateFromKey(last)))d.setDate(d.getDate()+Number(x.interval));
+   return d;
+ }
+ // Existing built-in room tasks: one authoritative weekly slot, shared by
+ // catalog and calendar. The task's position within the room determines the slot.
+ if(BASEMENT.includes(x.room)){
+   const last=state.lastDone?.[x.room+'|'+x.text]||'';
+   let start=ref;
+   if(last){start=dateFromKey(last);start.setDate(start.getDate()+1);}
+   return nextBasementOccurrence(x.room,start);
+ }
+ const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ if(dowByRoom[x.room]!==undefined){
+   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
+   const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
+   let d=nextWeekdayOnOrAfter(ref,dowByRoom[x.room]);
+   d.setDate(d.getDate()+Math.floor(idx/2)*7);
    return d;
  }
  const rot=ROTATIONS.find(r=>r[0]===x.text);
  if(rot){
-   const last=state.lastDone?.["care|"+x.room+"|"+x.text]||state.lastDone?.["care|Rotationsaufgabe|"+x.text]||state.lastDone?.[x.text]||"";
-   let d=last?new Date(last+"T12:00:00"):new Date(CARE_START);
-   if(last)d.setDate(d.getDate()+rot[1]);
-   else{const item=CARE_POOL.find(t=>t.text===x.text);d=item?careDateFor(item):d;}
-   while(d<ref)d.setDate(d.getDate()+rot[1]); return d;
- }
- if(BASEMENT.includes(x.room)){
-   const last=state.lastDone?.[x.room+"|"+x.text]||"";
-   let start=ref;
-   if(last){start=new Date(last+"T12:00:00");start.setDate(start.getDate()+1);}
-   return nextBasementOccurrence(x.room,start);
- }
- const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
- const last=state.lastDone?.[x.room+"|"+x.text]||"";
- if(last){let d=new Date(last+"T12:00:00");d.setDate(d.getDate()+catalogInterval(x));while(d<ref)d.setDate(d.getDate()+catalogInterval(x));return d;}
- if(dowByRoom[x.room]!==undefined){
-   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window);
-   const idx=Math.max(0,items.findIndex(y=>y.text===x.text));
-   let d=nextWeekdayOnOrAfter(ref,dowByRoom[x.room]);
-   d.setDate(d.getDate()+Math.floor(idx/2)*7);
-   while(d<ref)d.setDate(d.getDate()+7);
+   const last=state.lastDone?.['care|'+x.room+'|'+x.text]||state.lastDone?.['care|Rotationsaufgabe|'+x.text]||state.lastDone?.[x.text]||'';
+   let d=last?dateFromKey(last):new Date(CARE_START);
+   if(last)d.setDate(d.getDate()+rot[1]);else{const item=CARE_POOL.find(t=>t.text===x.text);d=item?careDateFor(item):d;}
+   while(d<ref)d.setDate(d.getDate()+rot[1]);
    return d;
  }
- if(x.start){const d=new Date(x.start+"T12:00:00");if(!isNaN(d))return d<ref?ref:d;}
- // Robuster Fallback: niemals "noch nicht festgelegt" und niemals ohne Datum.
- let d=new Date(ref); d.setDate(d.getDate()+Math.min(364,(stableHash((x.room||"")+"|"+(x.text||""))%180)+1));
- while(d.getDay()===0)d.setDate(d.getDate()+1);
- return d;
+ const start=anchor?dateFromKey(anchor):ref;
+ return start<ref?ref:start;
+}
+function catalogNextDate(x, referenceDate=today, catalogList=null){
+ return scheduledDateFor(x,referenceDate,catalogList);
+}
+function taskIsDueOnDate(x,d,catalogList=null){
+ const target=new Date(d); target.setHours(12,0,0,0);
+ if(target.getDay()===0 && x.area!=='Alltag')return false;
+ if(x.window||x.seasonal)return isSameDay(scheduledDateFor(x,target,catalogList),target);
+ const explicit= scheduleAnchor(x);
+ if(explicit && Number(x.interval)>0){
+   let first=dateFromKey(explicit);
+   const last=state.lastDone?.[x.room+'|'+x.text]||state.lastDone?.[x.canonical]||'';
+   if(last){
+     const ld=dateFromKey(last);
+     if(ld>=first)first=ld;
+   }
+   if(target<first)return false;
+   const diff=Math.round((target-first)/86400000);
+   return diff>=0 && diff%Number(x.interval)===0;
+ }
+ if(BASEMENT.includes(x.room))return isSameDay(scheduledDateFor(x,target,catalogList),target);
+ const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ if(dowByRoom[x.room]!==undefined){
+   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
+   const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
+   const slot=nextWeekdayOnOrAfter(new Date(2026,7,31,12),dowByRoom[x.room]);
+   slot.setDate(slot.getDate()+Math.floor(idx/2)*7);
+   return target>=slot && ((Math.round((target-slot)/86400000))%7===0);
+ }
+ return isSameDay(scheduledDateFor(x,target,catalogList),target);
 }
 function formatCatalogNextDate(d){
  if(!d)return formatCatalogNextDate(today);
