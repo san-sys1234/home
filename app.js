@@ -6,7 +6,7 @@ const ROOM_PLAN={
   4:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"]
 };
 const BATH_A=["Gäste-WC","Kinderbad"], BATH_B=["Bad","WC"];
-const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum"];
+const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
 const BASEMENT_TASKS={
  "Waschküche":["Waschmaschine außen reinigen","Arbeitsflächen reinigen","Wäschekörbe auswischen","Boden saugen"],
  "Musikzimmer":["Instrumente materialgerecht entstauben","Noten ordnen","Regale abstauben","Boden saugen"],
@@ -73,7 +73,7 @@ const SEED_ROOMS = {
  "Speis":["Speis","EG"],"Gäste-WC":["Gäste-WC","EG"],"Kinderbad":["Kinderbad","OG"],"Bad":["Bad","OG"],"WC":["WC","OG"],
  "Schlafzimmer":["Schlafzimmer","OG"],"Ankleidezimmer":["Ankleidezimmer","OG"],"Kinderzimmer 1":["Kinderzimmer 1","OG"],
  "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
- "Trainingsraum":["Trainingsraum","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],
+ "Trainingsraum":["Trainingsraum","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],"Flur KG":["Flur KG","Keller"],
  "Keller allgemein":["Keller allgemein","Keller"],"Saunaraum":["Saunaraum","OG"],"Treppenhaus":["Treppenhaus","Ganzes Haus"],
  "Fenster / Ganzes Haus":["Fenster / Ganzes Haus","Ganzes Haus"],"Türen / Ganzes Haus":["Türen / Ganzes Haus","Ganzes Haus"],
  "Kamin / Wohnzimmer":["Kamin / Wohnzimmer","EG"],"Ganzes Haus – Textilien":["Ganzes Haus – Textilien","Ganzes Haus"],
@@ -101,7 +101,7 @@ function purgeExpiredPostponements(){
  if(changed)save();
 }
 
-function save(){localStorage.setItem(STORAGE,JSON.stringify(state))}
+function save(){localStorage.setItem(STORAGE,JSON.stringify(state));invalidateCalendarCache()}
 function pad(n){return String(n).padStart(2,"0")}
 function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function dayKey(d=today){return iso(d)}
@@ -133,13 +133,19 @@ function themeFor(d){
 function roomTasks(room){
  return allCatalog().filter(x=>x.room===room && x.area!=="Alltag" && !x.window && !x.seasonal && x.room!=="Rotationsaufgabe").map(x=>x.text);
 }
+let calendarCache={key:"",days:{}};
+function invalidateCalendarCache(){calendarCache={key:"",days:{}};}
 function calendarTasksForDate(d){
- const k=dayKey(d), out=[], catalog=allCatalog();
+ const k=dayKey(d), key=String(d.getFullYear());
+ if(calendarCache.key!==key)calendarCache={key,days:{}};
+ if(Object.prototype.hasOwnProperty.call(calendarCache.days,k))return calendarCache.days[k];
+ const out=[], catalog=allCatalog();
  for(const x of catalog){
    if(x.area==="Alltag" || x.seasonal) continue;
    const nd=catalogNextDate(x,d,catalog);
    if(nd && dayKey(nd)===k) out.push({text:x.text,room:x.room,area:x.area});
  }
+ calendarCache.days[k]=out;
  return out;
 }
 function planForDate(d=today){
@@ -424,8 +430,7 @@ function plannedTasks(d=today){
  if(d.getDay()===0){
    if(d.getFullYear()===today.getFullYear()&&dayKey(d)===dayKey(today)&&sundayOptionalEnabled()){
      const care=careCandidateForDate(d);
-     const calendarTasks=calendarTasksForDate(d);
-     return care?[{id:care.id,canonical:care.canonical,text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"}]:[];
+     return care?[{id:care.id||("care|"+care.room+"|"+care.text),canonical:care.canonical||("care|"+care.room+"|"+care.text),text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"}]:[];
    }
    return [];
  }
@@ -798,7 +803,6 @@ function renderHistory(){
    const days=new Date(year,m+1,0).getDate();
    for(let day=1;day<=days;day++){
      const d=new Date(year,m,day,12),k=dayKey(d);
-     const care=careCandidateForDate(d);
      const calendarTasks=calendarTasksForDate(d);
      const free=d.getDay()===0;
      const done=!!state.completedDays[k];
@@ -830,7 +834,7 @@ function renderHistory(){
  showDay(new Date(year,today.getFullYear()===year?today.getMonth():0,today.getFullYear()===year?today.getDate():1,12));
 }
 
-const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen']};
+const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Flur KG': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Ecken absaugen']};
 function catalogWithExtras(){
  const rows=Array.isArray(catalogSeed)?catalogSeed.map(r=>r.slice()):[];
  const existing=new Set(rows.map(r=>r[0]));
@@ -850,7 +854,7 @@ function allCatalog(){
    const edit=state.catalogEdits[key]||{};
    const item={text:edit.text||text,room:edit.room||room,area:edit.area||area||"",place:edit.place||meta.place||"",description:edit.description||meta.description||"",key,editable:meta.editable!==false,
      start:edit.start||meta.start||"",interval:Number(edit.interval||meta.interval||0)||0,
-     window:!!meta.window,windowKey:meta.windowKey,windowSeasonalKey:meta.windowSeasonalKey,
+     id:meta.id||key,window:!!meta.window,windowKey:meta.windowKey,windowSeasonalKey:meta.windowSeasonalKey,
      seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey,source:meta.source||"seed"};
    seen.add(key); out.push(item);
  }
@@ -865,7 +869,7 @@ function allCatalog(){
  for(const c of state.custom){
    const key=c.key||("custom|"+c.id);
    if(catalogDeleted(key))continue;
-   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,place:c.place||"",description:c.description||"",source:"custom"});
+   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,place:c.place||"",description:c.description||"",id:c.id,source:"custom"});
  }
  for(const w of windowCatalogEntries())add(w.text,w.room,w.area,{key:"window|"+w.windowKey,editable:false,window:true,windowKey:w.windowKey,windowSeasonalKey:w.windowSeasonalKey,source:"window"});
  for(const x of SEASONAL_SPECIALS)add(x.text,x.room,x.area,{key:"seasonal|"+x.key+"|"+x.text,editable:false,seasonal:true,seasonalKey:x.key,source:"seasonal"});
@@ -918,21 +922,6 @@ function definition(title,room="",area=""){
 }
 const DEFINITIONS={};
 for(const x of allCatalog()) if(!DEFINITIONS[x.text]) DEFINITIONS[x.text]=definition(x.text,x.room,x.area);
-function allCatalog(){
- const out=[];
- for(const r of catalogSeed){
-  let tasks=r[2],area=r[1];
-  if(!Array.isArray(tasks)&&Array.isArray(area)){tasks=area;area=SEED_ROOMS[r[0]]?.[1]||"Ganzes Haus";}
-  if(!Array.isArray(tasks))continue;
-  for(const t of tasks)out.push({text:t,room:r[0],area:area||""});
- }
- for(const [t] of ROTATIONS)out.push({text:t,room:"Rotationsaufgabe",area:"Turnus"});
- for(const [,tasks] of DAILY)for(const t of tasks)out.push({text:t,room:"Ganzes Haus",area:"Alltag"});
- for(const c of state.custom)out.push({text:c.text,room:c.room,area:c.area,start:c.start||c.date||"",rec:c.rec||c.repeat||""});
- for(const w of windowCatalogEntries())out.push(w);
- for(const x of SEASONAL_SPECIALS)out.push({text:x.text,room:x.room,area:x.area,seasonal:true,seasonalKey:x.key});
- return out;
-}
 function openDetail(title,room="",area=""){
  const cat=allCatalog().find(x=>x.text===title&&x.room===room&&x.area===area);
  const d=DEFINITIONS[title]||definition(title,room,area);
