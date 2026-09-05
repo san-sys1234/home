@@ -1,171 +1,8 @@
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#9a8675">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Unser Zuhause">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
-<title>Unser Zuhause</title>
-<style>
-:root{
- --bg:#f7f5f1;--card:#fff;--ink:#2d2b29;--muted:#77716b;--line:#e8e0d8;
- --accent:#9a8675;--accent2:#efe9e3;--green:#eaf2eb;--greenInk:#3f6a4b;
- --yellow:#f6f0dc;--red:#f7e8e5;--shadow:0 8px 24px rgba(75,55,40,.06);
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
-button,input{font:inherit}
-button{cursor:pointer}
-.app{max-width:900px;margin:0 auto;padding:26px 18px 110px}
-.brand{font-size:16px;color:var(--muted);margin:2px 4px 2px}
-h1{font-size:36px;line-height:1.05;margin:0 0 8px;font-weight:800;letter-spacing:-1.3px}
-.subtitle{font-size:16px;color:var(--muted);margin-bottom:24px}
-.tabs{display:flex;gap:10px;margin-bottom:22px}
-.tab{border:1px solid var(--line);background:var(--card);padding:13px 20px;border-radius:22px;font-weight:700}
-.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
-.hero{padding:20px}
-.topline{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.badge{background:var(--accent2);padding:10px 15px;border-radius:22px;font-weight:700}
-.progress{height:10px;background:#ece7e2;border-radius:99px;overflow:hidden;margin:18px 0}
-.progress>i{display:block;height:100%;background:var(--accent);width:0;transition:.25s}
-.actions{display:flex;flex-wrap:wrap;gap:10px}
-.btn{border:1px solid var(--line);background:#fff;padding:12px 16px;border-radius:20px;font-weight:700}
-.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.btn.ghost{background:var(--accent2)}
-.notice{padding:16px;border-radius:22px;background:var(--green);color:var(--greenInk);line-height:1.45;margin-top:16px}
-.notice.yellow{background:var(--yellow);color:#6c5b2b}
-.notice.red{background:var(--red);color:#75443d}
-.sectionTitle{font-size:19px;font-weight:800;margin:24px 4px 12px}
-.task{display:block;position:relative;overflow:hidden;padding:0;min-height:64px;touch-action:pan-y;user-select:none;-webkit-user-select:none}border:1px solid var(--line);border-radius:20px;padding:13px 12px;margin:9px 0;background:#fff;touch-action:pan-y}
-.task.done{opacity:.56}.swipeBg{position:absolute;inset:0;display:flex;z-index:1;align-items:center;justify-content:space-between;padding:0 20px;border-radius:20px;font-weight:800;font-size:14px;color:#fff;opacity:0;transition:opacity .08s}.swipeBg.green{justify-content:flex-start}.swipeBg.red{justify-content:flex-end}.swipeLabel{display:block}.swipeBg.green{background:#6f9b78}.swipeBg.red{background:#c9786d}.taskContent{position:relative;z-index:2;display:flex;align-items:center;gap:12px;padding:13px 12px;background:#fff;border-radius:20px;min-height:64px;transition:transform .05s linear;will-change:transform}.swipeHint{font-size:10px;color:var(--muted);text-align:center;margin:-3px 0 10px}
-.check{width:27px;height:27px;border-radius:50%;border:2px solid #cfc5bc;display:grid;place-items:center;flex:0 0 27px;background:#fff}
-.task.done .check{background:var(--accent);border-color:var(--accent);color:#fff}
-.taskMain{min-width:0;flex:1}
-.taskName{font-weight:700;line-height:1.25;font-size:15px}
-.meta{font-size:11px;color:var(--muted);margin-top:3px}
-.taskButtons{display:flex;gap:6px;position:relative;z-index:2}
-.iconBtn.plannedToday{font-weight:800;opacity:.85}.iconBtn{border:0;background:var(--accent2);border-radius:14px;padding:8px 10px}
-.small{font-size:13px;color:var(--muted)}
-.empty{text-align:center;color:var(--muted);padding:30px 12px}
-.celebrate{background:var(--green);border:1px solid #d8e6da;color:var(--greenInk);font-size:19px;font-weight:800;padding:17px;border-radius:22px;margin-bottom:16px}
-.weekgrid{display:grid;gap:10px}
-.daycard{border:1px solid var(--line);border-radius:22px;padding:16px;background:#fff}
-.daycard.today{outline:2px solid var(--accent)}
-.daycard.free{background:var(--green)}
-.dayname{font-weight:800}.daytheme{color:var(--muted);margin-top:4px}
-.historygrid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
-.cal{aspect-ratio:1;border:1px solid var(--line);border-radius:14px;background:#fff;padding:6px;text-align:center;font-size:12px}
-.cal.done{background:var(--green);color:var(--greenInk);border-color:#d8e6da;font-weight:800}
-.cal.today{outline:2px solid var(--accent)}
-.cal small{display:block;margin-top:3px}
-.yearIntro{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
-.yearNav{display:flex;gap:8px;align-items:center}
-.yearNav button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:8px 12px;font-weight:700}
-.yearTitle{font-size:22px;font-weight:800}
-.monthGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.monthCard{border:1px solid var(--line);border-radius:22px;padding:13px;background:#fff}
-.monthName{font-weight:800;font-size:16px;margin:2px 2px 10px}
-.weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
-.weekdays span{font-size:9px;color:var(--muted);text-align:center;font-weight:700}
-.monthDays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.yearDay{position:relative;min-width:0;aspect-ratio:1;border:1px solid var(--line);border-radius:9px;background:#fff;padding:4px 2px;text-align:center;font-size:10px;cursor:pointer}
-.yearDay:hover{border-color:var(--accent)}
-.yearDay.free{background:var(--green)}
-.yearDay.today{outline:2px solid var(--accent);z-index:1}
-.yearDay.completed{background:var(--green);color:var(--greenInk);font-weight:800}
-.yearDay .dayNum{font-size:11px;font-weight:800}
-.yearDay .dayMark{display:block;font-size:9px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.yearDay .careMark{display:block;font-size:9px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.calendarLegend{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-.calendarLegend span{font-size:12px;color:var(--muted)}
-.yearDetail{margin-top:16px;background:var(--bg);border-radius:22px;padding:16px}
-.yearDetail h3{margin:0 0 5px;font-size:19px}
-.yearDetail .detailTasks{display:grid;gap:5px;margin-top:10px}
-.yearDetail .detailTask{padding:8px 10px;border-radius:12px;background:#fff;border:1px solid var(--line);font-size:12px}
-@media(max-width:760px){.monthGrid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:500px){.monthGrid{grid-template-columns:1fr 1fr;gap:8px}.monthCard{padding:9px;border-radius:17px}.monthName{font-size:14px}.monthDays{gap:3px}.yearDay{border-radius:7px;padding:3px 1px}.yearDay .dayMark,.yearDay .careMark{font-size:7px}.yearDay .dayNum{font-size:10px}.weekdays{gap:3px}.weekdays span{font-size:8px}}
 
-.search{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:18px;background:#fff;outline:none}
-.search:focus{border-color:var(--accent)}
-.result{padding:13px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
-.result:last-child{border-bottom:0}
-.resultText{flex:1}
-.detailOverlay{position:fixed;inset:0;background:rgba(25,20,16,.42);display:none;align-items:flex-end;justify-content:center;z-index:50}
-.detailOverlay.open{display:flex}
-.sheet{background:#fff;width:min(900px,100%);max-height:88vh;overflow:auto;border-radius:28px 28px 0 0;padding:22px 20px 30px}
-.sheetTop{display:flex;justify-content:space-between;gap:12px}
-.sheet h2{margin:0;font-size:25px}
-.detailBox{margin-top:15px;background:var(--bg);border-radius:20px;padding:16px}
-.detailBox b{display:block;margin-bottom:5px}
-.close{border:0;background:var(--accent2);border-radius:50%;width:42px;height:42px;font-size:22px}
-input[type=text]{min-width:0}
-.formrow{display:flex;gap:8px;margin-top:10px}
-.formrow input{flex:1;padding:13px;border:1px solid var(--line);border-radius:16px}
-
-.catalogEditorOverlay{position:fixed;inset:0;background:rgba(25,20,16,.42);display:flex;align-items:flex-end;justify-content:center;z-index:70}
-.catalogEditorSheet{background:#fff;width:min(720px,100%);max-height:92vh;overflow:auto;border-radius:28px 28px 0 0;padding:22px 20px 30px;box-shadow:0 -8px 30px rgba(0,0,0,.12)}
-.editorLabel{display:block;font-size:13px;font-weight:700;margin-top:14px;color:var(--muted)}
-.editorLabel input{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#fff;font:inherit;color:var(--text)}
-.editorTwo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.editorHint{margin-top:12px;padding:12px 14px;border-radius:15px;background:var(--bg)}
-.editorActions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-.deleteBtn{display:block;width:100%;margin-top:12px;padding:13px;border:1px solid #e5cfc9;border-radius:15px;background:#fff;color:#8b493f;font:inherit;font-weight:700}
-@media(max-width:520px){.editorTwo{grid-template-columns:1fr}}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);background:#2d2b29;color:#fff;padding:12px 17px;border-radius:20px;opacity:0;pointer-events:none;transition:.2s;z-index:80}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
-@media(max-width:600px){.app{padding:22px 14px 105px}h1{font-size:34px}.tab{padding:12px 15px}.taskButtons .iconBtn{padding:8px}.historygrid{gap:5px}.cal{border-radius:10px}}
-</style>
-
-<style>
-.specialPlanBox{margin-top:10px;padding:12px 14px;border-radius:16px;background:#fff;border:1px solid var(--line)}
-.specialPlanBox b{display:block;margin-bottom:3px}
-.specialBadge{display:inline-block;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--bg);font-size:10px}
-</style>
-
-<style>
-.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin:0 0 12px}
-.intelBox b{font-size:15px}
-.intelMeta{font-size:11px;color:var(--muted);margin-top:4px}
-</style>
-<style>
-.intelBox{padding:13px 15px;border-radius:18px;background:var(--bg);margin:0 0 12px}
-.intelBox b{font-size:15px}.intelMeta{font-size:11px;color:var(--muted);margin-top:4px}
-</style></head>
-<body>
-<div class="app">
-  <div class="brand">🌿 Unser Zuhause</div>
-  <h1>Haushaltsplan</h1>
-  <div class="subtitle">Ein Haus, das für euch arbeitet – nicht umgekehrt. ❤️</div>
-
-  <div class="tabs">
-    <button class="tab active" data-tab="today">Heute</button>
-    <button class="tab" data-tab="week">Woche</button>
-    <button class="tab" data-tab="history">📅 Kalender</button>
-  </div>
-
-  <main id="main"></main>
-  <footer>Flexibel statt perfekt. Ein ausgelassener Tag wird nicht automatisch nachgeholt. ❤️</footer>
-</div>
-
-<div class="detailOverlay" id="detailOverlay">
-  <div class="sheet">
-    <div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div>
-    <div id="detailContent"></div>
-  </div>
-</div>
-<div class="toast" id="toast"></div>
-
-<script>
 const STORAGE="unser-zuhause-v50";
 const ROOM_PLAN={
   1:["Wohnzimmer","Essbereich","Küche"],
-  3:["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG"],
+  3:["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"],
   4:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"]
 };
 const BATH_A=["Gäste-WC","Kinderbad"], BATH_B=["Bad","WC"];
@@ -175,8 +12,7 @@ const BASEMENT_TASKS={
  "Musikzimmer":["Instrumente materialgerecht entstauben","Noten ordnen","Regale abstauben","Boden saugen"],
  "Trainingsraum":["Trainingsgeräte abwischen","Matten reinigen","Ablageflächen ordnen","Boden saugen"],
  "Technikraum":["Sichtbaren Staub entfernen","Zugänge freihalten","Boden bei Bedarf reinigen"],
- "Lagerraum":["Kartons ordnen","Vorräte prüfen","Regale abstauben","Boden saugen"],
- "Flur KG":["Sichtbare Flächen abstauben","Handlauf/Geländer abwischen","Sockelleisten reinigen","Spinnweben entfernen","Ecken absaugen","Boden saugen","Boden wischen"]
+ "Lagerraum":["Kartons ordnen","Vorräte prüfen","Regale abstauben","Boden saugen"]
 };
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
@@ -217,13 +53,11 @@ const catalogSeed=[
 ['Ankleidezimmer','OG',['Kleidung nach Saison ordnen','Kleiderbügel vereinheitlichen','Schubladen ordnen','Schubladen auswischen','Regalböden reinigen','Spiegel reinigen','Schrankfronten abwischen','Schrankgriffe reinigen','Boden unter Schränken reinigen','Boden saugen','Boden wischen']],
 ['Kinderzimmer 1','OG',['Spielzeug grob sortieren','Bücher ordnen','Kleidung ordnen','Schubladen ordnen','Schrankfronten abwischen','Regale abstauben','Fensterbank reinigen','Türklinke reinigen','Boden unter Möbeln saugen','Boden saugen','Boden wischen']],
 ['Kinderzimmer 2','OG',['Spielzeug grob sortieren','Bücher ordnen','Kleidung ordnen','Schubladen ordnen','Schrankfronten abwischen','Regale abstauben','Fensterbank reinigen','Türklinke reinigen','Boden unter Möbeln saugen','Boden saugen','Boden wischen']],
-['Flur OG','OG',['Bilderrahmen abstauben','Handlauf/Geländer abwischen','Türklinken reinigen','Lichtschalter außen reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Ecken absaugen','Boden saugen','Boden wischen']],
 ['Waschküche','Keller',['Waschmaschine außen reinigen','Waschmittelschublade reinigen','Türdichtung reinigen','Waschmaschinenpflegeprogramm nach Hersteller','Trockner außen reinigen','Flusensieb nach Herstellerangabe reinigen','Arbeitsflächen reinigen','Wäschekörbe auswischen','Vorräte an Waschmittel prüfen','Sockelleisten reinigen','Boden saugen','Boden wischen','Bereich hinter/zwischen Geräten nur wenn sicher zugänglich']],
 ['Musikzimmer','Keller',['Instrumente materialgerecht entstauben','Noten ordnen','Regale abstauben','Oberflächen reinigen','Kabel grob ordnen','Fensterbank reinigen','Sockelleisten reinigen','Boden saugen','Boden wischen']],
 ['Trainingsraum','Keller',['Trainingsgeräte abwischen','Matten reinigen','Gewichte/Griffe abwischen','Handtücher einsammeln','Ablageflächen ordnen','Spiegel reinigen','Boden saugen','Boden wischen']],
 ['Technikraum','Keller',['Sichtbaren Staub entfernen','Zugänge freihalten','Boden bei Bedarf reinigen','Keine technischen Komponenten öffnen']],
 ['Lagerraum','Keller',['Kartons ordnen','Vorräte prüfen','Regale abstauben','Boden saugen','Boden wischen']],
-['Flur KG','Keller',['Sichtbare Flächen abstauben','Handlauf/Geländer abwischen','Türklinken reinigen','Lichtschalter außen reinigen','Türrahmen reinigen','Sockelleisten reinigen','Spinnweben entfernen','Ecken absaugen','Boden saugen','Boden wischen']],
 ['Keller allgemein','Keller',['Spinnweben entfernen','Sichtbare Ablagerungen entfernen','Boden saugen','Boden wischen','Ecken kontrollieren']],
 ['Saunaraum','OG',['Nach Nutzung lüften','Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
 ['Treppenhaus','Ganzes Haus',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
@@ -238,8 +72,8 @@ const SEED_ROOMS = {
  "Eingangsbereich":["Eingangsbereich","EG"],"Flur":["Flur","EG"],"Büro":["Büro","EG"],"Abstellraum":["Abstellraum","EG"],
  "Speis":["Speis","EG"],"Gäste-WC":["Gäste-WC","EG"],"Kinderbad":["Kinderbad","OG"],"Bad":["Bad","OG"],"WC":["WC","OG"],
  "Schlafzimmer":["Schlafzimmer","OG"],"Ankleidezimmer":["Ankleidezimmer","OG"],"Kinderzimmer 1":["Kinderzimmer 1","OG"],
- "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Flur OG":["Flur OG","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
- "Trainingsraum":["Trainingsraum","Keller"],"Flur KG":["Flur KG","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],
+ "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
+ "Trainingsraum":["Trainingsraum","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],
  "Keller allgemein":["Keller allgemein","Keller"],"Saunaraum":["Saunaraum","OG"],"Treppenhaus":["Treppenhaus","Ganzes Haus"],
  "Fenster / Ganzes Haus":["Fenster / Ganzes Haus","Ganzes Haus"],"Türen / Ganzes Haus":["Türen / Ganzes Haus","Ganzes Haus"],
  "Kamin / Wohnzimmer":["Kamin / Wohnzimmer","EG"],"Ganzes Haus – Textilien":["Ganzes Haus – Textilien","Ganzes Haus"],
@@ -253,7 +87,7 @@ let today=new Date(); today.setHours(12,0,0,0);
 function loadState(){
  try{
   const s=JSON.parse(localStorage.getItem(STORAGE)||"null");
-  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
+  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
  }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
 }
 
@@ -297,9 +131,7 @@ function themeFor(d){
  return "Wäsche + maximal eine Sonderaufgabe";
 }
 function roomTasks(room){
- const row=catalogSeed.find(r=>r[0]===room);
- if(!row)return [];
- return Array.isArray(row[2])?row[2]:Array.isArray(row[1])?row[1]:[];
+ return allCatalog().filter(x=>x.room===room && x.area!=="Alltag" && !x.window && !x.seasonal && x.room!=="Rotationsaufgabe").map(x=>x.text);
 }
 function calendarTasksForDate(d){
  const k=dayKey(d), out=[];
@@ -897,12 +729,7 @@ function renderPostponed(main){
  }
  main.appendChild(card);card.querySelector("#togglePost").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()};
 }
-function addCustom(){
- const name=prompt("Wie soll die Aufgabe heißen?");
- if(!name?.trim())return;
- const id="custom|"+uid();state.custom.push({id,text:name.trim(),room:"Eigene Aufgabe",area:"Eigene Aufgabe"});
- state.done[id]=false;save();render();toast("Aufgabe hinzugefügt");
-}
+function addCustom(){ openCatalogEditor(null); }
 function renderWeek(){
  const main=document.getElementById("main");
  main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Die Themen sind Anker, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="weekgrid"></div></div>`;
@@ -1004,7 +831,7 @@ function renderHistory(){
  showDay(new Date(year,today.getFullYear()===year?today.getMonth():0,today.getFullYear()===year?today.getDate():1,12));
 }
 
-const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Flur OG': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Türrahmen reinigen', 'Spinnweben entfernen', 'Bilderrahmen entstauben', 'Ecken absaugen'], 'Flur KG': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Türrahmen reinigen', 'Spinnweben entfernen', 'Ecken absaugen', 'Handlauf/Geländer abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen']};
+const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen']};
 function catalogWithExtras(){
  const rows=Array.isArray(catalogSeed)?catalogSeed.map(r=>r.slice()):[];
  const existing=new Set(rows.map(r=>r[0]));
@@ -1013,27 +840,36 @@ function catalogWithExtras(){
  }
  return rows;
 }
+function catalogKeyFor(text,room,area){ return "seed|"+[room,text].join("|"); }
+function catalogDeleted(key){ return !!(state.catalogDeleted&&state.catalogDeleted[key]); }
 function allCatalog(){
  const out=[],seen=new Set();
- function add(text,room,area){
-   const key=[text,room,area].join("|");
-   if(!text || seen.has(key))return;
-   seen.add(key); out.push({text,room,area});
+ state.catalogEdits=state.catalogEdits||{}; state.catalogDeleted=state.catalogDeleted||{};
+ function add(text,room,area,meta={}){
+   const key=meta.key||catalogKeyFor(text,room,area);
+   if(!text || seen.has(key) || catalogDeleted(key))return;
+   const edit=state.catalogEdits[key]||{};
+   const item={text:edit.text||text,room:edit.room||room,area:edit.area||area||"",key,editable:meta.editable!==false,
+     start:edit.start||meta.start||"",interval:Number(edit.interval||meta.interval||0)||0,
+     window:!!meta.window,windowKey:meta.windowKey,windowSeasonalKey:meta.windowSeasonalKey,
+     seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey,source:meta.source||"seed"};
+   seen.add(key); out.push(item);
  }
  for(const r of catalogWithExtras()){
-   const room=r[0];
-   let area=r[1], tasks=r[2];
-   // Some whole-house groups use [room, tasks] instead of [room, area, tasks].
-   if(!Array.isArray(tasks) && Array.isArray(area)){
-     tasks=area;
-     area=SEED_ROOMS[room]?.[1] || "Ganzes Haus";
-   }
+   const room=r[0]; let area=r[1],tasks=r[2];
+   if(!Array.isArray(tasks) && Array.isArray(area)){tasks=area;area=SEED_ROOMS[room]?.[1]||"Ganzes Haus";}
    if(!Array.isArray(tasks))continue;
-   for(const t of tasks)add(t,room,area||"");
+   for(const t of tasks)add(t,room,area||"",{key:"seed|"+room+"|"+t,editable:true,source:"seed"});
  }
- for(const [t] of ROTATIONS)add(t,"Rotationsaufgabe","Turnus");
- for(const [,tasks] of DAILY)for(const t of tasks)add(t,"Ganzes Haus","Alltag");
- for(const c of state.custom)add(c.text,c.room,c.area);
+ for(const [t] of ROTATIONS)add(t,"Rotationsaufgabe","Turnus",{key:"rotation|"+t,editable:false,source:"rotation"});
+ for(const [,tasks] of DAILY)for(const t of tasks)add(t,"Ganzes Haus","Alltag",{key:"daily|"+t,editable:false,source:"daily"});
+ for(const c of state.custom){
+   const key=c.key||("custom|"+c.id);
+   if(catalogDeleted(key))continue;
+   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,source:"custom"});
+ }
+ for(const w of windowCatalogEntries())add(w.text,w.room,w.area,{key:"window|"+w.windowKey,editable:false,window:true,windowKey:w.windowKey,windowSeasonalKey:w.windowSeasonalKey,source:"window"});
+ for(const x of SEASONAL_SPECIALS)add(x.text,x.room,x.area,{key:"seasonal|"+x.key+"|"+x.text,editable:false,seasonal:true,seasonalKey:x.key,source:"seasonal"});
  return out;
 }
 function definition(title,room="",area=""){
@@ -1160,6 +996,14 @@ function catalogNextDate(x, referenceDate=today){
    for(const ds of dates){const d=new Date(ds+"T12:00:00");if(d>=ref)return d;}
    return dates.length?new Date(dates[0]+"T12:00:00"):ref;
  }
+ if(x.interval>0){
+   const last=state.lastDone?.[x.room+"|"+x.text]||state.lastDone?.[x.canonical]||"";
+   let d=last?new Date(last+"T12:00:00"):new Date((x.start||"")+"T12:00:00");
+   if(isNaN(d)){d=new Date(ref);}
+   if(last)d.setDate(d.getDate()+x.interval);
+   else while(d<ref)d.setDate(d.getDate()+x.interval);
+   return d;
+ }
  const rot=ROTATIONS.find(r=>r[0]===x.text);
  if(rot){
    const last=state.lastDone?.["care|"+x.room+"|"+x.text]||state.lastDone?.["care|Rotationsaufgabe|"+x.text]||state.lastDone?.[x.text]||"";
@@ -1174,7 +1018,7 @@ function catalogNextDate(x, referenceDate=today){
    if(last){start=new Date(last+"T12:00:00");start.setDate(start.getDate()+1);}
    return nextBasementOccurrence(x.room,start);
  }
- const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,"Flur OG":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
  const last=state.lastDone?.[x.room+"|"+x.text]||"";
  if(last){let d=new Date(last+"T12:00:00");d.setDate(d.getDate()+catalogInterval(x));while(d<ref)d.setDate(d.getDate()+catalogInterval(x));return d;}
  if(dowByRoom[x.room]!==undefined){
@@ -1196,26 +1040,82 @@ function formatCatalogNextDate(d){
  return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"});
 }
 
+function catalogCanEdit(x){ return !!x && x.editable!==false && x.area!=="Alltag" && x.source!=="rotation" && x.source!=="daily" && !x.window && !x.seasonal; }
+function closeCatalogEditor(){ const el=document.getElementById("catalogEditorOverlay"); if(el)el.remove(); }
+function openCatalogEditor(x=null){
+ const isEdit=!!x, old=x||{};
+ const overlay=document.createElement("div"); overlay.id="catalogEditorOverlay"; overlay.className="catalogEditorOverlay";
+ const rooms=Array.from(new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])).sort();
+ const firstDue=old.start || (isEdit ? iso(catalogNextDate(old)) : dayKey(today));
+ overlay.innerHTML=`<div class="catalogEditorSheet">
+   <div class="sheetTop"><div><div class="small">${isEdit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${isEdit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="catalogEditorClose">×</button></div>
+   <label class="editorLabel">Aufgabe<input id="ceText" value="${esc(old.text||"")}" placeholder="z. B. Schubladen auswischen"></label>
+   <label class="editorLabel">Raum<input id="ceRoom" list="catalogRoomList" value="${esc(old.room||"")}" placeholder="z. B. Lagerraum"><datalist id="catalogRoomList">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label>
+   <label class="editorLabel">Bereich / Etage<input id="ceArea" value="${esc(old.area||"")}" placeholder="z. B. Keller"></label>
+   <div class="editorTwo"><label class="editorLabel">Erster / nächster Termin<input id="ceStart" type="date" value="${esc(firstDue)}"></label>
+   <label class="editorLabel">Wiederholung (Tage)<input id="ceInterval" type="number" min="1" step="1" value="${old.interval||catalogInterval(old)||60}"></label></div>
+   <div class="small editorHint">Das Datum ist der erste Fälligkeitstermin. Nach jeder Erledigung wird der nächste Termin automatisch um die eingestellte Anzahl Tage weitergesetzt.</div>
+   <div class="editorActions"><button class="btn" id="ceCancel">Abbrechen</button><button class="btn primary" id="ceSave">${isEdit?"Änderungen speichern":"Aufgabe speichern"}</button></div>
+   ${isEdit?`<button class="deleteBtn" id="ceDelete">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}
+ </div>`;
+ document.body.appendChild(overlay);
+ const close=()=>closeCatalogEditor();
+ overlay.querySelector("#catalogEditorClose").onclick=close; overlay.querySelector("#ceCancel").onclick=close;
+ overlay.onclick=e=>{if(e.target===overlay)close();};
+ overlay.querySelector("#ceSave").onclick=()=>{
+   const text=overlay.querySelector("#ceText").value.trim(), room=overlay.querySelector("#ceRoom").value.trim(), area=overlay.querySelector("#ceArea").value.trim();
+   const start=overlay.querySelector("#ceStart").value, interval=Math.max(1,Number(overlay.querySelector("#ceInterval").value)||60);
+   if(!text||!room||!area||!start){toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");return;}
+   state.catalogEdits=state.catalogEdits||{};
+   if(isEdit){
+     state.catalogEdits[old.key]={text,room,area,start,interval};
+     // If a custom task was edited, keep its own record in sync.
+     if(old.source==="custom"){
+       const c=state.custom.find(c=>(c.key||("custom|"+c.id))===old.key);
+       if(c){c.text=text;c.room=room;c.area=area;c.start=start;c.interval=interval;}
+     }
+     toast("Aufgabe geändert ❤️");
+   }else{
+     const id="custom|"+uid(),key=id;
+     state.custom.push({id,key,text,room,area,start,interval});
+     state.done[id]=false;
+     toast("Neue Aufgabe hinzugefügt ❤️");
+   }
+   save();close();render();
+ };
+ if(isEdit)overlay.querySelector("#ceDelete").onclick=()=>{
+   if(!confirm(`„${old.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;
+   state.catalogDeleted=state.catalogDeleted||{}; state.catalogDeleted[old.key]=true;
+   if(old.source==="custom")state.custom=state.custom.filter(c=>(c.key||("custom|"+c.id))!==old.key);
+   save();close();render();toast("Aufgabe gelöscht");
+ };
+}
 function renderCatalog(){
  const main=document.getElementById("main");
- main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Jede einzelne Aufgabe hat eigene Details.</div></div><button class="btn" id="backToday">Heute</button></div>
+ main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Aufgaben suchen, hinzufügen, ändern oder löschen.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="newCatalogTask">＋ Neue Aufgabe</button><button class="btn" id="backToday">Heute</button></div></div>
  <div style="margin-top:15px"><input class="search" id="search" placeholder="Aufgabe, Raum, Bereich suchen …" autocomplete="off"></div>
  <div id="results" style="margin-top:12px"></div></div>`;
  const input=main.querySelector("#search"),results=main.querySelector("#results");
+ main.querySelector("#newCatalogTask").onclick=()=>openCatalogEditor(null);
  function draw(){
   const q=input.value.trim().toLowerCase();
   const arr=allCatalog().filter(x=>!q || [x.text,x.room,x.area].join(" ").toLowerCase().includes(q));
   results.innerHTML=`<div class="small" style="padding:5px">${arr.length} Treffer</div>`;
-  arr.slice(0,80).forEach(x=>{
-   const planned=catalogPlannedToday(x);
+  arr.slice(0,100).forEach(x=>{
+   const planned=catalogPlannedToday(x), editable=catalogCanEdit(x);
    const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
-   row.children[1].onclick=()=>openDetail(x.text,x.room,x.area);
-   row.children[2].onclick=()=>addCatalogToToday(x);
-   if(planned){
-     row.children[2].classList.add("plannedToday");
-     row.children[2].title=isDone(planned)?"Heute bereits erledigt":"Heute bereits im Tagesplan";
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div>
+     ${editable?`<button class="iconBtn" title="Aufgabe bearbeiten">✏️</button>`:""}
+     ${editable?`<button class="iconBtn" title="Aufgabe löschen">🗑️</button>`:""}
+     <button class="iconBtn" title="Details">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
+   const offset=editable?2:0;
+   if(editable){
+     row.children[1].onclick=()=>openCatalogEditor(x);
+     row.children[2].onclick=()=>{if(confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`)){state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;if(x.source==="custom")state.custom=state.custom.filter(c=>(c.key||("custom|"+c.id))!==x.key);save();render();toast("Aufgabe gelöscht");}};
    }
+   row.children[1+offset].onclick=()=>openDetail(x.text,x.room,x.area);
+   row.children[2+offset].onclick=()=>addCatalogToToday(x);
+   if(planned){row.children[2+offset].classList.add("plannedToday");row.children[2+offset].title=isDone(planned)?"Heute bereits erledigt":"Heute bereits im Tagesplan";}
    results.appendChild(row);
   });
   if(!arr.length)results.innerHTML+=`<div class="empty">Nichts gefunden. ❤️</div>`;
@@ -1257,6 +1157,3 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.datase
 document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");
 document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
-</script>
-</body>
-</html>
