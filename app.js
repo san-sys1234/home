@@ -616,7 +616,7 @@ function renderToday(){
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
  <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp;&nbsp; | &nbsp;&nbsp; Erledigt · GRÜN 👉</div>
- <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
+ <div class="actions" style="margin-top:15px"><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
  main.innerHTML=html;
@@ -667,7 +667,6 @@ function renderToday(){
    main.appendChild(sec);
  }
  renderPostponed(main);
- document.getElementById("addBtn").onclick=addCustom;
  document.getElementById("energyBtn").onclick=showEnergyChoices;
  if(state.energyOpen) showEnergyChoices(false);
  document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;save();render()};
@@ -849,7 +848,7 @@ function allCatalog(){
    const key=meta.key||catalogKeyFor(text,room,area);
    if(!text || seen.has(key) || catalogDeleted(key))return;
    const edit=state.catalogEdits[key]||{};
-   const item={text:edit.text||text,room:edit.room||room,area:edit.area||area||"",key,editable:meta.editable!==false,
+   const item={text:edit.text||text,room:edit.room||room,area:edit.area||area||"",place:edit.place||meta.place||"",description:edit.description||meta.description||"",key,editable:meta.editable!==false,
      start:edit.start||meta.start||"",interval:Number(edit.interval||meta.interval||0)||0,
      window:!!meta.window,windowKey:meta.windowKey,windowSeasonalKey:meta.windowSeasonalKey,
      seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey,source:meta.source||"seed"};
@@ -866,7 +865,7 @@ function allCatalog(){
  for(const c of state.custom){
    const key=c.key||("custom|"+c.id);
    if(catalogDeleted(key))continue;
-   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,source:"custom"});
+   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,place:c.place||"",description:c.description||"",source:"custom"});
  }
  for(const w of windowCatalogEntries())add(w.text,w.room,w.area,{key:"window|"+w.windowKey,editable:false,window:true,windowKey:w.windowKey,windowSeasonalKey:w.windowSeasonalKey,source:"window"});
  for(const x of SEASONAL_SPECIALS)add(x.text,x.room,x.area,{key:"seasonal|"+x.key+"|"+x.text,editable:false,seasonal:true,seasonalKey:x.key,source:"seasonal"});
@@ -935,7 +934,10 @@ function allCatalog(){
  return out;
 }
 function openDetail(title,room="",area=""){
+ const cat=allCatalog().find(x=>x.text===title&&x.room===room&&x.area===area);
  const d=DEFINITIONS[title]||definition(title,room,area);
+ if(cat?.description) d.what=cat.description;
+ if(cat?.place) d.belongs=["Genauer Ort: "+cat.place,...d.belongs];
  document.getElementById("detailMeta").textContent=[room,area].filter(Boolean).join(" · ");
  document.getElementById("detailTitle").textContent=title;
  document.getElementById("detailContent").innerHTML=
@@ -1052,9 +1054,11 @@ function openCatalogEditor(x=null){
    <label class="editorLabel">Aufgabe<input id="ceText" value="${esc(old.text||"")}" placeholder="z. B. Schubladen auswischen"></label>
    <label class="editorLabel">Raum<input id="ceRoom" list="catalogRoomList" value="${esc(old.room||"")}" placeholder="z. B. Lagerraum"><datalist id="catalogRoomList">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label>
    <label class="editorLabel">Bereich / Etage<input id="ceArea" value="${esc(old.area||"")}" placeholder="z. B. Keller"></label>
+   <label class="editorLabel">Genauer Ort (optional)<input id="cePlace" value="${esc(old.place||"")}" placeholder="z. B. Fenster links neben der Tür"></label>
+   <label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="ceDescription" rows="4" placeholder="Was genau soll gemacht werden? Was gehört dazu, was nicht?">${esc(old.description||"")}</textarea></label>
    <div class="editorTwo"><label class="editorLabel">Erster / nächster Termin<input id="ceStart" type="date" value="${esc(firstDue)}"></label>
-   <label class="editorLabel">Wiederholung (Tage)<input id="ceInterval" type="number" min="1" step="1" value="${old.interval||catalogInterval(old)||60}"></label></div>
-   <div class="small editorHint">Das Datum ist der erste Fälligkeitstermin. Nach jeder Erledigung wird der nächste Termin automatisch um die eingestellte Anzahl Tage weitergesetzt.</div>
+   <label class="editorLabel">Periode (Tage)<input id="ceInterval" type="number" min="1" step="1" value="${old.interval||catalogInterval(old)||60}"></label></div>
+   <div class="small editorHint">Datum = erster Fälligkeitstermin. Nach jeder Erledigung wird der nächste Termin automatisch um die eingestellte Periode weitergesetzt.</div>
    <div class="editorActions"><button class="btn" id="ceCancel">Abbrechen</button><button class="btn primary" id="ceSave">${isEdit?"Änderungen speichern":"Aufgabe speichern"}</button></div>
    ${isEdit?`<button class="deleteBtn" id="ceDelete">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}
  </div>`;
@@ -1063,21 +1067,21 @@ function openCatalogEditor(x=null){
  overlay.querySelector("#catalogEditorClose").onclick=close; overlay.querySelector("#ceCancel").onclick=close;
  overlay.onclick=e=>{if(e.target===overlay)close();};
  overlay.querySelector("#ceSave").onclick=()=>{
-   const text=overlay.querySelector("#ceText").value.trim(), room=overlay.querySelector("#ceRoom").value.trim(), area=overlay.querySelector("#ceArea").value.trim();
+   const text=overlay.querySelector("#ceText").value.trim(), room=overlay.querySelector("#ceRoom").value.trim(), area=overlay.querySelector("#ceArea").value.trim(), place=overlay.querySelector("#cePlace").value.trim(), description=overlay.querySelector("#ceDescription").value.trim();
    const start=overlay.querySelector("#ceStart").value, interval=Math.max(1,Number(overlay.querySelector("#ceInterval").value)||60);
    if(!text||!room||!area||!start){toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");return;}
    state.catalogEdits=state.catalogEdits||{};
    if(isEdit){
-     state.catalogEdits[old.key]={text,room,area,start,interval};
+     state.catalogEdits[old.key]={text,room,area,place,description,start,interval};
      // If a custom task was edited, keep its own record in sync.
      if(old.source==="custom"){
        const c=state.custom.find(c=>(c.key||("custom|"+c.id))===old.key);
-       if(c){c.text=text;c.room=room;c.area=area;c.start=start;c.interval=interval;}
+       if(c){c.text=text;c.room=room;c.area=area;c.place=place;c.description=description;c.start=start;c.interval=interval;}
      }
      toast("Aufgabe geändert ❤️");
    }else{
      const id="custom|"+uid(),key=id;
-     state.custom.push({id,key,text,room,area,start,interval});
+     state.custom.push({id,key,text,room,area,place,description,start,interval});
      state.done[id]=false;
      toast("Neue Aufgabe hinzugefügt ❤️");
    }
@@ -1104,7 +1108,7 @@ function renderCatalog(){
   arr.slice(0,100).forEach(x=>{
    const planned=catalogPlannedToday(x), editable=catalogCanEdit(x);
    const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div>
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div>${x.description?`<div class="meta">${esc(x.description.slice(0,140))}${x.description.length>140?"…":""}</div>`:""}<div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div>
      ${editable?`<button class="iconBtn" title="Aufgabe bearbeiten">✏️</button>`:""}
      ${editable?`<button class="iconBtn" title="Aufgabe löschen">🗑️</button>`:""}
      <button class="iconBtn" title="Details">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;

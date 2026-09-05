@@ -110,7 +110,7 @@ input[type=text]{min-width:0}
 .catalogEditorOverlay{position:fixed;inset:0;background:rgba(25,20,16,.42);display:flex;align-items:flex-end;justify-content:center;z-index:70}
 .catalogEditorSheet{background:#fff;width:min(720px,100%);max-height:92vh;overflow:auto;border-radius:28px 28px 0 0;padding:22px 20px 30px;box-shadow:0 -8px 30px rgba(0,0,0,.12)}
 .editorLabel{display:block;font-size:13px;font-weight:700;margin-top:14px;color:var(--muted)}
-.editorLabel input{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#fff;font:inherit;color:var(--text)}
+.editorLabel input,.editorLabel textarea{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#fff;font:inherit;color:var(--text);box-sizing:border-box}.editorLabel textarea{resize:vertical;min-height:100px;line-height:1.45}
 .editorTwo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .editorHint{margin-top:12px;padding:12px 14px;border-radius:15px;background:var(--bg)}
 .editorActions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
