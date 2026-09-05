@@ -1,20 +1,6 @@
-
-
-const STORAGE="unser-zuhause-v50";
-const ROOM_PLAN={
-  1:["Wohnzimmer","Essbereich","Küche"],
-  3:["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"],
-  4:["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"]
-};
-const BATH_A=["Gäste-WC","Kinderbad"], BATH_B=["Bad","WC"];
-const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
-const BASEMENT_TASKS={
- "Waschküche":["Waschmaschine außen reinigen","Arbeitsflächen reinigen","Wäschekörbe auswischen","Boden saugen"],
- "Musikzimmer":["Instrumente materialgerecht entstauben","Noten ordnen","Regale abstauben","Boden saugen"],
- "Trainingsraum":["Trainingsgeräte abwischen","Matten reinigen","Ablageflächen ordnen","Boden saugen"],
- "Technikraum":["Sichtbaren Staub entfernen","Zugänge freihalten","Boden bei Bedarf reinigen"],
- "Lagerraum":["Kartons ordnen","Vorräte prüfen","Regale abstauben","Boden saugen"]
-};
+/* Unser Zuhause – kompletter Neustart V100 */
+const STORAGE="unser-zuhause-v100";
+const LEGACY_STORAGE="unser-zuhause-v50";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
  ["🍽️ Nach Mahlzeiten",["Geschirr in den Geschirrspüler","Tisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf abwischen"]],
@@ -35,7 +21,6 @@ const ROTATIONS=[
  ["🔥 Bereich direkt vor Kamin gründlich absaugen",14],["🔥 Ruß-/Aschespuren entfernen",30],["🔥 Kaminverkleidung materialgerecht reinigen",90],
  ["🔥 Kaminglas reinigen, falls vorhanden",30],["🔥 Fachgerechte Kamin-/Schornsteinkontrolle und Wartung nach Vorgabe",365]
 ];
-
 const catalogSeed=[
 ['Wohnzimmer','EG',['Polster absaugen','Sofaritze absaugen','Sofakissen ausschütteln','Decken ordentlich zusammenlegen','Fernbedienungen sammeln','Dekoration abstauben','Bilderrahmen abstauben','Fensterbank abwischen','Möbelfüße sichtbar reinigen','Teppich gründlich absaugen','Teppichränder kontrollieren','Vorhänge auf Staub prüfen','Kaminbereich reinigen']],
 ['Essbereich','EG',['Esstischoberseite reinigen','Tischkanten abwischen','Tischbeine abwischen','Stuhlsitze reinigen','Stuhllehnen abwischen','Krümel aus Tischritzen entfernen','Sideboard abstauben','Sideboardfronten abwischen','Dekoration abstauben','Boden unter dem Tisch gründlich reinigen']],
@@ -80,178 +65,11 @@ const SEED_ROOMS = {
  "Kamin / Wohnzimmer":["Kamin / Wohnzimmer","EG"],"Ganzes Haus – Textilien":["Ganzes Haus – Textilien","Ganzes Haus"],
  "Ganzes Haus – Allgemein":["Ganzes Haus – Allgemein","Ganzes Haus"]
 };
-
-let state=loadState();
-let selectedTab="today";
-let today=new Date(); today.setHours(12,0,0,0);
-
-function loadState(){
- try{
-  const s=JSON.parse(localStorage.getItem(STORAGE)||"null");
-  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
- }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
-}
-
-function purgeExpiredPostponements(){
- const todayKey=dayKey();
- const p=state.postponed||{};
- let changed=false;
- for(const [id,x] of Object.entries(p)){
-   if(x.from && x.from<todayKey){ delete p[id]; changed=true; }
- }
- if(changed)save();
-}
-
-function save(){localStorage.setItem(STORAGE,JSON.stringify(state));invalidateCalendarCache()}
-function pad(n){return String(n).padStart(2,"0")}
-function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
-function dayKey(d=today){return iso(d)}
-function dateLabel(d=today){return new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).format(d)}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function toast(t){const x=document.getElementById("toast");x.textContent=t;x.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>x.classList.remove("show"),1800)}
-function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
-
-function weekNumber(d){
- const x=new Date(d); x.setHours(12,0,0,0); x.setDate(x.getDate()+4-(x.getDay()||7));
- const y=new Date(x.getFullYear(),0,1); return Math.ceil((((x-y)/86400000)+1)/7);
-}
-function weekA(d=today){return weekNumber(d)%2===0}
-function basementRoom(d=today){
- const base=new Date(2026,8,4,12); const x=new Date(d); x.setHours(12,0,0,0);
- const diff=Math.round((x-base)/86400000);
- return BASEMENT[((Math.floor(diff/7)%BASEMENT.length)+BASEMENT.length)%BASEMENT.length];
-}
-function themeFor(d){
- const dow=d.getDay();
- if(dow===0)return "Haushaltsfrei ❤️";
- if(dow===1)return "EG · Wohnen, Essen & Küche";
- if(dow===2)return weekA(d)?"Gäste-WC + Kinderbad":"Bad + WC";
- if(dow===3)return "OG · Schlaf- & Kinderbereiche";
- if(dow===4)return weekA(d)?"Eingang + Garderobe + Flur":"Büro + Abstellraum + Speis";
- if(dow===5)return "Keller · nur ein Raum · "+basementRoom(d);
- return "Wäsche + maximal eine Sonderaufgabe";
-}
-function roomTasks(room){
- return allCatalog().filter(x=>x.room===room && x.area!=="Alltag" && !x.window && !x.seasonal && x.room!=="Rotationsaufgabe").map(x=>x.text);
-}
-let calendarCache={key:"",days:{}};
-function invalidateCalendarCache(){calendarCache={key:"",days:{}};}
-function calendarTasksForDate(d){
- const k=dayKey(d), key=String(d.getFullYear());
- if(calendarCache.key!==key)calendarCache={key,days:{}};
- if(Object.prototype.hasOwnProperty.call(calendarCache.days,k))return calendarCache.days[k];
- const out=[], catalog=allCatalog();
- for(const x of catalog){
-   if(x.area==="Alltag") continue;
-   if(taskIsDueOnDate(x,d,catalog)) out.push({text:x.text,room:x.room,area:x.area});
- }
- calendarCache.days[k]=out;
- return out;
-}
-function planForDate(d=today){
- const tasks=calendarTasksForDate(d), by={};
- for(const x of tasks){
-   const room=x.room||"Ganzes Haus";
-   if(!by[room])by[room]=[];
-   by[room].push(x.text);
- }
- return Object.entries(by).map(([room,tasks])=>[room,tasks]);
-}
-
-// Der gesamte Katalog ist jetzt auch Teil der Jahresrotation.
-// Häufige Wochenaufgaben bleiben im Wochenanker; alles darüber hinaus bekommt
-// einen eigenen, kleinen Turnus. So muss die Nutzerin nicht selbst mitdenken.
-const WEEKLY_CORE=new Set([
- "Polster absaugen","Sofaritze absaugen","Sofakissen ausschütteln","Teppich gründlich absaugen",
- "Esstischoberseite reinigen","Stuhlsitze reinigen","Krümel aus Tischritzen entfernen",
- "Arbeitsplatten gründlich reinigen","Herd gründlich reinigen","Spüle entkalken",
- "Schuhe paarweise ordnen","Ablageflächen leeren","Schreibtischfläche reinigen","Papierkorb leeren",
- "Waschmaschine außen reinigen","Arbeitsflächen reinigen","Boden saugen","Boden wischen",
- "Instrumente materialgerecht entstauben","Trainingsgeräte abwischen","Handtücher einsammeln",
- "Nach Nutzung lüften","Bänke reinigen","Fensterbank reinigen"
-]);
-function careInterval(text){
- const t=text.toLowerCase();
- if(/fachgerechte|wartung|kontrolle.*schornstein/.test(t))return 365;
- if(/fenster.*außen|fenster.*innen|fensterrahmen|falze|raffstore|vorhangstange|vorhang.*pflege/.test(t))return 180;
- if(/matratze|teppich|polster|decke|vorhang/.test(t))return 180;
- if(/stuck|lampe|leuchte|dunstabzugfilter|gefrierfach|vorratsschrank|schuhschrank innen|schubladen innen|regalböden|regalböden|unter.*bett/.test(t))return 120;
- if(/backofen|dunstabzug außen|fronten gründlich|türblätter|türblatt|türkanten|kabel|papierstapel|kleidung aussortieren|jacken nach saison|schuhe.*sohlen|keller.*zone|kartons ordnen/.test(t))return 90;
- if(/fugen|silikon|duschglas|duschrinne|armatur entkalken|mülleimer|wc-bürstenhalter|spiegel gründlich|schrankfronten|sideboardfronten|tischbeine|stuhllehnen|garderobenhaken/.test(t))return 60;
- if(/türrahmen|zargen|lichtschalter|steckdosen|sockelleisten|spinnweben|deko|bilderrahmen|fensterbank|kühlschrank|geschirrspüler|waschmittelschublade|türdichtung|sauna|kamin|holzablage/.test(t))return 30;
- if(/ordnen|sortieren|prüfen|regale abstauben|oberflächen reinigen|schrankgriffe|notizen|bücher|spielzeug|kleidung ordnen|vorräte/.test(t))return 60;
- return 90;
-}
-function stableHash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
-function buildCarePool(){
- const out=[];
- for(const r of catalogSeed){
-   const room=r[0],area=r[1],tasks=r[2];
-   for(const text of tasks){
-     if(WEEKLY_CORE.has(text))continue;
-     // Keine doppelte Tages-/Wochenbasis; diese Einträge werden dort bereits abgebildet.
-     if(/^(Boden saugen|Boden wischen|Fensterbank reinigen)$/.test(text))continue;
-     out.push({text,room,area,interval:careInterval(text),seed:stableHash(room+'|'+text)});
-   }
- }
- // Die expliziten Spezialaufgaben (Kamin, Fenster etc.) kommen zusätzlich hinein.
- for(const [text,interval] of ROTATIONS){
-   let room='Ganzes Haus',area='Hauspflege';
-   if(/Kamin/.test(text)) {room='Wohnzimmer';area='EG';}
-   if(/Fenster OG/.test(text)) {room='Fenster OG';area='OG';}
-   if(/Fenster EG/.test(text)) {room='Fenster EG';area='EG';}
-   out.push({text,room,area,interval,seed:stableHash('rot|'+text)});
- }
- return out.filter((x,i,a)=>i===a.findIndex(y=>y.text===x.text));
-}
-const CARE_POOL=buildCarePool();
-const CARE_START=new Date(2026,7,31,12);
-function careDateFor(task){
- const idx=Math.max(0,CARE_POOL.indexOf(task));
- // Gleichmäßig über das Jahr verteilen; Sonntage bleiben frei.
- let d=new Date(CARE_START);
- d.setDate(d.getDate()+((idx*2)%365));
- while(d.getDay()===0)d.setDate(d.getDate()+1);
- return d;
-}
-function careLastDone(task){
- return state.lastDone['care|'+task.room+'|'+task.text]||'';
-}
-function careDueOn(task,d=today){
- const last=careLastDone(task);
- if(last){
-   const due=new Date(last); due.setDate(due.getDate()+task.interval);
-   return dayKey(d)===iso(due);
- }
- return dayKey(d)===iso(careDateFor(task));
-}
-
-// --- Sinnvolle Jahresverteilung / leichte Tage ---
 const WINDOW_INVENTORY = [
  ["KG","Waschküche",2],["KG","Musikzimmer",2],["KG","Technikraum",2],["KG","Trainingsraum",2],["KG","Flur KG",2],["KG","Stiegenhaus",1],
  ["EG","Garderobe",1],["EG","Büro",3],["EG","Wohnzimmer",1],["EG","Essbereich",2],["EG","Küche",2],["EG","Speis",1],["EG","Abstellraum",1],["EG","WC",1],
  ["OG","Kinderzimmer 1",2],["OG","Kinderzimmer 2",3],["OG","Kinderbad",1],["OG","Schlafzimmer",1],["OG","Ankleide",1],["OG","Eltern-WC",1],["OG","Saunaraum",1],["OG","Bad",2]
 ];
-function windowCatalogEntries(){
- const out=[];
- for(const [area,room,count] of WINDOW_INVENTORY) for(let i=1;i<=count;i++){
-   const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);
-   const keyMap={
-     "KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik",
-     "KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training",
-     "KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus",
-     "EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero",
-     "EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen",
-     "EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|WC":"fenster-eg-kueche-speis-abstell",
-     "OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder",
-     "OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna",
-     "OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"
-   };
-   out.push({text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room:`Fenster ${area} · ${room}`,area,window:true,windowKey:`${area}|${room}|${i}`,windowSeasonalKey:keyMap[area+"|"+room]});
- }
- return out;
-}
-
 const SEASONAL_SPECIALS = [
  // Herbst 2026 – erste Runde, bewusst klein portioniert
  {key:"fenster-kg-waschkueche-musik",text:"🪟 Fenster KG · Waschküche + Musikzimmer",room:"Waschküche + Musikzimmer",area:"KG",dates:["2026-09-15","2026-09-17","2026-09-19"]},
@@ -289,921 +107,116 @@ const SEASONAL_SPECIALS = [
  {key:"fenster-og-baeder-wc-sauna",text:"🪟 Fenster OG · Kinderbad + Eltern-WC + Sauna",room:"Kinderbad + Eltern-WC + Sauna",area:"OG",dates:["2027-11-02","2027-11-04","2027-11-06"]},
  {key:"fenster-og-bad",text:"🪟 Fenster OG · großes Bad",room:"Bad",area:"OG",dates:["2027-11-09","2027-11-11","2027-11-13"]}
 ];
-function seasonalSpecialForDate(d){
- const k=dayKey(d);
- const exact=SEASONAL_SPECIALS.filter(x=>x.dates.includes(k));
- return exact[0]||null;
+
+const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
+const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+const DAY_THEME={1:"EG · Wohnen, Essen & Küche",2:"Bäder & WCs",3:"OG · Schlafen, Kinder & Sauna",4:"EG · Nebenräume",5:"Keller · nur ein Raum",6:"Wäsche + maximal eine Sonderaufgabe",0:"Haushaltsfrei ❤️"};
+
+function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
+function pad(n){return String(n).padStart(2,"0")}
+function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function fromKey(k){return new Date(k+"T12:00:00")}
+function dayKey(d=new Date()){return iso(d)}
+function sameDay(a,b){return iso(a)===iso(b)}
+function addDays(d,n){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+n);return x}
+function nextDow(d,dow){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+((dow-x.getDay()+7)%7));return x}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function dateLabel(d=today){return new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"}).format(d)}
+function toast(t){const el=document.getElementById("toast");if(!el)return;el.textContent=t;el.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove("show"),1800)}
+
+function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},calendarYear:new Date().getFullYear()}}
+function loadState(){let raw=null;try{raw=JSON.parse(localStorage.getItem(STORAGE)||"null")}catch{};if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE)||"null")}catch{}}const s=Object.assign(defaultState(),raw||{});s.done=s.done||{};s.lastDone=s.lastDone||{};s.postponed=s.postponed||{};s.custom=Array.isArray(s.custom)?s.custom:[];s.catalogEdits=s.catalogEdits||{};s.catalogDeleted=s.catalogDeleted||{};s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};return s}
+let state=loadState();
+let selectedTab="today";
+let today=new Date();today.setHours(12,0,0,0);
+let CATALOG=[];
+let calendarCache={year:null,days:new Map()};
+function save(){localStorage.setItem(STORAGE,JSON.stringify(state));calendarCache={year:null,days:new Map()}}
+function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
+function doneKey(x){return "done|"+taskId(x)}
+function lastKey(x){return "last|"+taskId(x)}
+function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]}
+function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
+function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
+function unmarkDone(x){delete state.done[doneKey(x)]}
+function isPostponed(x){return !!state.postponed[taskId(x)]}
+function postponeTask(x){state.postponed[taskId(x)]={...x,from:dayKey()};save();render();toast("Für heute verschoben ❤️")}
+function restorePostponed(id){delete state.postponed[id];save();render()}
+function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k)delete state.postponed[id]}
+function syncCompletedDay(d=today){
+ const k=dayKey(d), tasks=plannedTodayForDate(d);
+ if(tasks.length && tasks.every(isDone)) state.completedDays[k]=true; else delete state.completedDays[k];
 }
-function isMajorSpecial(t){
- const x=(t?.text||"").toLowerCase();
- return /fenster|raffstore|kamin|stuck|vorhangstangen|matratzen|teppich|polster/.test(x);
+function plannedTodayForDate(d){
+ const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
 }
-function lightweightDayPlan(d, base){
- if(!base)return [];
- const essentialPatterns=/geschirrspüler|küchenarbeitsfläche|esstisch|hochstuhl|essplatz|heruntergefallen|müll|wäsche nur bei bedarf|sichtbare bodenflecken/i;
- const keep=[];
- for(const [room,tasks] of base){
-   const filtered=tasks.filter(t=>essentialPatterns.test(t));
-   if(filtered.length)keep.push([room,filtered]);
+function toggleTask(x){if(isDone(x))unmarkDone(x);else markDone(x);syncCompletedDay(today);save();render()}
+
+function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
+function editFor(key){return state.catalogEdits?.[key]||null}
+function catalogInterval(x){if(Number(x.interval)>0)return Number(x.interval);const t=(x.text||"").toLowerCase();if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;if(/sockelleiste|fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;if(/bettwäsche|handtücher|kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;if(/fenster|raffstore|vorhangstange|matratze|teppich|polster/.test(t))return 180;if(/türblätter|türrahmen|zargen|fugen|silikon|backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna|stuck|lampe/.test(t))return 90;return 60}
+
+function windowEntries(){const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};const out=[];for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);out.push({key:`window|${area}|${room}|${i}`,text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room:`Fenster ${area} · ${room}`,area,place:`Fenster ${i}`,description:"Nur dieses Fenster bzw. diesen kleinen Fensterbereich gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.",window:true,windowKey:`${area}|${room}|${i}`,windowGroup:map[area+"|"+room],source:"window",editable:false,interval:180});}return out}
+const WINDOW_TASKS=windowEntries();
+const WINDOW_GROUP_DATES={};for(const s of SEASONAL_SPECIALS){if(!WINDOW_GROUP_DATES[s.key])WINDOW_GROUP_DATES[s.key]=[];WINDOW_GROUP_DATES[s.key].push(...s.dates)}for(const k in WINDOW_GROUP_DATES)WINDOW_GROUP_DATES[k]=[...new Set(WINDOW_GROUP_DATES[k])].sort();
+function windowDate(x,ref=today){
+ const rounds=SEASONAL_SPECIALS.filter(s=>s.key===x.windowGroup);
+ if(!rounds.length)return null;
+ const idx=Math.max(0,Number((x.windowKey||"|1").split("|").pop())-1);
+ const candidates=[];
+ for(const round of rounds){
+   const dates=(round.dates||[]).slice().sort();
+   if(dates.length)candidates.push(fromKey(dates[idx%dates.length]));
  }
- return keep;
+ candidates.sort((a,b)=>a-b);
+ for(const d of candidates)if(d>=ref)return d;
+ // Continue the seasonal rhythm: after the last published round, repeat every 6 months.
+ let d=candidates[candidates.length-1];
+ while(d<ref)d=addDays(d,180);
+ return d;
 }
 
-function careCandidateForDate(d=today){
- if(d.getDay()===0)return null;
- const seasonal=seasonalSpecialForDate(d);
- if(seasonal){
-   return {id:"care|seasonal|"+seasonal.key,canonical:"care|seasonal|"+seasonal.key,
-           text:seasonal.text,room:seasonal.room,area:seasonal.area,interval:180,seed:0,seasonal:true};
- }
- const due=CARE_POOL.filter(t=>careDueOn(t,d));
- if(!due.length)return null;
- due.sort((a,b)=>{
-   const age=x=>{const l=careLastDone(x);const base=l?new Date(l):careDateFor(x);return d-base};
-   return age(b)-age(a);
- });
- return due[0];
-}
-function chaosPlan(){
- return [["Hanni-Modus",["Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"]]];
-}
-function dailyTasks(){
- const out=[];
- for(const [group,tasks] of DAILY) for(const t of tasks) out.push({id:"daily|"+t,canonical:t,text:t,room:"Ganzes Haus",area:"Alltag",group});
- return out;
-}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:e.start??meta.start??"",interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){if(room==="Fenster / Ganzes Haus")continue;for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}for(const [text,interval] of ROTATIONS)add(text,"Rotationsaufgabe","Turnus",{key:`rotation|${text}`,editable:false,source:"rotation",interval});for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
+function refreshCatalog(){CATALOG=buildCatalog();calendarCache={year:null,days:new Map()}}
+refreshCatalog();
 
-// ===== Intelligenter Tagesplan V70 =====
-const TASK_WEIGHT_RULES=[
- [/fenster|raffstore|kamin|stuck|vorhangstange|matratze|teppich|polster/i,3],
- [/bad|dusche|wanne|wc.*gründlich|toilette.*gründlich/i,2],
- [/sockelleisten|türblätter|türrahmen|zargen|schubladen|regalböden|lampen/i,1],
- [/saugen|wischen|abwischen|abstauben|reinigen|ordnen|prüfen/i,1]
-];
-function taskWeight(text){
- for(const [re,w] of TASK_WEIGHT_RULES)if(re.test(text))return w;
- return 1;
-}
-function dayBudget(d=today){
- if(d.getDay()===0)return 0;
- if(d.getDay()===6)return 3;
- if(d.getDay()===3)return 5;
- return 5;
-}
-function taskLastDone(t){
- return state.lastDone?.[t.canonical] || state.lastDone?.[t.id] || "";
-}
-function taskAgeScore(t,d=today){
- const last=taskLastDone(t);
- if(!last)return 999999;
- return Math.max(0,Math.round((d-new Date(last+"T12:00:00"))/86400000));
-}
-function weeklyRoomsForDate(d){
- const dow=d.getDay();
- if(dow===1)return ["Wohnzimmer","Essbereich","Küche"];
- if(dow===2)return weekA(d)?BATH_A:BATH_B;
- if(dow===3)return ["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2"];
- if(dow===4)return weekA(d)?["Eingangsbereich","Garderobe","Flur"]:["Büro","Abstellraum","Speis"];
- if(dow===5)return [basementRoom(d)];
- if(dow===6)return ["Waschküche"];
- return [];
-}
-function weeklyCandidateTasks(room,d){
- return roomTasks(room).filter(text=>{
-   if(WEEKLY_CORE.has(text))return true;
-   if(/^(Boden saugen|Boden wischen|Fensterbank reinigen)$/.test(text))return false;
-   return true;
- }).map(text=>({id:"plan|"+dayKey(d)+"|"+room+"|"+text,canonical:room+"|"+text,text,room,area:SEED_ROOMS[room]?.[1]||"",group:room}));
-}
-function adaptiveWeeklyPlan(d){
- const rooms=weeklyRoomsForDate(d),budget=dayBudget(d),chosen=[];let used=0;
- const candidatesForRoom=room=>roomRecentlyDone(room,d,7)?[]:
-   weeklyCandidateTasks(room,d).filter(x=>taskAgeScore(x,d)>=7)
-     .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
+function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&x.source!=="rotation"&&x.area!=="Alltag")}
+function basementRoom(d){const base=fromKey("2026-09-04"),diff=Math.round((d-base)/86400000);return BASEMENT[((Math.floor(diff/7)%BASEMENT.length)+BASEMENT.length)%BASEMENT.length]}
+function weeklyDate(x){const dow=WEEKDAYS[x.room];if(dow===undefined)return null;const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));return addDays(nextDow(fromKey("2026-08-31"),dow),Math.floor(idx/2)*7)}
+function rotationAnchor(x){const idx=Math.max(0,ROTATIONS.findIndex(r=>r[0]===x.text));return addDays(fromKey("2026-09-07"),(idx*5)%150)}
+function explicitNext(x,ref){const start=/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")?fromKey(x.start):ref;const interval=catalogInterval(x);let d=new Date(start),last=lastDone(x);if(last&&fromKey(last)>=d)d=fromKey(last);while(d<ref)d=addDays(d,interval);if(last&&sameDay(d,fromKey(last)))d=addDays(d,interval);return d}
+function nextDue(x,ref=today){if(x.window)return windowDate(x,ref)||ref;if(x.start)return explicitNext(x,ref);if(x.source==="rotation"){const interval=catalogInterval(x),last=lastDone(x);let d=last?addDays(fromKey(last),interval):rotationAnchor(x);while(d<ref)d=addDays(d,interval);return d}if(BASEMENT.includes(x.room)){const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));const firstFriday=fromKey("2026-09-04");let d=addDays(firstFriday,Math.floor(idx/2)*7);while(d<ref)d=addDays(d,7*BASEMENT.length);return d}return weeklyDate(x)||ref}
+function dueOn(x,d){if(x.area==="Alltag")return false;if(x.window)return sameDay(windowDate(x,d),d);if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}if(x.source==="rotation"){const interval=catalogInterval(x),a=rotationAnchor(x),last=lastDone(x);let anchor=last?addDays(fromKey(last),interval):a;if(d<anchor)return false;return Math.round((d-anchor)/86400000)%interval===0}if(BASEMENT.includes(x.room))return sameDay(nextDue(x,d),d);const w=weeklyDate(x);return w?sameDay(d,w)||((d>w)&&Math.round((d-w)/86400000)%7===0):false}
+function scheduledForDate(d){const out=[];for(const x of CATALOG)if(dueOn(x,d))out.push(x);return out}
+function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=scheduledForDate(d);calendarCache.days.set(k,v);return v}
+function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
+function themeFor(d){if(d.getDay()===0)return DAY_THEME[0];if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);return DAY_THEME[d.getDay()]||""}
 
- for(const room of rooms){
-   const c=candidatesForRoom(room);
-   const pick=c.find(x=>used+taskWeight(x.text)<=budget);
-   if(pick){chosen.push(pick);used+=taskWeight(pick.text);}
- }
- const all=rooms.flatMap(r=>candidatesForRoom(r))
-   .filter(x=>!chosen.some(y=>y.canonical===x.canonical))
-   .sort((a,b)=>taskAgeScore(b,d)-taskAgeScore(a,d));
- for(const x of all){
-   const w=taskWeight(x.text);
-   if(used+w>budget)continue;
-   chosen.push(x);used+=w;
-   if(used>=budget)break;
- }
- return chosen;
-}
-function intelligentSpecialForDate(d=today){
- if(d.getDay()===0)return null;
- const seasonal=seasonalSpecialForDate(d);
- if(seasonal)return {...seasonal,weight:3,seasonal:true};
- return careCandidateForDate(d);
-}
-function isMajorSpecialTask(t){return !!t&&(t.seasonal||isMajorSpecial(t));}
-function explicitScheduledTasksForDate(d=today){
- const catalog=allCatalog();
- return catalog.filter(x=>{
-   if(x.area==='Alltag' || x.window || x.seasonal) return false;
-   if(!scheduleAnchor(x) || Number(x.interval)<=0) return false;
-   return taskIsDueOnDate(x,d,catalog);
- }).map(x=>({
-   id:x.id||x.key,
-   canonical:'catalog|'+x.key,
-   text:x.text,
-   room:x.room||'Ganzes Haus',
-   area:x.area||'',
-   group:x.room||'📌 Geplante Aufgaben'
- }));
-}
-function buildIntelligentToday(d=today){
- const scheduled=explicitScheduledTasksForDate(d);
- if(d.getDay()===0)return scheduled;
- if(state.chaos)return [...scheduled,...dailyTasks().filter(x=>[
-  "Geschirrspüler einräumen/einschalten","Küchenarbeitsfläche abwischen","Esstisch abwischen",
-  "Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Müll kontrollieren"
- ].includes(x.text))];
- const out=[...scheduled,...dailyTasks()],special=intelligentSpecialForDate(d);
- if(special&&isMajorSpecialTask(special)){
-   out.push({id:"care|"+special.room+"|"+special.text,canonical:"care|"+special.room+"|"+special.text,
-     text:special.text,room:special.room,area:special.area||"Hauspflege",group:"🔄 Hauspflege · Schwerpunkt"});
-   return out;
- }
- out.push(...adaptiveWeeklyPlan(d));
- const care=careCandidateForDate(d);
- if(care&&!out.some(x=>x.canonical===care.canonical)){
-   const cost=out.filter(x=>x.group&&x.group!=="Ganzes Haus"&&x.group!=="Alltag")
-     .reduce((a,x)=>a+taskWeight(x.text),0);
-   if(cost+taskWeight(care.text)<=dayBudget(d))
-     out.push({id:"care|"+care.room+"|"+care.text,canonical:"care|"+care.room+"|"+care.text,text:care.text,room:care.room,area:care.area,group:"🔄 Hauspflege · heute nur eine Sonderaufgabe"});
- }
- return out;
-}
-function plannedTasks(d=today){
- if(d.getDay()===0){
-   if(d.getFullYear()===today.getFullYear()&&dayKey(d)===dayKey(today)&&sundayOptionalEnabled()){
-     const care=careCandidateForDate(d);
-     return care?[{id:care.id||("care|"+care.room+"|"+care.text),canonical:care.canonical||("care|"+care.room+"|"+care.text),text:care.text,room:care.room||"Ganzes Haus",area:care.area||"Turnus",group:"☀️ Sonntag optional"}]:[];
-   }
-   return [];
- }
- const out=buildIntelligentToday(d);
- if(dayKey(d)===dayKey(today)&&Array.isArray(state.todayExtras)){
-   for(const x of state.todayExtras.filter(x=>x.date===dayKey(today))){
-     if(!out.some(t=>t.canonical===x.canonical||(t.text===x.text&&t.room===x.room)))
-       out.push({id:x.id,canonical:x.canonical||("extra|"+x.room+"|"+x.text),text:x.text,room:x.room||"Ganzes Haus",area:x.area||"",group:"＋ Heute hinzugefügt"});
-   }
- }
- return out;
-}
+function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Ganzes Haus",area:"Alltag",group,source:"daily",editable:false});return out}
+function taskWeight(x){const t=x.text.toLowerCase();if(/fenster|raffstore|kamin|stuck|matratze|teppich|polster/.test(t))return 3;if(/bad|dusche|wanne|wc|toilette/.test(t))return 2;return 1}
+function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
+function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 2;if(d.getDay()===3)return 4;return 5}
+function groupFor(x){if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;if(x.source==="rotation")return "Rotationsaufgabe";if(x.window)return "Fenster";return "Weitere Aufgabe"}
+function weeklyCandidates(d){const due=scheduledForDate(d).filter(x=>!x.window&&x.source!=="rotation").sort((a,b)=>taskWeight(a)-taskWeight(b));let total=0,out=[];for(const x of due){if(recent(x,d,7))continue;const w=taskWeight(x);if(total+w>dayBudget(d))continue;out.push({...x,group:groupFor(x)});total+=w}return out}
+function specialForDate(d){const season=SEASONAL_SPECIALS.find(s=>s.dates.includes(dayKey(d)));if(season)return {key:`seasonal|${season.key}|${dayKey(d)}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal"};const care=CATALOG.filter(x=>x.source==="rotation"&&dueOn(x,d));if(care.length)return {...care[0],group:"Rotationsaufgabe",major:/kamin|fenster|raffstore|stuck|matratze|teppich|polster/i.test(care[0].text)};return null}
+function plannedToday(){const d=today;if(d.getDay()===0&&!state.sundayOptional[dayKey(d)])return [];if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));const out=dailyTasks();const major=specialForDate(d);if(major?.major)out.push(major);else out.push(...weeklyCandidates(d));out.push(...scheduledForDate(d).filter(x=>x.window));if(d.getDay()===6){const r=scheduledForDate(d).filter(x=>x.source==="rotation"&&!recent(x,d,7));if(r[0])out.push({...r[0],group:"Rotationsaufgabe"})}for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})}
 
-function isDone(task){return !!state.done[task.id]}
-function isPostponed(task){
- return Object.values(state.postponed||{}).some(x=>x.id===task.id || x.canonical===task.canonical);
-}
+function definition(x){const t=x.text.toLowerCase();let what=x.description||x.text,belongs=[x.place?"Genauer Ort: "+x.place:"genau der genannte Bereich bzw. Gegenstand"],not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"],care=["Material- und Herstellerangaben haben Vorrang."];if(x.window){what=x.description||"Nur das genannte Fenster gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.";belongs=[x.place||"genanntes Fenster","Fensterbank","Rahmen und Falz dieses Fensters"];not=["Keine anderen Fenster des Hauses zusätzlich","Keine unsicheren Außen-/Höhenarbeiten"]}else if(/kamin|asche|ruß|feuerraum|rost/.test(t)){what=x.description||"Den genannten Kaminbereich nur vollständig erkaltet und sicher reinigen.";not=["Heiße Asche oder Glut anfassen","Feuerraum bei brennendem Feuer reinigen"];care=["Herstellerangaben beachten; fachgerechte Kontrolle/Wartung nach Vorgabe."]}else if(/lichtschalter|steckdose/.test(t)){what=x.description||"Nur die zugängliche Außenfläche vorsichtig abwischen.";not=["Schalter/Steckdose öffnen","Flüssigkeit in Öffnungen bringen"]}else if(/sauna/.test(t)){what=x.description||"Saunaraum im genannten Umfang reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Saunaofen zerlegen"];care=["Holz und Saunaofen ausschließlich nach Herstellerangaben behandeln."]}else if(/toilette|wc-bürste/.test(t)){what=x.description||"Das genannte WC-Element gründlich hygienisch reinigen.";care=["Handschuhe tragen. Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]}return {what,belongs,not,care}}
+function openDetail(x){const d=definition(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · nächster Termin: "+nextDueLabel(x);document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
+function swipeRow(el,x){let sx=0,dx=0,drag=false;const c=el.querySelector(".taskContent"),bg=el.querySelector(".swipeBg");const upd=()=>{c.style.transform=`translateX(${dx}px)`;bg.classList.toggle("green",dx>0);bg.classList.toggle("red",dx<0);bg.style.opacity=Math.min(1,Math.abs(dx)/70);bg.querySelector(".swipeLabel").textContent=dx<0?"↩ Später":"✓ Erledigt"};el.addEventListener("touchstart",e=>{sx=e.touches[0].clientX;dx=0;drag=true;c.style.transition="none"},{passive:true});el.addEventListener("touchmove",e=>{if(!drag)return;dx=e.touches[0].clientX-sx;if(Math.abs(dx)>8)e.preventDefault()},{passive:false});el.addEventListener("touchend",()=>{if(!drag)return;drag=false;c.style.transition="transform .18s";if(dx>90)toggleTask(x);else if(dx<-90)postponeTask(x);else{dx=0;upd();c.style.transform="translateX(0)"}})}
+function taskRow(x){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div><div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(nextDueLabel(x))}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button><button class="iconBtn later">↩</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);el.querySelector(".later").onclick=()=>postponeTask(x);swipeRow(el,x);return el}
 
-function markRoomCompleted(room){
- state.roomLastDone=state.roomLastDone||{};
- state.roomLastDone[room]=dayKey();
-}
-function roomRecentlyDone(room,d=today,days=7){
- const k=state.roomLastDone?.[room];
- if(k && Math.round((d-new Date(k+"T12:00:00"))/86400000)<days)return true;
- // Fallback for data created before roomLastDone existed:
- // any task in this room completed within the last 'days' is enough to avoid
- // immediately forcing the room back into the weekly plan.
- const cutoff=new Date(d);cutoff.setDate(cutoff.getDate()-days);
- for(const [canonical,date] of Object.entries(state.lastDone||{})){
-   if(canonical.startsWith(room+"|")){
-     const dd=new Date(date+"T12:00:00");
-     if(dd>=cutoff && dd<=d)return true;
-   }
- }
- return false;
-}
+function renderToday(){purgePostponed();const main=document.getElementById("main");if(today.getDay()===0&&!state.sundayOptional[dayKey(today)]){main.innerHTML=`<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn du möchtest, kannst du freiwillig einen Sonntagsschwerpunkt freischalten.</p><button class="btn primary" id="sun">☀️ Sonntag nutzen</button></div>`;main.querySelector("#sun").onclick=()=>{state.sundayOptional[dayKey(today)]=true;save();render()};return}const tasks=plannedToday(),done=tasks.filter(isDone).length;main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":"Normal"}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp; | &nbsp; Erledigt · GRÜN 👉</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div><div class="notice">Nichts wird automatisch auf morgen gestapelt. Große Aufgaben verdrängen kleinere Pflegepunkte. ❤️</div></div>`;const groups={};for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}const completed=tasks.filter(isDone);if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}renderPostponed(main);main.querySelector("#energy").onclick=showEnergy;main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()}}
+function renderPostponed(main){const arr=Object.entries(state.postponed||{});if(!arr.length)return;const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="topline"><b>↩ Später (${arr.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.postponedOpen)arr.forEach(([id,x])=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)}</div></div><button class="btn">Wieder öffnen</button>`;r.querySelector("button").onclick=()=>restorePostponed(id);c.appendChild(r)});main.appendChild(c);c.querySelector("#po").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()}}
+function showEnergy(){const main=document.getElementById("main");let box=document.getElementById("energyBox");if(!box){box=document.createElement("div");box.id="energyBox";box.className="card";main.insertBefore(box,main.children[1]||null)}const candidates=CATALOG.filter(x=>x.area!=="Alltag"&&!x.window&&!isDone(x)&&!isPostponed(x)&&!recent(x,today,7)).sort((a,b)=>nextDue(a)-nextDue(b)).slice(0,3);box.innerHTML=`<div class="topline"><div><b>⚡ Ich habe Energie</b><div class="small">Nur wenn du möchtest – diese Aufgaben werden heute zusätzlich vorgezogen.</div></div></div>`;if(!candidates.length)box.innerHTML+=`<div class="empty">Gerade gibt es keine sinnvolle Zusatzaufgabe. 🥰</div>`;candidates.forEach(x=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · regulär ${esc(nextDueLabel(x))}</div></div><button class="btn primary">Heute vorziehen</button>`;r.querySelector("button").onclick=()=>{state.todayExtras.push({id:`extra|${dayKey()}|${uid()}`,date:dayKey(),text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});save();render();showEnergy()};box.appendChild(r)})}
 
-function toggleTask(task){
- state.done[task.id]=!state.done[task.id];
- if(state.done[task.id]){
-   state.lastDone[task.canonical]=dayKey();
-   if(task.id.startsWith("care|"))state.lastDone[task.canonical]=dayKey();
-   if(task.id.startsWith("extra|"))state.lastDone[task.room+"|"+task.text]=dayKey();
-   if(task.room && task.room!=="Ganzes Haus" && task.group===task.room){
-     const sameRoom=plannedTasks().filter(x=>x.room===task.room && x.group===task.room);
-     if(sameRoom.length && sameRoom.every(x=>state.done[x.id]))markRoomCompleted(task.room);
-   }
- }
- save(); purgeExpiredPostponements();
-render();
-}
-function postponeTask(task){
- if(!isPostponed(task)){
-   state.postponed[uid()]={id:task.id,text:task.text,room:task.room,area:task.area,canonical:task.canonical,from:dayKey()};
- }
- save(); render(); toast("Auf später verschoben ↩");
-}
-function restorePostponed(id){delete state.postponed[id];save();render();toast("Wieder geöffnet ❤️")}
-function completedToday(){
- const tasks=plannedTasks().filter(t=>!isPostponed(t));
- return tasks.length>0 && tasks.every(isDone);
-}
-function updateCompletion(){
- const k=dayKey();
- if(completedToday()) state.completedDays[k]=true;
- else delete state.completedDays[k];
- save();
-}
-function swipeRow(el,task){
- let sx=0,sy=0,active=false,dragging=false;
- const content=el.querySelector(".taskContent"), bg=el.querySelector(".swipeBg");
+function openEditor(x=null){const edit=!!x,old=x||{},rooms=[...new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])].sort(),overlay=document.createElement("div");overlay.className="catalogEditorOverlay";overlay.id="editor";overlay.innerHTML=`<div class="catalogEditorSheet"><div class="sheetTop"><div><div class="small">${edit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${edit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="x">×</button></div><label class="editorLabel">Aufgabe<input id="t" value="${esc(old.text||"")}"></label><label class="editorLabel">Raum<input id="r" list="rooms" value="${esc(old.room||"")}"><datalist id="rooms">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label><label class="editorLabel">Bereich / Etage<input id="a" value="${esc(old.area||"")}"></label><label class="editorLabel">Genauer Ort<input id="p" value="${esc(old.place||"")}"></label><label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="d">${esc(old.description||"")}</textarea></label><div class="editorTwo"><label class="editorLabel">Erster Fälligkeitstermin<input id="s" type="date" value="${esc(old.start||nextDue(old))}"></label><label class="editorLabel">Periode (Tage)<input id="i" type="number" min="1" value="${old.interval||catalogInterval(old)||60}"></label></div><div class="editorHint">Dieser Termin ist die verbindliche Quelle. Kalender, Heute und Katalog berechnen daraus exakt dieselben Fälligkeiten.</div><div class="editorActions"><button class="btn" id="cancel">Abbrechen</button><button class="btn primary" id="saveTask">${edit?"Änderungen speichern":"Aufgabe speichern"}</button></div>${edit?`<button class="deleteBtn" id="del">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}</div>`;document.body.appendChild(overlay);const close=()=>overlay.remove();overlay.querySelector("#x").onclick=close;overlay.querySelector("#cancel").onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};overlay.querySelector("#saveTask").onclick=()=>{const text=overlay.querySelector("#t").value.trim(),room=overlay.querySelector("#r").value.trim(),area=overlay.querySelector("#a").value.trim(),place=overlay.querySelector("#p").value.trim(),description=overlay.querySelector("#d").value.trim(),start=overlay.querySelector("#s").value,interval=Math.max(1,Number(overlay.querySelector("#i").value)||60);if(!text||!room||!area||!start)return toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");if(edit){state.catalogEdits[old.key]={text,room,area,place,description,start,interval};if(old.source==="custom"){const c=state.custom.find(c=>(c.key||`custom|${c.id}`)===old.key);if(c)Object.assign(c,{text,room,area,place,description,start,interval})}}else{const id=`custom|${uid()}`;state.custom.push({id,key:id,text,room,area,place,description,start,interval})}save();refreshCatalog();close();render();toast(edit?"Aufgabe geändert ❤️":"Neue Aufgabe hinzugefügt ❤️")};if(edit)overlay.querySelector("#del").onclick=()=>{if(!confirm(`„${old.text}“ wirklich löschen?`))return;state.catalogDeleted[old.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==old.key);save();refreshCatalog();close();render();toast("Aufgabe gelöscht")}}
+function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die einzige Stelle zum Hinzufügen, Bearbeiten und Löschen.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term));res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Nächster Termin: <b>${esc(nextDueLabel(x))}</b></div></div>${x.editable?`<button class="iconBtn edit">✏️</button><button class="iconBtn remove">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button>`;if(x.editable){r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}}}r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
 
- function reset(){
-   content.style.transition="transform .18s ease";
-   content.style.transform="translateX(0)";
-   bg.style.opacity="0";
-   bg.classList.remove("green","red");
-   bg.querySelector(".swipeLabel").textContent="✓ Erledigt";
-   setTimeout(()=>content.style.transition="",190);
- }
- function start(x,y){
-   sx=x; sy=y; active=true; dragging=false;
-   content.style.transition="none";
- }
- function move(x,y,e){
-   if(!active)return;
-   const dx=x-sx,dy=y-sy;
-   if(!dragging){
-     if(Math.abs(dx)<8 && Math.abs(dy)<8)return;
-     if(Math.abs(dy)>Math.abs(dx)*1.15){ active=false; return; }
-     dragging=true;
-   }
-   if(e && e.cancelable)e.preventDefault();
-   const limited=Math.max(-145,Math.min(145,dx));
-   content.style.transform=`translate3d(${limited}px,0,0)`;
-   bg.classList.toggle("green",dx>0);
-   bg.classList.toggle("red",dx<0);
-   // Während des Wischens muss die Beschriftung die Richtung sofort anzeigen.
-   bg.querySelector(".swipeLabel").textContent = dx<0 ? "↩ Später" : "✓ Erledigt";
-   bg.style.opacity=String(Math.min(1,Math.abs(dx)/45));
- }
- function finish(x,y){
-   if(!active)return;
-   active=false;
-   const dx=x-sx,dy=y-sy;
-   if(dragging && Math.abs(dx)>=65 && Math.abs(dx)>Math.abs(dy)*1.1){
-     if(dx>0){
-       // RECHTS WISCHEN = GRÜN = ERLEDIGT
-       content.style.transition="transform .16s ease";
-       content.style.transform="translate3d(100%,0,0)";
-       bg.classList.add("green"); bg.classList.remove("red");
-       bg.querySelector(".swipeLabel").textContent="✓ Erledigt";
-       bg.style.opacity="1";
-       setTimeout(()=>{
-         toggleTask(task);
-         toast("Erledigt ✓");
-       },150);
-     }else{
-       // LINKS WISCHEN = ROT = SPÄTER
-       content.style.transition="transform .16s ease";
-       content.style.transform="translate3d(-100%,0,0)";
-       bg.classList.add("red"); bg.classList.remove("green");
-       bg.querySelector(".swipeLabel").textContent="↩ Später";
-       bg.style.opacity="1";
-       setTimeout(()=>postponeTask(task),150);
-     }
-   }else reset();
- }
- el.addEventListener("touchstart",e=>{
-   if(e.touches.length===1)start(e.touches[0].clientX,e.touches[0].clientY);
- },{passive:true});
- el.addEventListener("touchmove",e=>{
-   if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY,e);
- },{passive:false});
- el.addEventListener("touchend",e=>{
-   if(e.changedTouches.length)finish(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
- },{passive:true});
- el.addEventListener("pointerdown",e=>{
-   if(e.pointerType==="mouse" || e.pointerType==="pen")start(e.clientX,e.clientY);
- });
- el.addEventListener("pointermove",e=>{
-   if(e.pointerType==="mouse" || e.pointerType==="pen")move(e.clientX,e.clientY,e);
- });
- el.addEventListener("pointerup",e=>{
-   if(e.pointerType==="mouse" || e.pointerType==="pen")finish(e.clientX,e.clientY);
- });
- el.addEventListener("pointercancel",()=>{if(active){active=false;reset();}});
-}
-function nextDueForTask(task){
- const x=allCatalog().find(c=>c.text===task.text && c.room===task.room);
- return x?catalogNextDate(x):null;
-}
-function nextDueLabelForTask(task){
- const d=nextDueForTask(task);
- if(!d || task.room==="Ganzes Haus" || task.area==="Alltag")return "";
- return `Nächster Termin: <b>${esc(formatCatalogNextDate(d))}</b>`;
-}
-function taskRow(task){
- const el=document.createElement("div");el.className="task"+(isDone(task)?" done":"");
- const due=isDone(task)?nextDueLabelForTask(task):"";
- el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div>
- <div class="taskContent"><button class="check" aria-label="Erledigt">${isDone(task)?"✓":""}</button>
- <div class="taskMain"><div class="taskName">${esc(task.text)}</div><div class="meta">${esc(task.room)}${task.area?" · "+esc(task.area):""}</div>${due?`<div class="meta nextDue">${due}</div>`:""}</div>
- <div class="taskButtons"><button class="iconBtn info" aria-label="Details">ⓘ</button><button class="iconBtn later" aria-label="Verschieben">↩</button></div></div>`;
- el.querySelector(".check").onclick=()=>toggleTask(task);
- el.querySelector(".info").onclick=()=>openDetail(task.text,task.room,task.area);
- el.querySelector(".later").onclick=()=>postponeTask(task);
- swipeRow(el,task);
- return el;
-}
-function renderToday(){
- updateCompletion();
- const main=document.getElementById("main");
- if(today.getDay()===0){
-  main.innerHTML=`<div class="card" id="sundayOptionalCard" style="display:none">
-  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
-    <div><b>☀️ Sonntag optional</b>
-      <div class="small">Der Sonntag bleibt grundsätzlich haushaltsfrei. Wenn du heute Lust hast, kannst du freiwillig eine Hauspflege-Aufgabe freischalten.</div>
-    </div>
-    <button class="btn" id="sundayOptionalBtn">☀️ Sonntag nutzen</button>
-  </div>
-</div>
-<div class="card"><div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><h2>Heute müsst ihr nichts aufholen.</h2><p class="small">Wenn etwas unter der Woche liegen geblieben ist, darf es liegen bleiben. ❤️</p></div>`;
-  return;
- }
- const tasks=plannedTasks().filter(t=>!isPostponed(t)),done=tasks.filter(isDone).length,pct=tasks.length?Math.round(done/tasks.length*100):0;
- let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
- <div class="progress"><i style="width:${pct}%"></i></div>
- <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp;&nbsp; | &nbsp;&nbsp; Erledigt · GRÜN 👉</div>
- <div class="actions" style="margin-top:15px"><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
- <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
- if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
- main.innerHTML=html;
- const plannerBox=document.createElement("div");
- plannerBox.className="intelBox";
- const special=intelligentSpecialForDate(today);
- if(special&&isMajorSpecialTask(special)){
-   plannerBox.innerHTML=`<b>🎯 Heute ist ein Schwerpunkt</b><div class="intelMeta">${esc(special.text)} · ${esc(special.room||"")}</div><div class="intelMeta">Der normale Wochen- und Sonderturnus pausiert heute bewusst. ❤️</div>`;
- }else{
-   plannerBox.innerHTML=`<b>🧠 Heute passend dosiert</b><div class="intelMeta">Die Wochenaufgaben werden nach Aufwand und tatsächlicher Erledigung ausgewählt.</div>`;
- }
- main.appendChild(plannerBox);
- const energyBox=document.createElement("div");
- energyBox.className="card";
- energyBox.id="energyBox";
- energyBox.style.display="none";
- main.appendChild(energyBox);
- const openTasks=tasks.filter(t=>!isDone(t));
- const completedTasks=tasks.filter(t=>isDone(t));
+function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} fest eingeplante Aufgaben</div>`;wg.appendChild(el)}}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = fest eingeplante Aufgaben</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(state.completedDays[dayKey(d)]?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),by={};tasks.forEach(x=>(by[x.room]??=[]).push(x));box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}</h3><div class="small">${esc(themeFor(d))}</div>${tasks.length?Object.entries(by).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} geplante Aufgaben</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}<br><span class="small">Geplant am: ${esc(d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}))}</span></div>`).join("")}</div>`).join(""):`<div class="empty">Keine fest eingeplanten Aufgaben.</div>`}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
 
- // Completed tasks are collected into one compact, collapsed section.
- if(completedTasks.length){
-   const completedCard=document.createElement("div");
-   completedCard.className="card";
-   completedCard.innerHTML=`<div class="topline"><b>✓ Erledigt (${completedTasks.length})</b><button class="btn" id="toggleCompleted">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;
-   if(state.completedOpen){
-     const groupsDone={};
-     for(const t of completedTasks)(groupsDone[t.group]??=[]).push(t);
-     for(const [group,arr] of Object.entries(groupsDone)){
-       const sec=document.createElement("section");
-       sec.innerHTML=`<div class="sectionTitle">${esc(group)}</div>`;
-       for(const t of arr)sec.appendChild(taskRow(t));
-       completedCard.appendChild(sec);
-     }
-   }
-   main.appendChild(completedCard);
-   completedCard.querySelector("#toggleCompleted").onclick=()=>{
-     state.completedOpen=!state.completedOpen; save(); render();
-   };
- }
-
- const groups={};
- for(const t of openTasks)(groups[t.group]??=[]).push(t);
- for(const [group,arr] of Object.entries(groups)){
-   const sec=document.createElement("section");
-   sec.innerHTML=`<div class="sectionTitle">${esc(group)}</div>`;
-   for(const t of arr)sec.appendChild(taskRow(t));
-   main.appendChild(sec);
- }
- renderPostponed(main);
- document.getElementById("energyBtn").onclick=showEnergyChoices;
- if(state.energyOpen) showEnergyChoices(false);
- document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;save();render()};
- document.getElementById("catalogBtn").onclick=()=>{selectedTab="catalog";render()};
-}
-function energyCandidates(){
- const planned=plannedTasks().filter(t=>!isPostponed(t));
- const recentCutoff=new Date(today);recentCutoff.setDate(recentCutoff.getDate()-7);
- return allCatalog()
-  .filter(x=>x.area!=="Alltag")
-  .filter(x=>!planned.some(t=>t.room===x.room && t.text===x.text))
-  .filter(x=>!Object.values(state.postponed||{}).some(p=>p.canonical===x.room+"|"+x.text))
-  .map(x=>({...x,canonical:x.room+"|"+x.text,next:catalogNextDate(x)}))
-  .filter(x=>{
-    const last=state.lastDone?.[x.canonical];
-    if(!last)return true;
-    return new Date(last+"T12:00:00")<recentCutoff;
-  })
-  .sort((a,b)=>{
-    const ad=a.next?Math.round((today-a.next)/86400000):-999999;
-    const bd=b.next?Math.round((today-b.next)/86400000):-999999;
-    if(bd!==ad)return bd-ad;
-    return taskWeight(b.text)-taskWeight(a.text);
-  });
-}
-function showEnergyChoices(scroll=true){
- const box=document.getElementById("energyBox");
- if(!box)return;
- state.energyOpen=true;
- const arr=energyCandidates().slice(0,3);
- box.style.display="block";
- box.innerHTML=`<div class="topline"><div><b>⚡ Heute habe ich Energie</b><div class="small">Wähle so viele passende Aufgaben aus, wie du möchtest. Nach jeder Erledigung rückt automatisch eine neue nach. ❤️</div></div><button class="btn" id="closeEnergy">Schließen</button></div>`;
- if(!arr.length){box.innerHTML+=`<div class="empty" style="margin-top:12px">Gerade gibt es keine sinnvolle Zusatzaufgabe. Dann ist heute einfach genug. 🥰</div>`;}
- arr.forEach(x=>{
-   const row=document.createElement("div");row.className="result";row.style.marginTop="10px";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta">Nächster regulärer Termin: <b>${esc(formatCatalogNextDate(x.next))}</b></div></div><button class="btn primary">Heute vorziehen</button>`;
-   row.querySelector("button").onclick=()=>{
-     addCatalogToToday(x);
-     showEnergyChoices(false);
-     toast("Für heute vorgezogen ❤️");
-   };
-   box.appendChild(row);
- });
- box.querySelector("#closeEnergy").onclick=()=>{state.energyOpen=false;save();box.style.display="none"};
- if(scroll)box.scrollIntoView({behavior:"smooth",block:"nearest"});
-}
-
-function renderPostponed(main){
- const ids=Object.keys(state.postponed);
- if(!ids.length)return;
- const card=document.createElement("div");card.className="card";
- card.innerHTML=`<div class="topline"><b>↩ Auf später verschoben (${ids.length})</b><button class="btn" id="togglePost">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;
- if(state.postponedOpen){
-  for(const id of ids){
-   const x=state.postponed[id],r=document.createElement("div");r.className="task";
-   r.innerHTML=`<div class="taskMain"><div class="taskName">${esc(x.text)}</div><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)}</div></div><button class="btn">Wieder öffnen</button>`;
-   r.querySelector("button").onclick=()=>restorePostponed(id);card.appendChild(r);
-  }
- }
- main.appendChild(card);card.querySelector("#togglePost").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()};
-}
-function addCustom(){ openCatalogEditor(null); }
-function renderWeek(){
- const main=document.getElementById("main");
- main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Die Themen sind Anker, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="weekgrid"></div></div>`;
- const grid=main.querySelector("#weekgrid"),base=new Date(today);base.setDate(base.getDate()-(base.getDay()||7)+1);
- for(let i=0;i<7;i++){const d=new Date(base);d.setDate(base.getDate()+i);const k=dayKey(d),el=document.createElement("div");
-  el.className="daycard"+(k===dayKey()?" today":"")+(d.getDay()===0?" free":"");
-  el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div>${state.completedDays[k]?"<div class='small' style='margin-top:8px'>✓ vollständig erledigt</div>":""}`;
-  grid.appendChild(el);
- }
-}
-function renderHistory(){
- const main=document.getElementById("main");
- if(!state.calendarYear)state.calendarYear=today.getFullYear();
- const year=state.calendarYear;
- const monthNames=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
- const weekdayNames=["Mo","Di","Mi","Do","Fr","Sa","So"];
-
- function shortTheme(d){
-   if(d.getDay()===0)return "frei";
-   if(d.getDay()===1)return "EG";
-   if(d.getDay()===2)return weekA(d)?"Bad A":"Bad B";
-   if(d.getDay()===3)return "OG";
-   if(d.getDay()===4)return weekA(d)?"EG A":"EG B";
-   if(d.getDay()===5)return basementRoom(d);
-   return "Wäsche";
- }
- function showDay(d){
-   const k=dayKey(d);
-   const plan=planForDate(d);
-   const isToday=k===dayKey(today);
-   const details=[];
-   if(d.getDay()===0) details.push("Haushaltsfrei ❤️");
-   else {
-     plan.forEach(([room,tasks])=>{
-       details.push(`<div class="detailTask"><b>${esc(room)}</b> · ${tasks.length} geplante Aufgaben</div>`);
-       tasks.forEach(t=>details.push(`<div class="detailTask" style="padding-left:12px">• ${esc(t)}</div>`));
-     });
-   }
-   const dateLabel=new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"}).format(d);
-   const el=document.getElementById("yearDetail");
-   el.innerHTML=`<h3>${esc(dateLabel)}${isToday?" · heute":""}</h3>
-     <div class="small">${esc(themeFor(d))}</div>
-     <div class="detailTasks">${details.length?details.join(""):`<div class="detailTask">Keine Hausarbeit geplant. ❤️</div>`}</div>`;
- }
-
- main.innerHTML=`<div class="card">
-   <div class="yearIntro">
-    <div><div class="yearTitle">📅 Jahreskalender ${year}</div>
-      <div class="small">Alle Tage auf einen Blick – mit Wochenanker, hausfreier Sonntagen und den automatisch eingeplanten Sonderaufgaben.</div></div>
-    <div class="yearNav"><button id="prevYear">‹</button><button id="thisYear">Heute</button><button id="nextYear">›</button></div>
-   </div>
-   <div class="calendarLegend">
-    <span>🟢 = vollständig erledigt</span><span>♡ = heute</span><span>🔢 = geplante Aufgaben</span><span>So = haushaltsfrei</span>
-   </div>
-   <div class="monthGrid" id="monthGrid" style="margin-top:16px"></div>
-   <div class="yearDetail" id="yearDetail"></div>
- </div>
- <div class="card"><b>Me-Time ❤️</b><p class="small">10–20 Minuten mehrmals pro Woche · 30–60 Minuten wöchentlich · 1–2 Stunden monatlich. Nicht streichen, nur weil eine Aufgabe offen ist.</p></div>`;
-
- const grid=main.querySelector("#monthGrid");
- for(let m=0;m<12;m++){
-   const card=document.createElement("div");card.className="monthCard";
-   let inner=`<div class="monthName">${monthNames[m]}</div><div class="weekdays">${weekdayNames.map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays">`;
-   const first=new Date(year,m,1,12);
-   const offset=(first.getDay()+6)%7;
-   for(let i=0;i<offset;i++)inner+=`<div></div>`;
-   const days=new Date(year,m+1,0).getDate();
-   for(let day=1;day<=days;day++){
-     const d=new Date(year,m,day,12),k=dayKey(d);
-     const calendarTasks=calendarTasksForDate(d);
-     const free=d.getDay()===0;
-     const done=!!state.completedDays[k];
-     const classes=["yearDay"];
-     if(free)classes.push("free");
-     if(done)classes.push("completed");
-     if(k===dayKey(today))classes.push("today");
-     inner+=`<button class="${classes.join(" ")}" data-date="${k}" title="${esc(themeFor(d))}">
-       <span class="dayNum">${day}</span>
-       <span class="dayMark">${esc(shortTheme(d))}</span>
-       ${calendarTasks.length?`<span class="careMark">${calendarTasks.length}</span>`:""}
-       ${done?`<span class="careMark">✓</span>`:""}
-     </button>`;
-   }
-   inner+="</div>";
-   card.innerHTML=inner;
-   grid.appendChild(card);
- }
- grid.querySelectorAll(".yearDay").forEach(btn=>{
-   btn.onclick=()=>{
-     const [y,m,d]=btn.dataset.date.split("-").map(Number);
-     showDay(new Date(y,m-1,d,12));
-     document.getElementById("yearDetail").scrollIntoView({behavior:"smooth",block:"nearest"});
-   };
- });
- main.querySelector("#prevYear").onclick=()=>{state.calendarYear=year-1;save();render()};
- main.querySelector("#nextYear").onclick=()=>{state.calendarYear=year+1;save();render()};
- main.querySelector("#thisYear").onclick=()=>{state.calendarYear=today.getFullYear();save();render()};
- showDay(new Date(year,today.getFullYear()===year?today.getMonth():0,today.getFullYear()===year?today.getDate():1,12));
-}
-
-const EXTRA_ROOM_TASKS = {'Eingangsbereich': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Fensterbank reinigen', 'Ablageflächen ordnen'], 'Garderobe': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Schuhe ordnen', 'Jacken ordnen', 'Taschen ordnen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spiegel reinigen'], 'Flur': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen', 'Bilderrahmen entstauben'], 'Büro': ['Boden saugen', 'Boden wischen', 'Schreibtisch reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Schubladen ordnen', 'Schrankfronten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Spinnweben entfernen'], 'Abstellraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Vorräte ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Speis': ['Boden saugen', 'Boden wischen', 'Arbeitsflächen reinigen', 'Regale abstauben', 'Vorräte kontrollieren', 'Vorräte ordnen', 'Schubladen reinigen', 'Schrankfronten reinigen', 'Türklinken reinigen'], 'Gäste-WC': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Fugen kontrollieren/reinigen'], 'Kinderbad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Dusche/Bad reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'Bad': ['Boden saugen', 'Boden wischen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Dusche/Bad reinigen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Fugen kontrollieren/reinigen', 'Silikon kontrollieren', 'Türklinken reinigen'], 'WC': ['Boden saugen', 'Boden wischen', 'Toilette reinigen', 'WC-Bürste reinigen', 'Waschbecken reinigen', 'Armatur reinigen', 'Spiegel reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Schlafzimmer': ['Boden saugen', 'Boden wischen', 'Bettwäsche wechseln', 'Matratze pflegen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Ankleidezimmer': ['Boden saugen', 'Boden wischen', 'Kleidung ordnen', 'Schuhe ordnen', 'Schrankfronten reinigen', 'Schrankgriffe reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen'], 'Kinderzimmer 1': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Kinderzimmer 2': ['Boden saugen', 'Boden wischen', 'Spielzeug grob ordnen', 'Bücher ordnen', 'Regale abstauben', 'Schrankfronten reinigen', 'Sockelleisten reinigen', 'Fensterbank reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Waschküche': ['Boden saugen', 'Boden wischen', 'Waschmaschine außen reinigen', 'Waschmittelschublade reinigen', 'Türdichtung der Waschmaschine reinigen', 'Trockner außen reinigen', 'Flusensieb nach Herstellerangabe reinigen', 'Arbeitsflächen reinigen', 'Wäschekörbe reinigen', 'Sockelleisten reinigen', 'Vorräte/Pflegemittel ordnen'], 'Musikzimmer': ['Boden saugen', 'Boden wischen', 'Instrumente materialgerecht entstauben', 'Noten ordnen', 'Regale abstauben', 'Ablageflächen reinigen', 'Schubladen ordnen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Trainingsraum': ['Boden saugen', 'Boden wischen', 'Trainingsgeräte abwischen', 'Matten reinigen', 'Ablageflächen reinigen', 'Regale abstauben', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Technikraum': ['Boden saugen', 'Boden wischen', 'Zugängliche Außenflächen abstauben', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Lagerraum': ['Boden saugen', 'Boden wischen', 'Regale abstauben', 'Kartons/Behälter ordnen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Türklinken reinigen', 'Spinnweben entfernen'], 'Saunaraum': ['Boden saugen', 'Boden wischen', 'Saunabänke reinigen', 'Glasflächen reinigen', 'Ablageflächen reinigen', 'Sockelleisten reinigen', 'Sauna lüften', 'Sauna nach Herstellerangabe pflegen', 'Türklinken reinigen'], 'Keller allgemein': ['Boden saugen', 'Boden wischen', 'Treppenbereich reinigen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen'], 'Flur KG': ['Boden saugen', 'Boden wischen', 'Sockelleisten reinigen', 'Spinnweben entfernen', 'Türklinken reinigen', 'Lichtschalter außen abwischen', 'Ecken absaugen']};
-function catalogWithExtras(){
- const rows=Array.isArray(catalogSeed)?catalogSeed.map(r=>r.slice()):[];
- const existing=new Set(rows.map(r=>r[0]));
- for(const [room,tasks] of Object.entries(EXTRA_ROOM_TASKS)){
-   if(!existing.has(room)) rows.push([room,SEED_ROOMS[room]?.[1]||"Ganzes Haus",tasks]);
- }
- return rows;
-}
-function catalogKeyFor(text,room,area){ return "seed|"+[room,text].join("|"); }
-function catalogDeleted(key){ return !!(state.catalogDeleted&&state.catalogDeleted[key]); }
-function allCatalog(){
- const out=[],seen=new Set();
- state.catalogEdits=state.catalogEdits||{}; state.catalogDeleted=state.catalogDeleted||{};
- function add(text,room,area,meta={}){
-   const key=meta.key||catalogKeyFor(text,room,area);
-   if(!text || seen.has(key) || catalogDeleted(key))return;
-   const edit=state.catalogEdits[key]||{};
-   const item={text:edit.text||text,room:edit.room||room,area:edit.area||area||"",place:edit.place||meta.place||"",description:edit.description||meta.description||"",key,editable:meta.editable!==false,
-     start:edit.start||meta.start||"",interval:Number(edit.interval||meta.interval||0)||0,
-     id:meta.id||key,window:!!meta.window,windowKey:meta.windowKey,windowSeasonalKey:meta.windowSeasonalKey,
-     seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey,source:meta.source||"seed"};
-   seen.add(key); out.push(item);
- }
- for(const r of catalogWithExtras()){
-   const room=r[0]; let area=r[1],tasks=r[2];
-   if(!Array.isArray(tasks) && Array.isArray(area)){tasks=area;area=SEED_ROOMS[room]?.[1]||"Ganzes Haus";}
-   if(!Array.isArray(tasks))continue;
-   for(const t of tasks)add(t,room,area||"",{key:"seed|"+room+"|"+t,editable:true,source:"seed"});
- }
- for(const [t] of ROTATIONS)add(t,"Rotationsaufgabe","Turnus",{key:"rotation|"+t,editable:false,source:"rotation"});
- for(const [,tasks] of DAILY)for(const t of tasks)add(t,"Ganzes Haus","Alltag",{key:"daily|"+t,editable:false,source:"daily"});
- for(const c of state.custom){
-   const key=c.key||("custom|"+c.id);
-   if(catalogDeleted(key))continue;
-   add(c.text,c.room,c.area,{key,editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||0,place:c.place||"",description:c.description||"",id:c.id,source:"custom"});
- }
- for(const w of windowCatalogEntries())add(w.text,w.room,w.area,{key:"window|"+w.windowKey,editable:false,window:true,windowKey:w.windowKey,windowSeasonalKey:w.windowSeasonalKey,source:"window"});
- for(const x of SEASONAL_SPECIALS)add(x.text,x.room,x.area,{key:"seasonal|"+x.key+"|"+x.text,editable:false,seasonal:true,seasonalKey:x.key,source:"seasonal"});
- return out;
-}
-function definition(title,room="",area=""){
- if(/Fenster/.test(title)){
-   return {
-    what:"Nur den genannten Fenster-Abschnitt gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank; bei Bedarf Rahmen/Falz im jeweiligen Abschnitt.",
-    belongs:[room||"genannter Fensterbereich"],
-    not:["Keine anderen Fenster des Hauses zusätzlich","Keine Leiter-/Höhenarbeiten ohne sichere Ausstattung"],
-    care:["Fensterpflege in kleine Abschnitte aufteilen; an einem Fenster-Schwerpunkt-Tag entfallen normale Hauspflege-Sonderaufgaben."]
-   };
- }
-
- const t=title.toLowerCase();
- let what=title, belongs=[],not=[],care=[];
- if(/saugen|absaugen/.test(t)){what="Den genannten Bereich gründlich absaugen, inklusive Kanten und sichtbarer Ecken.";belongs=["gut zugängliche Flächen","Ecken und Kanten","sichtbare Krümel/Staubnester"];not=["Möbel komplett verrücken","unzugängliche Bereiche erzwingen"];care=["Bei Möbeln/Teppichen Material und Saugstufe beachten."]}
- else if(/wischen|abwischen|reinigen|sauber machen|säubern/.test(t)){what="Die genannte Oberfläche bzw. den genannten Bereich sauber und streifenarm reinigen.";belongs=["sichtbarer Staub","Krümel","normale Verschmutzungen"];not=["Material durchnässen","aggressive Mittel ohne Materialfreigabe"];care=["Passendes Tuch und materialgereinigtes Mittel verwenden."]}
- if(/türklink|türgriff|türkanten/.test(t)){what="Griff, Klinke und direkt berührte Bereiche gründlich abwischen.";belongs=["Griff","Rosette","direkte Griffzone"];not=["Türblatt komplett reinigen"];care=["Nicht in elektrische Bauteile oder empfindliche Beschläge sprühen."]}
- if(/lichtschalter/.test(t)){what="Nur die zugängliche Außenfläche des Lichtschalters abwischen.";belongs=["Schalteroberfläche","Randbereich"];not=["Schalter öffnen","Flüssigkeit hineinsprühen"];care=["Tuch nur leicht anfeuchten."]}
- if(/steckdose/.test(t)){what="Nur die Außenfläche der Steckdose vorsichtig abwischen.";belongs=["Abdeckung","sichtbarer Rand"];not=["Steckdose öffnen","Flüssigkeit in Öffnungen"];care=["Nur trocken bzw. sehr leicht feucht arbeiten."]}
- if(/toilette|wc-bürste|toilettenrand/.test(t)){what="Das genannte WC-Element gründlich hygienisch reinigen.";belongs=["Innen-/Außenflächen je nach Aufgabe","Rand und sichtbare Spritzer"];not=["andere Badflächen automatisch mitmachen"];care=["Handschuhe tragen. Reinigungsmittel niemals mit Chlor-/Säureprodukten mischen."]}
- if(/fugen|silikon/.test(t)){what="Fugen bzw. Silikon auf Verschmutzung und Auffälligkeiten prüfen und materialgerecht reinigen.";belongs=["sichtbare Ablagerungen","Schimmel-/Verfärbungsstellen beobachten"];not=["beschädigtes Silikon herausreißen"];care=["Bei Schäden oder Schimmelbefall nicht aggressiv scheuern, sondern fachgerecht beurteilen lassen."]}
- if(/kamin|asche|ruß|feuerraum|kaminrost/.test(t)){what="Den genannten Kaminbereich nur im sicheren, vollständig erkalteten Zustand reinigen.";belongs=["erkaltete Asche bzw. die ausdrücklich genannte Kaminfläche"];not=["heiße Asche anfassen","Glut oder Feuer berühren"];care=["Herstellerangaben beachten. Fachgerechte Kamin-/Schornsteinkontrollen nach den geltenden Vorgaben durchführen lassen."]}
- if(/waschmaschine/.test(t)){what="Die genannte zugängliche Außen-/Pflegefläche der Waschmaschine reinigen.";belongs=["Außenfläche","Waschmittelschublade/Dichtung, falls genannt"];not=["Gerät öffnen","technische Teile zerlegen"];care=["Pflegeprogramm und Herstellerangaben beachten."]}
- if(/trockner|flusensieb/.test(t)){what="Trockner bzw. Filter entsprechend der genannten Aufgabe reinigen.";belongs=["Außenfläche","Flusensieb nach Herstellerangabe"];not=["technische Komponenten zerlegen"];care=["Filter und Wartung exakt nach Herstellerangaben."]}
- if(/fenster/.test(t)){what="Das ausdrücklich genannte Fensterteil reinigen und anschließend auf sichtbare Verschmutzungen prüfen.";belongs=["nur der genannte Fensterbereich"];not=["unsichere Außenarbeiten"];care=["Außen nur sicher erreichbar arbeiten; Raffstores/Fenster nach Herstellerangaben."]}
- if(/matratze/.test(t)){what="Matratze nach Pflegehinweisen pflegen, wenden/absaugen nur soweit dafür vorgesehen.";belongs=["Matratzenoberfläche","zugängliche Seiten"];not=["Matratze falsch biegen oder durchnässen"];care=["Pflegeetikett beachten."]}
- if(/vorhang/.test(t)){what="Vorhang bzw. Schiene/Stange entsprechend der genannten Aufgabe entstauben oder reinigen.";belongs=["genannter Vorhangbereich"];not=["Textilien ohne Pflegeetikett waschen"];care=["Pflegeetikett und Material beachten."]}
- if(/sockelleiste/.test(t)){what="Sockelleisten entlang des genannten Bereichs von Staub und sichtbaren Verschmutzungen befreien.";belongs=["Oberkante","Vorderseite","Ecken"];not=["Wandfarbe abschrubben"];care=["Nur leicht feucht reinigen, wenn Material das zulässt."]}
- if(/spinnweb/.test(t)){what="Sichtbare Spinnweben an Decken-, Wand- und Türbereichen entfernen.";belongs=["sichtbare Spinnweben","Ecken"];not=["Wände komplett reinigen"];care=["Sanft arbeiten, besonders bei empfindlichem Stuck."]}
- if(/lampe|leuchten/.test(t)){what="Erreichbare Leuchten außen vorsichtig entstauben/reinigen.";belongs=["zugängliche Außenflächen"];not=["Leuchte zerlegen","unsicher auf Leitern arbeiten"];care=["Stromsicherheit und Herstellerhinweise beachten."]}
- if(/sauna/.test(t)){what="Saunaraum nach Nutzung bzw. im Turnus reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Ofen zerlegen"];care=["Holz und Ofen ausschließlich nach Herstellerangaben behandeln."]}
- if(/backofen/.test(t)){what="Backofen bzw. die ausdrücklich genannten Teile von Fett- und Speiseresten befreien.";belongs=["Innenraum","Tür/Bleche nur wenn genannt"];not=["technische Teile zerlegen"];care=["Herstellerhinweise und Materialverträglichkeit beachten."]}
- if(/geschirrspüler/.test(t)){what="Geschirrspüler im genannten Pflegeumfang reinigen und pflegen.";belongs=["Filter","Dichtung","Pflegeprogramm, wenn genannt"];not=["Maschine zerlegen"];care=["Herstellerangaben beachten."]}
- if(/kühlschrank/.test(t)){what="Kühlschrank im genannten Umfang ausräumen, reinigen und wieder ordentlich einräumen.";belongs=["genannte Fächer/Dichtungen","sichtbare Verschmutzungen"];not=["Lebensmittel unnötig wegwerfen"];care=["Lebensmittel kühl halten und nur wirklich Verdorbenes entsorgen."]}
- if(/arbeitsfläche|arbeitsplatten/.test(t)){what="Die Arbeitsfläche vollständig freiräumen, reinigen und wieder sinnvoll nutzbar machen.";belongs=["gesamte zugängliche Fläche","Randbereiche"];not=["Schränke innen, sofern nicht genannt"];care=["Materialgerechtes Reinigungsmittel."]}
- if(/esstisch|tisch/.test(t)){what="Den ausdrücklich genannten Teil des Tisches reinigen.";belongs=["Oberfläche bzw. genannter Teil","Krümel in sichtbaren Ritzen, falls genannt"];not=["Stühle oder Boden automatisch mitreinigen"];care=["Material und Beschichtung beachten."]}
- if(/schublad|regal|schrank/.test(t)){what="Den genannten Stauraum leeren bzw. ordnen und die ausdrücklich genannte Fläche reinigen.";belongs=["Innen-/Außenfläche je nach Aufgabe","sichtbarer Staub"];not=["gesamten Inhalt ungefragt aussortieren"];care=["Nur entsorgen, was wirklich weg soll."]}
- if(/kleidung|schuhe|taschen|spielzeug|bücher|noten|vorräte/.test(t)){what="Die genannten Dinge kurz ordnen, sinnvoll gruppieren und nur bei Bedarf aussortieren.";belongs=["offensichtliches Durcheinander","passender Stauraum"];not=["perfektes Neuorganisieren des ganzen Raums"];care=["Ziel ist Funktionalität, nicht Perfektion."]}
- if(/bettwäsche|handtücher|decken|teppiche|polster/.test(t)){what="Das genannte Textil nach Pflegeetikett bzw. Pflegehinweis behandeln.";belongs=["genanntes Textil","sichtbarer Staub/Verschmutzung"];not=["Pflegeetikett ignorieren"];care=["Wasch-/Reinigungstemperatur und Trocknung beachten."]}
- if(/müll|papierkorb/.test(t)){what="Den genannten Müll prüfen, bei Bedarf leeren und den Behälter sauber halten.";belongs=["Füllstand","sichtbare Verschmutzung"];not=["halbvolle Behälter zwanghaft leeren"];care=["Bei Biomüll hygienisch arbeiten."]}
- if(/stuck/.test(t)){what="Stuck vorsichtig und trocken von losem Staub befreien.";belongs=["sichtbare Staubauflage"];not=["nass schrubben","Druck auf empfindliche Profile"];care=["Bei empfindlichem/denkmalartigem Material besonders sanft."]}
- if(/böden|boden/.test(t)){what="Den genannten Bodenbereich gründlich reinigen.";belongs=["zugängliche Fläche","Ecken und sichtbare Verschmutzungen"];not=["Möbel schwer verrücken"];care=["Belagmaterial beachten."]}
- if(!belongs.length)belongs=["genau der genannte Bereich bzw. Gegenstand","sichtbare Verschmutzungen"];
- if(!not.length)not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"];
- if(!care.length)care=["Wenn Material oder Hersteller etwas anderes vorgibt, hat diese Vorgabe Vorrang."];
- return {what,belongs,not,care,room,area};
-}
-const DEFINITIONS={};
-for(const x of allCatalog()) if(!DEFINITIONS[x.text]) DEFINITIONS[x.text]=definition(x.text,x.room,x.area);
-function openDetail(title,room="",area=""){
- const cat=allCatalog().find(x=>x.text===title&&x.room===room&&x.area===area);
- const d=DEFINITIONS[title]||definition(title,room,area);
- if(cat?.description) d.what=cat.description;
- if(cat?.place) d.belongs=["Genauer Ort: "+cat.place,...d.belongs];
- document.getElementById("detailMeta").textContent=[room,area].filter(Boolean).join(" · ");
- document.getElementById("detailTitle").textContent=title;
- document.getElementById("detailContent").innerHTML=
- `<div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div>
-  <div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
-  <div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
-  <div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`;
- document.getElementById("detailOverlay").classList.add("open");
-}
-function catalogPlannedToday(x){
- const planned=plannedTasks();
- return planned.find(t=>t.text===x.text && t.room===x.room && !isPostponed(t));
-}
-function addCatalogToToday(x){
- const existing=catalogPlannedToday(x);
- if(existing){ toast(isDone(existing)?"Ist heute bereits erledigt ✓":"Ist heute bereits im Plan ❤️"); return; }
- state.todayExtras=Array.isArray(state.todayExtras)?state.todayExtras:[];
- const id="extra|"+dayKey()+"|"+uid();
- state.todayExtras.push({id,date:dayKey(),text:x.text,room:x.room,area:x.area,canonical:"extra|"+x.room+"|"+x.text});
- state.done[id]=false;
- save();
- toast("Heute hinzugefügt ❤️");
-}
-function nextWeekdayOnOrAfter(d,dow){const out=new Date(d);out.setDate(out.getDate()+((dow-out.getDay()+7)%7));return out;}
-function catalogInterval(x){
- const t=(x.text||'').toLowerCase();
- if(Number(x.interval)>0)return Number(x.interval);
- if(x.window||/fenster/.test(t))return 180;
- if(/kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;
- if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;
- if(/sockelleiste|fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;
- if(/bettwäsche|handtücher/.test(t))return 14;
- if(/vorhang|teppich|polster|matratze|stuck|lampe|türblätter|türrahmen|zargen|fugen|silikon|backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 90;
- if(/sortieren|ordnen|aussortieren|vorräte|schubladen|regal|schrank|kabel|papierstapel/.test(t))return 90;
- return 60;
-}
-function scheduleAnchor(x){
- const explicit=String(x.start||'');
- if(explicit && /^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
- return '';
-}
-function dateFromKey(k){ return new Date(k+'T12:00:00'); }
-function isSameDay(a,b){ return dayKey(a)===dayKey(b); }
-function weeklySlotFor(x, catalogList=null, referenceDate=today){
- const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
- const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
- if(dowByRoom[x.room]===undefined)return null;
- const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
- const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
- const slot=nextWeekdayOnOrAfter(new Date(2026,7,31,12),dowByRoom[x.room]);
- slot.setDate(slot.getDate()+Math.floor(idx/2)*7);
- while(slot<ref)slot.setDate(slot.getDate()+7);
- return slot;
-}
-function scheduledDateFor(x, referenceDate=today, catalogList=null){
- const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
- if(x.area==='Alltag')return ref;
- if(x.window){
-   const group=SEASONAL_SPECIALS.find(s=>s.key===x.windowSeasonalKey);
-   const ds=(group?.dates||[]).slice().sort();
-   for(const date of ds){const d=dateFromKey(date);if(d>=ref)return d;}
-   return ds.length?dateFromKey(ds[0]):ref;
- }
- if(x.seasonal){
-   const ds=SEASONAL_SPECIALS.filter(s=>s.key===x.seasonalKey).flatMap(s=>s.dates||[]).sort();
-   for(const date of ds){const d=dateFromKey(date);if(d>=ref)return d;}
-   return ds.length?dateFromKey(ds[0]):ref;
- }
- // Explicitly edited/custom tasks: their start date + interval is authoritative.
- const anchor=scheduleAnchor(x);
- if(anchor && Number(x.interval)>0){
-   let d=dateFromKey(anchor);
-   const last=state.lastDone?.['catalog|'+x.key]||state.lastDone?.[x.canonical]||state.lastDone?.[x.room+'|'+x.text]||'';
-   if(last){
-     const ld=dateFromKey(last);
-     // A completed task starts its next cycle from the actual completion date,
-     // but never creates a phantom date before the configured anchor.
-     d=ld>=d?ld:d;
-   }
-   while(d<ref)d.setDate(d.getDate()+Number(x.interval));
-   if(last && isSameDay(d,dateFromKey(last)))d.setDate(d.getDate()+Number(x.interval));
-   return d;
- }
- // Existing built-in room tasks: one authoritative weekly slot, shared by
- // catalog and calendar. The task's position within the room determines the slot.
- if(BASEMENT.includes(x.room)){
-   const last=state.lastDone?.[x.room+'|'+x.text]||'';
-   let start=ref;
-   if(last){start=dateFromKey(last);start.setDate(start.getDate()+1);}
-   return nextBasementOccurrence(x.room,start);
- }
- const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
- if(dowByRoom[x.room]!==undefined){
-   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
-   const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
-   const d=weeklySlotFor(x,catalogList,ref);
-   return d||ref;
- }
- const rot=ROTATIONS.find(r=>r[0]===x.text);
- if(rot){
-   const last=state.lastDone?.['care|'+x.room+'|'+x.text]||state.lastDone?.['care|Rotationsaufgabe|'+x.text]||state.lastDone?.[x.text]||'';
-   let d=last?dateFromKey(last):new Date(CARE_START);
-   if(last)d.setDate(d.getDate()+rot[1]);else{const item=CARE_POOL.find(t=>t.text===x.text);d=item?careDateFor(item):d;}
-   while(d<ref)d.setDate(d.getDate()+rot[1]);
-   return d;
- }
- const start=anchor?dateFromKey(anchor):ref;
- return start<ref?ref:start;
-}
-function catalogNextDate(x, referenceDate=today, catalogList=null){
- return scheduledDateFor(x,referenceDate,catalogList);
-}
-function taskIsDueOnDate(x,d,catalogList=null){
- const target=new Date(d); target.setHours(12,0,0,0);
- const explicit= scheduleAnchor(x);
- // An explicitly scheduled catalog/custom task always wins over the default
- // Sunday-free rule: if the user chose a date, that date is authoritative.
- if(target.getDay()===0 && x.area!=='Alltag' && !(explicit && Number(x.interval)>0))return false;
- if(x.window||x.seasonal)return isSameDay(scheduledDateFor(x,target,catalogList),target);
- if(explicit && Number(x.interval)>0){
-   let first=dateFromKey(explicit);
-   const last=state.lastDone?.['catalog|'+x.key]||state.lastDone?.[x.canonical]||state.lastDone?.[x.room+'|'+x.text]||'';
-   if(last){
-     const ld=dateFromKey(last);
-     if(ld>=first)first=ld;
-   }
-   if(target<first)return false;
-   const diff=Math.round((target-first)/86400000);
-   return diff>=0 && diff%Number(x.interval)===0;
- }
- if(BASEMENT.includes(x.room))return isSameDay(scheduledDateFor(x,target,catalogList),target);
- const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
- if(dowByRoom[x.room]!==undefined){
-   const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
-   const slot=weeklySlotFor(x,catalogList,new Date(2026,7,31,12));
-   if(!slot || target<slot)return false;
-   return (Math.round((target-slot)/86400000)%7)===0;
- }
- return isSameDay(scheduledDateFor(x,target,catalogList),target);
-}
-function formatCatalogNextDate(d){
- if(!d)return formatCatalogNextDate(today);
- return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"});
-}
-
-function catalogCanEdit(x){ return !!x && x.editable!==false && x.area!=="Alltag" && x.source!=="rotation" && x.source!=="daily" && !x.window && !x.seasonal; }
-function closeCatalogEditor(){ const el=document.getElementById("catalogEditorOverlay"); if(el)el.remove(); }
-function openCatalogEditor(x=null){
- const isEdit=!!x, old=x||{};
- const overlay=document.createElement("div"); overlay.id="catalogEditorOverlay"; overlay.className="catalogEditorOverlay";
- const rooms=Array.from(new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])).sort();
- const firstDue=old.start || (isEdit ? iso(catalogNextDate(old)) : dayKey(today));
- overlay.innerHTML=`<div class="catalogEditorSheet">
-   <div class="sheetTop"><div><div class="small">${isEdit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${isEdit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="catalogEditorClose">×</button></div>
-   <label class="editorLabel">Aufgabe<input id="ceText" value="${esc(old.text||"")}" placeholder="z. B. Schubladen auswischen"></label>
-   <label class="editorLabel">Raum<input id="ceRoom" list="catalogRoomList" value="${esc(old.room||"")}" placeholder="z. B. Lagerraum"><datalist id="catalogRoomList">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label>
-   <label class="editorLabel">Bereich / Etage<input id="ceArea" value="${esc(old.area||"")}" placeholder="z. B. Keller"></label>
-   <label class="editorLabel">Genauer Ort (optional)<input id="cePlace" value="${esc(old.place||"")}" placeholder="z. B. Fenster links neben der Tür"></label>
-   <label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="ceDescription" rows="4" placeholder="Was genau soll gemacht werden? Was gehört dazu, was nicht?">${esc(old.description||"")}</textarea></label>
-   <div class="editorTwo"><label class="editorLabel">Erster / nächster Termin<input id="ceStart" type="date" value="${esc(firstDue)}"></label>
-   <label class="editorLabel">Periode (Tage)<input id="ceInterval" type="number" min="1" step="1" value="${old.interval||catalogInterval(old)||60}"></label></div>
-   <div class="small editorHint">Datum = erster Fälligkeitstermin. Nach jeder Erledigung wird der nächste Termin automatisch um die eingestellte Periode weitergesetzt.</div>
-   <div class="editorActions"><button class="btn" id="ceCancel">Abbrechen</button><button class="btn primary" id="ceSave">${isEdit?"Änderungen speichern":"Aufgabe speichern"}</button></div>
-   ${isEdit?`<button class="deleteBtn" id="ceDelete">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}
- </div>`;
- document.body.appendChild(overlay);
- const close=()=>closeCatalogEditor();
- overlay.querySelector("#catalogEditorClose").onclick=close; overlay.querySelector("#ceCancel").onclick=close;
- overlay.onclick=e=>{if(e.target===overlay)close();};
- overlay.querySelector("#ceSave").onclick=()=>{
-   const text=overlay.querySelector("#ceText").value.trim(), room=overlay.querySelector("#ceRoom").value.trim(), area=overlay.querySelector("#ceArea").value.trim(), place=overlay.querySelector("#cePlace").value.trim(), description=overlay.querySelector("#ceDescription").value.trim();
-   const start=overlay.querySelector("#ceStart").value, interval=Math.max(1,Number(overlay.querySelector("#ceInterval").value)||60);
-   if(!text||!room||!area||!start){toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");return;}
-   state.catalogEdits=state.catalogEdits||{};
-   if(isEdit){
-     state.catalogEdits[old.key]={text,room,area,place,description,start,interval};
-     // If a custom task was edited, keep its own record in sync.
-     if(old.source==="custom"){
-       const c=state.custom.find(c=>(c.key||("custom|"+c.id))===old.key);
-       if(c){c.text=text;c.room=room;c.area=area;c.place=place;c.description=description;c.start=start;c.interval=interval;}
-     }
-     toast("Aufgabe geändert ❤️");
-   }else{
-     const id="custom|"+uid(),key=id;
-     state.custom.push({id,key,text,room,area,place,description,start,interval});
-     state.done[id]=false;
-     toast("Neue Aufgabe hinzugefügt ❤️");
-   }
-   save();close();render();
- };
- if(isEdit)overlay.querySelector("#ceDelete").onclick=()=>{
-   if(!confirm(`„${old.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;
-   state.catalogDeleted=state.catalogDeleted||{}; state.catalogDeleted[old.key]=true;
-   if(old.source==="custom")state.custom=state.custom.filter(c=>(c.key||("custom|"+c.id))!==old.key);
-   save();close();render();toast("Aufgabe gelöscht");
- };
-}
-function renderCatalog(){
- const main=document.getElementById("main");
- main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Aufgaben suchen, hinzufügen, ändern oder löschen.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="newCatalogTask">＋ Neue Aufgabe</button><button class="btn" id="backToday">Heute</button></div></div>
- <div style="margin-top:15px"><input class="search" id="search" placeholder="Aufgabe, Raum, Bereich suchen …" autocomplete="off"></div>
- <div id="results" style="margin-top:12px"></div></div>`;
- const input=main.querySelector("#search"),results=main.querySelector("#results");
- main.querySelector("#newCatalogTask").onclick=()=>openCatalogEditor(null);
- function draw(){
-  const q=input.value.trim().toLowerCase();
-  const arr=allCatalog().filter(x=>!q || [x.text,x.room,x.area].join(" ").toLowerCase().includes(q));
-  results.innerHTML=`<div class="small" style="padding:5px">${arr.length} Treffer</div>`;
-  arr.slice(0,100).forEach(x=>{
-   const planned=catalogPlannedToday(x), editable=catalogCanEdit(x);
-   const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div>${x.description?`<div class="meta">${esc(x.description.slice(0,140))}${x.description.length>140?"…":""}</div>`:""}<div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div>
-     ${editable?`<button class="iconBtn" title="Aufgabe bearbeiten">✏️</button>`:""}
-     ${editable?`<button class="iconBtn" title="Aufgabe löschen">🗑️</button>`:""}
-     <button class="iconBtn" title="Details">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
-   const offset=editable?2:0;
-   if(editable){
-     row.children[1].onclick=()=>openCatalogEditor(x);
-     row.children[2].onclick=()=>{if(confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`)){state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;if(x.source==="custom")state.custom=state.custom.filter(c=>(c.key||("custom|"+c.id))!==x.key);save();render();toast("Aufgabe gelöscht");}};
-   }
-   row.children[1+offset].onclick=()=>openDetail(x.text,x.room,x.area);
-   row.children[2+offset].onclick=()=>addCatalogToToday(x);
-   if(planned){row.children[2+offset].classList.add("plannedToday");row.children[2+offset].title=isDone(planned)?"Heute bereits erledigt":"Heute bereits im Tagesplan";}
-   results.appendChild(row);
-  });
-  if(!arr.length)results.innerHTML+=`<div class="empty">Nichts gefunden. ❤️</div>`;
- }
- input.oninput=draw;draw();
- main.querySelector("#backToday").onclick=()=>{selectedTab="today";render()};
- input.focus();
-}
-
-function sundayOptionalEnabled(){
- return !!(state.sundayOptional && state.sundayOptional[dayKey(today)]);
-}
-function setupSundayOptional(){
- const card=document.getElementById("sundayOptionalCard");
- const btn=document.getElementById("sundayOptionalBtn");
- if(!card||!btn)return;
- const isSunday=today.getDay()===0;
- card.style.display=isSunday?"block":"none";
- if(!isSunday)return;
- const enabled=sundayOptionalEnabled();
- btn.textContent=enabled?"✓ Sonntag genutzt":"☀️ Sonntag nutzen";
- btn.disabled=enabled;
- btn.onclick=()=>{
-   state.sundayOptional=state.sundayOptional||{};
-   state.sundayOptional[dayKey(today)]=true;
-   save(); render(); toast("Sonntag freigeschaltet ❤️");
- };
-}
-
-function render(){
- setupSundayOptional();
- document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
- if(selectedTab==="today")renderToday();
- else if(selectedTab==="week")renderWeek();
- else if(selectedTab==="history")renderHistory();
- else renderCatalog();
-}
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});
-document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");
-document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
+function render(){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
