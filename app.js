@@ -1,6 +1,6 @@
-/* Unser Zuhause – V109 · raumweise Türrahmen */
-const STORAGE="unser-zuhause-v134";
-const LEGACY_STORAGE="unser-zuhause-v120";
+/* Unser Zuhause – V137 · Rotationsaufgaben raumweise integriert */
+const STORAGE="unser-zuhause-v137";
+const LEGACY_STORAGE="unser-zuhause-v134";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
@@ -9,18 +9,38 @@ const DAILY=[
  ["🔎 Tagescheck",["Restmüll kontrollieren","Biomüll kontrollieren","Wäsche nur bei Bedarf starten","Kühlschrank nur bei Bedarf prüfen","Toiletten nur bei Bedarf prüfen","Küchenboden bei Essensresten reinigen","Sichtbare Bodenflecken beseitigen"]]
 ];
 const ROTATIONS=[
- ["🚪 Türklinken & häufig berührte Stellen",7],["🚪 Türblätter gründlich",75],
- ["🧹 Sockelleisten",42],["🕸️ Decken-/Wandecken auf Spinnweben",30],["✨ Lichtschalter außen abwischen",30],
- ["🔌 Steckdosen außen abwischen",75],["🏛️ Stuck vorsichtig trocken entstauben",120],["🪟 Fenster EG – Abschnitt",180],
- ["🪟 Fenster OG – Abschnitt",180],["☀️ Raffstores / Sonnenschutz nach Herstellerangabe",180],
- ["🪟 Vorhangstangen / Schienen",180],["💡 Erreichbare Lampen vorsichtig reinigen",120],["🧊 Kühlschrank prüfen und bei Bedarf reinigen",30],
- ["🔥 Backofen gründlich reinigen",75],["🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller",30],
- ["🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",30],["🧖 Sauna reinigen / pflegen",30],
- ["🛏️ Matratzen wenden/pflegen nach Herstellerangabe",180],["🧼 Fugen & Silikon kontrollieren / materialgerecht reinigen",90],
- ["🔥 Kamin: erkaltete Asche entfernen",30],["🔥 Kamin: Feuerraum auskehren",60],["🔥 Kaminrost reinigen",60],
- ["🔥 Kaminbesteck abwischen",30],["🔥 Kaminholz schlichten",14],["🔥 Holzablage reinigen",30],
- ["🔥 Bereich direkt vor Kamin gründlich absaugen",14],["🔥 Ruß-/Aschespuren entfernen",30],["🔥 Kaminverkleidung materialgerecht reinigen",90],
- ["🔥 Kaminglas reinigen, falls vorhanden",30],["🔥 Fachgerechte Kamin-/Schornsteinkontrolle und Wartung nach Vorgabe",365]
+ {text:"Türklinken reinigen",interval:7,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Türblätter gründlich reinigen",interval:75,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Sockelleisten reinigen",interval:42,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Decken-/Wandecken auf Spinnweben prüfen",interval:30,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Lichtschalter außen reinigen",interval:30,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Steckdosen außen reinigen",interval:75,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"🏛️ Stuck vorsichtig trocken entstauben",interval:120,rooms:["Wohnzimmer","Flur","Stiegenhaus"],area:"Raum"},
+ {text:"Vorhangstangen / Schienen reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2","Ankleidezimmer"],area:"Raum"},
+ {text:"Erreichbare Lampen reinigen",interval:120,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"🧊 Kühlschrank prüfen und bei Bedarf reinigen",interval:30,rooms:["Küche"],area:"EG"},
+ {text:"🔥 Backofen gründlich reinigen",interval:75,rooms:["Küche"],area:"EG"},
+ {text:"🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller",interval:30,rooms:["Küche"],area:"EG"},
+ {text:"🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",interval:30,rooms:["Waschküche"],area:"Keller"},
+ {text:"🧖 Sauna reinigen / pflegen",interval:30,rooms:["Saunaraum"],area:"OG"},
+ {text:"🛏️ Matratzen wenden/pflegen nach Herstellerangabe",interval:180,rooms:["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"],area:"OG"},
+ {text:"🧼 Fugen & Silikon kontrollieren / materialgerecht reinigen",interval:90,rooms:["Gäste-WC","Kinderbad","Bad","WC"],area:"Raum"},
+ {text:"🔥 Kamin: erkaltete Asche entfernen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kamin: Feuerraum auskehren",interval:60,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminrost reinigen",interval:60,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminbesteck abwischen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminholz schlichten",interval:14,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Holzablage reinigen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Bereich direkt vor Kamin gründlich absaugen",interval:14,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Ruß-/Aschespuren entfernen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminverkleidung materialgerecht reinigen",interval:90,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminglas reinigen, falls vorhanden",interval:90,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Fachgerechte Kamin-/Schornsteinkontrolle und Wartung nach Vorgabe",interval:365,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🧺 Bettwäsche wechseln",interval:14,rooms:["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"],area:"OG"},
+ {text:"🧺 Handtücher wechseln",interval:14,rooms:["Gäste-WC","Kinderbad","Bad","WC"],area:"Raum"},
+ {text:"🧺 Decken nach Pflegeetikett reinigen",interval:180,rooms:["Wohnzimmer","Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"],area:"Raum"},
+ {text:"🧺 Teppiche nach Pflegehinweisen reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Kinderzimmer 1","Kinderzimmer 2"],area:"Raum"},
+ {text:"🧺 Vorhänge nach Pflegeetikett reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"],area:"Raum"}
 ];
 const catalogSeed=[
 ['Wohnzimmer','EG',['Polster absaugen','Sofaritze absaugen','Sofakissen ausschütteln','Decken ordentlich zusammenlegen','Fernbedienungen sammeln','Dekoration abstauben','Bilderrahmen abstauben','Fensterbank abwischen','Möbelfüße sichtbar reinigen','Teppich gründlich absaugen','Teppichränder kontrollieren','Vorhänge auf Staub prüfen','Kaminbereich reinigen']],
@@ -47,20 +67,22 @@ const catalogSeed=[
 ['Trainingsraum','Keller',['Trainingsgeräte abwischen','Matten reinigen','Gewichte/Griffe abwischen','Handtücher einsammeln','Ablageflächen ordnen','Spiegel reinigen','Boden saugen','Boden wischen']],
 ['Technikraum','Keller',['Sichtbaren Staub entfernen','Zugänge freihalten','Boden bei Bedarf reinigen','Keine technischen Komponenten öffnen']],
 ['Lagerraum','Keller',['Kartons ordnen','Vorräte prüfen','Regale abstauben','Boden saugen','Boden wischen']],
-['Keller allgemein','Keller',['Spinnweben entfernen','Sichtbare Ablagerungen entfernen','Boden saugen','Boden wischen','Ecken kontrollieren']],
 ['Saunaraum','OG',['Nach Nutzung lüften','Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
-['Treppenhaus','Ganzes Haus',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
-['Fenster / Ganzes Haus','Ganzes Haus',['Fenster innen reinigen','Fenster außen reinigen, wenn sicher','Fensterbänke reinigen','Dichtungen kontrollieren','Vorhangstangen reinigen','Vorhänge nach Pflegeetikett reinigen','Raffstores nach Herstellerangabe reinigen']],
-['Türen / Ganzes Haus','Ganzes Haus',['Türklinken reinigen','Türrahmen/Zargen reinigen','Türblätter abwischen','Türkanten reinigen','Lichtschalter außen reinigen','Steckdosen außen abwischen','Spinnweben über Türen entfernen']],
-['Kamin / Wohnzimmer','EG',['Erkaltete Asche aus Feuerraum entfernen','Feuerraum auskehren','Kaminrost reinigen','Kaminbesteck abwischen','Kaminholz schlichten','Holzablage reinigen','Bereich direkt vor Kamin gründlich absaugen','Ruß-/Aschespuren entfernen','Kaminverkleidung materialgerecht reinigen','Kaminglas, falls vorhanden, reinigen','Fachgerechte Kontrolle/Wartung nach Vorgabe']],
-['Ganzes Haus – Textilien','Ganzes Haus',['Bettwäsche wechseln','Handtücher wechseln','Decken nach Pflegeetikett reinigen','Teppiche nach Pflegehinweisen reinigen','Vorhänge nach Pflegeetikett reinigen','Polster nach Pflegehinweisen reinigen']],
-['Ganzes Haus – Allgemein','Ganzes Haus',['Sockelleisten reinigen','Decken-/Wandecken entstauben','Stuck vorsichtig trocken entstauben','Erreichbare Lampen reinigen','Lichtschalter außen reinigen','Steckdosen außen reinigen','Türblätter reinigen']]
+['Stiegenhaus','EG/OG',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
 ];
+// Auch die früheren „Keller allgemein“-Punkte sind jetzt direkt in die jeweiligen Kellerräume integriert.
+for (const room of ["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"]) {
+  const row=catalogSeed.find(r=>r[0]===room);
+  if(row){
+    for(const t of ["Spinnweben entfernen","Sichtbare Ablagerungen entfernen","Ecken kontrollieren"]) if(!row[2].includes(t)) row[2].push(t);
+  }
+}
+
 // Türrahmen/Zargen werden bewusst raumweise geführt – nie als „ganzes Haus“-Aufgabe.
 // Dadurch kann der Planer das Pensum pro Raum sinnvoll portionieren.
 const DOORFRAME_ROOMS = new Set(catalogSeed.map(r=>r[0]).filter(r =>
   !r.includes("Ganzes Haus") &&
-  r !== "Kamin / Wohnzimmer"
+  r !== "Stiegenhaus"
 ));
 for (const row of catalogSeed) {
   const [room, area, tasks] = row;
@@ -76,10 +98,7 @@ const SEED_ROOMS = {
  "Schlafzimmer":["Schlafzimmer","OG"],"Ankleidezimmer":["Ankleidezimmer","OG"],"Kinderzimmer 1":["Kinderzimmer 1","OG"],
  "Kinderzimmer 2":["Kinderzimmer 2","OG"],"Flur OG":["Flur OG","OG"],"Waschküche":["Waschküche","Keller"],"Musikzimmer":["Musikzimmer","Keller"],
  "Trainingsraum":["Trainingsraum","Keller"],"Flur KG":["Flur KG","Keller"],"Technikraum":["Technikraum","Keller"],"Lagerraum":["Lagerraum","Keller"],
- "Keller allgemein":["Keller allgemein","Keller"],"Saunaraum":["Saunaraum","OG"],"Treppenhaus":["Treppenhaus","Ganzes Haus"],
- "Fenster / Ganzes Haus":["Fenster / Ganzes Haus","Ganzes Haus"],"Türen / Ganzes Haus":["Türen / Ganzes Haus","Ganzes Haus"],
- "Kamin / Wohnzimmer":["Kamin / Wohnzimmer","EG"],"Ganzes Haus – Textilien":["Ganzes Haus – Textilien","Ganzes Haus"],
- "Ganzes Haus – Allgemein":["Ganzes Haus – Allgemein","Ganzes Haus"]
+ "Saunaraum":["Saunaraum","OG"],"Stiegenhaus":["Stiegenhaus","EG/OG"]
 };
 const WINDOW_INVENTORY = [
  ["KG","Waschküche",2],["KG","Musikzimmer",2],["KG","Technikraum",2],["KG","Trainingsraum",2],["KG","Flur KG",2],["KG","Stiegenhaus",1],
@@ -125,7 +144,7 @@ const SEASONAL_SPECIALS = [
 ];
 
 const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
-const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,"Flur OG":3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,"Flur OG":3,Saunaraum:3,Stiegenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
 const DAY_THEME={1:"EG · Wohnen, Essen & Küche",2:"Bäder & WCs",3:"OG · Schlafen, Kinder & Sauna",4:"EG · Nebenräume",5:"Keller · nur ein Raum",6:"Wäsche + maximal eine Sonderaufgabe",0:"Haushaltsfrei ❤️"};
 
 function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
@@ -178,6 +197,9 @@ function loadState(){
  s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
+ // Alte generische „Ganzes Haus“-/„Keller allgemein“-Aufgaben dürfen nicht wieder im Katalog auftauchen.
+ for(const [k,v] of Object.entries(s.catalogEdits)){const blob=(String(k)+" "+JSON.stringify(v)).toLowerCase();if(/ganzes haus|gesamtes haus|keller allgemein/.test(blob)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
+ if(Array.isArray(s.custom)) s.custom=s.custom.filter(c=>{const blob=(String(c?.room||"")+" "+String(c?.text||"")).toLowerCase();return !/ganzes haus|gesamtes haus|keller allgemein/.test(blob)})
  try{localStorage.setItem(STORAGE,JSON.stringify(s))}catch{}
  return s
 }
@@ -248,7 +270,7 @@ function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
 function catalogInterval(x){if(Number(x.interval)>0)return Number(x.interval);const t=(x.text||"").toLowerCase();if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;if(/sockelleiste|fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;if(/bettwäsche|handtücher|kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;if(/fenster|raffstore|vorhangstange|matratze|teppich|polster/.test(t))return 180;if(/türblätter|türrahmen|zargen|fugen|silikon|backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna|stuck|lampe/.test(t))return 90;return 60}
 
-function windowEntries(){const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};const out=[];for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);out.push({key:`window|${area}|${room}|${i}`,text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room:`Fenster ${area} · ${room}`,area,place:`Fenster ${i}`,description:"Nur dieses Fenster bzw. diesen kleinen Fensterbereich gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.",window:true,windowKey:`${area}|${room}|${i}`,windowGroup:map[area+"|"+room],source:"window",editable:false,interval:180});}return out}
+function windowEntries(){const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};const out=[];for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);out.push({key:`window|${area}|${room}|${i}`,text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""} + zugehörigem Raffstore`,room:`Fenster ${area} · ${room}`,area,place:`Fenster ${i}`,description:"Nur dieses Fenster bzw. diesen kleinen Fensterbereich gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters. Den zu diesem Fenster gehörenden Raffstore/Sonnenschutz nach Herstellerangabe mitreinigen bzw. prüfen.",window:true,windowKey:`${area}|${room}|${i}`,windowGroup:map[area+"|"+room],source:"window",editable:false,interval:180});}return out}
 const WINDOW_TASKS=windowEntries();
 const WINDOW_GROUP_DATES={};for(const s of SEASONAL_SPECIALS){if(!WINDOW_GROUP_DATES[s.key])WINDOW_GROUP_DATES[s.key]=[];WINDOW_GROUP_DATES[s.key].push(...s.dates)}for(const k in WINDOW_GROUP_DATES)WINDOW_GROUP_DATES[k]=[...new Set(WINDOW_GROUP_DATES[k])].sort();
 function windowDate(x,ref=today){
@@ -268,7 +290,7 @@ function windowDate(x,ref=today){
  return d;
 }
 
-function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){if(room==="Fenster / Ganzes Haus"||room==="Türen / Ganzes Haus"||room==="Ganzes Haus – Allgemein")continue;for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}for(const [text,interval] of ROTATIONS)add(text,"Rotationsaufgabe","Turnus",{key:`rotation|${text}`,editable:false,source:"rotation",interval});for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const roomText=new Set(out.map(x=>`${x.room}|${x.text}`));for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${r.text}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:false,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
 function refreshCatalog(){
  CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
  invalidatePlans();
@@ -457,9 +479,9 @@ function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.yea
 function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function themeFor(d){if(d.getDay()===0)return DAY_THEME[0];if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);return DAY_THEME[d.getDay()]||""}
 
-function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Ganzes Haus",area:"Alltag",group,source:"daily",editable:false});return out}
+function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Alltag",area:"Haushalt",group,source:"daily",editable:false});return out}
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
-function groupFor(x){if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;if(x.source==="rotation")return "Rotationsaufgabe";if(x.window)return "Fenster";return "Weitere Aufgabe"}
+function groupFor(x){if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;if(x.window)return "Fenster";return "Weitere Aufgabe"}
 function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:groupFor(x)}))}
 function ensureTodayPlanSnapshot(d=today){
  const k=dayKey(d);state.todayPlanSnapshot=state.todayPlanSnapshot||{};
@@ -524,7 +546,7 @@ function roomFocusTasks(room,d=today){
 function renderRoomFocus(main, tasks){
   const card=document.createElement("div");
   card.className="card roomFocus";
-  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
+  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && r!=="Rotationsaufgabe" && r!=="Keller allgemein" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
   const day=dayKey(today), selected=state.roomFocus?.[day]||"";
   card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh alle offenen Aufgaben dieses Raumes – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
   main.appendChild(card);
