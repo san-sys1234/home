@@ -163,7 +163,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear()}}
+function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function loadState(){
  let raw=null;
  try{raw=JSON.parse(localStorage.getItem(STORAGE)||"null")}catch{}
@@ -173,7 +173,7 @@ function loadState(){
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  try{localStorage.setItem(STORAGE,JSON.stringify(s))}catch{}
@@ -208,7 +208,29 @@ function postponedEntry(x){
  return null;
 }
 function isPostponed(x){const p=postponedEntry(x);return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
-function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);const id=taskId(x);state.postponed[id]={...x,key:x.key||id,from:dayKey(),postponedUntil:until};state.catalogEdits=state.catalogEdits||{};state.__planRevision=(state.__planRevision||0)+1;save();invalidatePlans();calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
+function postponeTask(x){
+ const day=dayKey();
+ ensureTodayPlanSnapshot(today);
+ const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
+ state.todayPlanLock=state.todayPlanLock||{};
+ state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
+ // "Später" is a real rescheduling action: move the task by one sensible
+ // cadence, never merely to the next day. The normal rhythm is based on the
+ // task type and, for room rotations, on that room's actual cycle.
+ let cadence=7;
+ if(x.window) cadence=180;
+ else if(x.start) cadence=Math.max(7,catalogInterval(x));
+ else if(x.source==="rotation") cadence=Math.max(7,catalogInterval(x));
+ else if(BASEMENT.includes(x.room)) cadence=7*BASEMENT.length;
+ else {
+   const items=roomItems(x.room);
+   if(items.length){ cadence=Math.max(7,Math.ceil(items.length/3)*7); }
+   else cadence=Math.max(7,catalogInterval(x));
+ }
+ const until=dayKey(addDays(today,cadence));const id=taskId(x);
+ state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until};
+ state.catalogEdits=state.catalogEdits||{};save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)
+}
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
 function syncCompletedDay(d=today){
@@ -298,12 +320,24 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v125|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v126|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
  const addFixed=(k,x)=>{const arr=days.get(k);if(!arr)return;arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)};
+ // Once the user postpones a task, keep the remaining tasks that were already
+ // planned for today. Do not refill the freed capacity with new tasks.
+ const lockedToday=state.todayPlanLock?.[dayKey(today)]||[];
+ if(lockedToday.length){
+   const lockedSet=new Set(lockedToday);
+   for(const x of CATALOG){
+     if(lockedSet.has(taskId(x))&&!isDone(x)&&!isPostponed(x)){
+       const arr=days.get(dayKey(today));
+       if(arr&&!arr.some(y=>taskId(y)===taskId(x))){arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);}
+     }
+   }
+ }
  // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
  for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
  // Flexible occurrences: create only the next required occurrence per task and
@@ -349,6 +383,7 @@ function buildIntelligentPlan(){
    }
    for(let delta=0;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
      const weight=taskWeight(occ.x);
@@ -403,7 +438,24 @@ function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const te
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
 function groupFor(x){if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;if(x.source==="rotation")return "Rotationsaufgabe";if(x.window)return "Fenster";return "Weitere Aufgabe"}
 function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:groupFor(x)}))}
-function plannedToday(){const d=today;if(d.getDay()===0&&!state.sundayOptional[dayKey(d)])return [];if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));const out=dailyTasks();const plan=plannedForDate(d);for(const x of plan)out.push({...x,group:groupFor(x)});for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})}
+function ensureTodayPlanSnapshot(d=today){
+ const k=dayKey(d);state.todayPlanSnapshot=state.todayPlanSnapshot||{};
+ if(Array.isArray(state.todayPlanSnapshot[k]))return state.todayPlanSnapshot[k];
+ const ids=plannedForDate(d).map(taskId);
+ state.todayPlanSnapshot[k]=[...new Set(ids)];
+ try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+ return state.todayPlanSnapshot[k];
+}
+function plannedToday(){
+ const d=today;if(d.getDay()===0&&!state.sundayOptional[dayKey(d)])return [];
+ if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
+ const out=dailyTasks();
+ const snapshot=new Set(ensureTodayPlanSnapshot(d));
+ const plan=CATALOG.filter(x=>snapshot.has(taskId(x)));
+ for(const x of plan)out.push({...x,group:groupFor(x)});
+ for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
+ const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
+}
 
 function definition(x){const t=x.text.toLowerCase();let what=x.description||x.text,belongs=[x.place?"Genauer Ort: "+x.place:"genau der genannte Bereich bzw. Gegenstand"],not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"],care=["Material- und Herstellerangaben haben Vorrang."];if(x.window){what=x.description||"Nur das genannte Fenster gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.";belongs=[x.place||"genanntes Fenster","Fensterbank","Rahmen und Falz dieses Fensters"];not=["Keine anderen Fenster des Hauses zusätzlich","Keine unsicheren Außen-/Höhenarbeiten"]}else if(/kamin|asche|ruß|feuerraum|rost/.test(t)){what=x.description||"Den genannten Kaminbereich nur vollständig erkaltet und sicher reinigen.";not=["Heiße Asche oder Glut anfassen","Feuerraum bei brennendem Feuer reinigen"];care=["Herstellerangaben beachten; fachgerechte Kontrolle/Wartung nach Vorgabe."]}else if(/lichtschalter|steckdose/.test(t)){what=x.description||"Nur die zugängliche Außenfläche vorsichtig abwischen.";not=["Schalter/Steckdose öffnen","Flüssigkeit in Öffnungen bringen"]}else if(/sauna/.test(t)){what=x.description||"Saunaraum im genannten Umfang reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Saunaofen zerlegen"];care=["Holz und Saunaofen ausschließlich nach Herstellerangaben behandeln."]}else if(/toilette|wc-bürste/.test(t)){what=x.description||"Das genannte WC-Element gründlich hygienisch reinigen.";care=["Handschuhe tragen. Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]}return {what,belongs,not,care}}
 function openDetail(x){const d=definition(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · nächster Termin: "+nextDueLabel(x);document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
@@ -434,7 +486,9 @@ function showEnergy(){
   if(!box){box=document.createElement("div");box.id="energyBox";box.className="card";main.insertBefore(box,main.children[1]||null)}
   const day=dayKey();
   if(state.energySkipDay!==day){state.energySkipDay=day;state.energySeen=[];state.energyOffset=0}
-  const base=CATALOG.filter(x=>x.area!=="Alltag"&&!x.window&&!isDone(x)&&!isPostponed(x)&&!recent(x,today,7)).sort((a,b)=>nextDue(a)-nextDue(b)||String(a.id).localeCompare(String(b.id)));
+  const todayIds=new Set(ensureTodayPlanSnapshot(today));
+  const extraIds=new Set(state.todayExtras.filter(e=>e.date===day).map(e=>e.sourceKey||e.key||taskId(e)));
+  const base=CATALOG.filter(x=>x.area!=="Alltag"&&!x.window&&!isDone(x)&&!isPostponed(x)&&!todayIds.has(taskId(x))&&!extraIds.has(taskId(x))&&!recent(x,today,7)).sort((a,b)=>nextDue(a)-nextDue(b)||String(a.id).localeCompare(String(b.id)));
   const seen=new Set(Array.isArray(state.energySeen)?state.energySeen:[]);
   let candidates=[];
   if(base.length){
