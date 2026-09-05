@@ -503,11 +503,14 @@ function taskRow(x,opts={}){const el=document.createElement("div");el.className=
 
 function focusRoomMatches(x,room){
   if(!x || !room)return false;
-  if(x.room===room)return true;
-  // Window tasks are separate inventory entries, but belong to the same room.
+  // Normal catalog tasks belong directly to the selected room.
+  if(!x.window && x.room===room)return true;
+  // Window inventory entries are technically stored under a synthetic
+  // "Fenster …" room, but must appear inside the real room's block.
   if(x.window){
+    const inventoryRoom=String(x.room||"").replace(/^Fenster\s+(?:EG|OG|KG)\s+·\s*/i,"").trim();
     const text=String(x.text||"");
-    return text.includes(room);
+    return inventoryRoom===room || text.includes(room);
   }
   return false;
 }
@@ -521,7 +524,7 @@ function roomFocusTasks(room,d=today){
 function renderRoomFocus(main, tasks){
   const card=document.createElement("div");
   card.className="card roomFocus";
-  const rooms=[...new Set(CATALOG.map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
+  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
   const day=dayKey(today), selected=state.roomFocus?.[day]||"";
   card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh alle offenen Aufgaben dieses Raumes – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
   main.appendChild(card);
