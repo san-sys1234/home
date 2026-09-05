@@ -110,7 +110,7 @@ input[type=text]{min-width:0}
 .catalogEditorOverlay{position:fixed;inset:0;background:rgba(25,20,16,.42);display:flex;align-items:flex-end;justify-content:center;z-index:70}
 .catalogEditorSheet{background:#fff;width:min(720px,100%);max-height:92vh;overflow:auto;border-radius:28px 28px 0 0;padding:22px 20px 30px;box-shadow:0 -8px 30px rgba(0,0,0,.12)}
 .editorLabel{display:block;font-size:13px;font-weight:700;margin-top:14px;color:var(--muted)}
-.editorLabel input,.editorLabel textarea{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#fff;font:inherit;color:var(--text);box-sizing:border-box}.editorLabel textarea{resize:vertical;min-height:100px;line-height:1.45}
+.editorLabel input,.editorLabel textarea,.editorLabel select{display:block;width:100%;margin-top:6px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:#fff;font:inherit;color:var(--text);box-sizing:border-box}.editorLabel textarea{resize:vertical;min-height:100px;line-height:1.45}
 .editorTwo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .editorHint{margin-top:12px;padding:12px 14px;border-radius:15px;background:var(--bg)}
 .editorActions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
@@ -253,8 +253,8 @@ let today=new Date(); today.setHours(12,0,0,0);
 function loadState(){
  try{
   const s=JSON.parse(localStorage.getItem(STORAGE)||"null");
-  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
- }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],completedDays:{},chaos:false}}
+  return Object.assign({done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},completedDays:{},chaos:false,completedOpen:false,energyOpen:false},s||{});
+ }catch(e){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},completedDays:{},chaos:false}}
 }
 
 function purgeExpiredPostponements(){
@@ -784,7 +784,7 @@ function renderToday(){
  let html=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Hanni-Modus":"Normal"}</span></div>
  <div class="progress"><i style="width:${pct}%"></i></div>
  <div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="swipeHint">👈 ROT · Später &nbsp;&nbsp; | &nbsp;&nbsp; Erledigt · GRÜN 👉</div>
- <div class="actions" style="margin-top:15px"><button class="btn primary" id="addBtn">＋ Aufgabe hinzufügen</button><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
+ <div class="actions" style="margin-top:15px"><button class="btn" id="energyBtn">⚡ Ich habe Energie</button><button class="btn" id="chaosBtn">🧸 ${state.chaos?"Normalmodus":"Heute leicht"}</button><button class="btn ghost" id="catalogBtn">📚 Aufgabenkatalog</button></div>
  <div class="notice">Wenn heute Baby-Chaos ist: nur das Nötigste. Nichts wird morgen automatisch nachgeholt. ❤️</div></div>`;
  if(completedToday())html+=`<div class="celebrate">🥳 Alles geschafft! Jetzt ist Feierabend – Me-Time gehört dazu. ❤️</div>`;
  main.innerHTML=html;
@@ -835,7 +835,6 @@ function renderToday(){
    main.appendChild(sec);
  }
  renderPostponed(main);
- document.getElementById("addBtn").onclick=addCustom;
  document.getElementById("energyBtn").onclick=showEnergyChoices;
  if(state.energyOpen) showEnergyChoices(false);
  document.getElementById("chaosBtn").onclick=()=>{state.chaos=!state.chaos;save();render()};
@@ -897,12 +896,60 @@ function renderPostponed(main){
  }
  main.appendChild(card);card.querySelector("#togglePost").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()};
 }
-function addCustom(){
- const name=prompt("Wie soll die Aufgabe heißen?");
- if(!name?.trim())return;
- const id="custom|"+uid();state.custom.push({id,text:name.trim(),room:"Eigene Aufgabe",area:"Eigene Aufgabe"});
- state.done[id]=false;save();render();toast("Aufgabe hinzugefügt");
+function catalogKey(x){return [x.text||"",x.room||"",x.area||""].join("|")}
+function catalogDefaultDescription(x){return definition(x.text,x.room,x.area).what;}
+function catalogRoomOptions(){return Object.keys(SEED_ROOMS);}
+function openCatalogEditor(x=null){
+ const editing=!!x, key=editing?catalogKey(x):null;
+ const base=editing?x:{text:"",room:"Wohnzimmer",area:"EG",place:"",start:iso(today),rec:30,description:""};
+ const ov=document.createElement("div");ov.className="catalogEditorOverlay";
+ ov.innerHTML=`<div class="catalogEditorSheet">
+  <div class="sheetTop"><div><h2>${editing?"Aufgabe bearbeiten":"Neue Aufgabe"}</h2><div class="small">Alle Angaben gehören zu genau dieser Aufgabe.</div></div><button class="close" id="editorClose">×</button></div>
+  <label class="editorLabel">Aufgabe<input id="edText" type="text" value="${esc(base.text||"")}" placeholder="z. B. Fensterbank reinigen"></label>
+  <div class="editorTwo">
+   <label class="editorLabel">Raum<select id="edRoom">${catalogRoomOptions().map(r=>`<option value="${esc(r)}" ${r===(base.room||"")?"selected":""}>${esc(r)}</option>`).join("")}</select></label>
+   <label class="editorLabel">Bereich / Etage<input id="edArea" type="text" value="${esc(base.area||"")}" placeholder="EG, OG, Keller …"></label>
+  </div>
+  <label class="editorLabel">Genauer Ort / Bereich<input id="edPlace" type="text" value="${esc(base.place||"")}" placeholder="z. B. Fenster links neben dem Esstisch"></label>
+  <div class="editorTwo">
+   <label class="editorLabel">Erster / nächster Termin<input id="edStart" type="date" value="${esc(base.start||"")}"></label>
+   <label class="editorLabel">Periode in Tagen<input id="edRec" type="number" min="0" step="1" value="${esc(base.rec??0)}"><span class="small">0 = kein automatischer Turnus</span></label>
+  </div>
+  <label class="editorLabel">Beschreibung / Durchführung<textarea id="edDesc" placeholder="Was genau soll gemacht werden? Was gehört dazu?">${esc(base.description||catalogDefaultDescription(base))}</textarea></label>
+  <div class="editorHint">💡 Die Aufgabe wird vom Tagesplan anhand von Termin, Periode und den bestehenden Haushaltsregeln berücksichtigt. Große Aufgaben können weiterhin normale Turnusaufgaben verdrängen.</div>
+  <div class="editorActions"><button class="btn" id="editorCancel">Abbrechen</button><button class="btn primary" id="editorSave">${editing?"Änderungen speichern":"Aufgabe hinzufügen"}</button></div>
+  ${editing?`<button class="deleteBtn" id="editorDelete">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}
+ </div>`;
+ document.body.appendChild(ov);
+ const close=()=>ov.remove();
+ ov.querySelector("#editorClose").onclick=close; ov.querySelector("#editorCancel").onclick=close;
+ ov.onclick=e=>{if(e.target===ov)close()};
+ ov.querySelector("#editorSave").onclick=()=>{
+   const text=ov.querySelector("#edText").value.trim(); if(!text){toast("Bitte eine Aufgabe eingeben.");return;}
+   const room=ov.querySelector("#edRoom").value, area=ov.querySelector("#edArea").value.trim()||"Ganzes Haus";
+   const place=ov.querySelector("#edPlace").value.trim(); const start=ov.querySelector("#edStart").value||iso(today);
+   const rec=Math.max(0,Number(ov.querySelector("#edRec").value||0));
+   const description=ov.querySelector("#edDesc").value.trim()||definition(text,room,area).what;
+   if(editing){
+     const oldKey=key; const edited={...x,text,room,area,place,start,rec,description,editable:true};
+     state.catalogEdits=state.catalogEdits||{};
+     delete state.catalogDeleted?.[oldKey];
+     state.catalogEdits[oldKey]=edited;
+     // Preserve completion identity where possible; future planning uses the edited identity.
+   }else{
+     const id="custom|"+uid(); state.custom=state.custom||[]; state.custom.push({id,text,room,area,place,start,rec,description,editable:true});
+   }
+   save(); close(); render(); toast(editing?"Aufgabe geändert ❤️":"Aufgabe hinzugefügt ❤️");
+ };
+ if(editing)ov.querySelector("#editorDelete").onclick=()=>{
+   if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;
+   if(x.editable && String(x.id||"").startsWith("custom|")){state.custom=(state.custom||[]).filter(c=>c.id!==x.id);}
+   else {state.catalogDeleted=state.catalogDeleted||{}; state.catalogDeleted[key]=true; delete (state.catalogEdits||{})[key];}
+   save(); close(); render(); toast("Aufgabe gelöscht");
+ };
 }
+function addCustom(){openCatalogEditor();}
+
 function renderWeek(){
  const main=document.getElementById("main");
  main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Die Themen sind Anker, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="weekgrid"></div></div>`;
@@ -1084,22 +1131,36 @@ function definition(title,room="",area=""){
 const DEFINITIONS={};
 for(const x of allCatalog()) if(!DEFINITIONS[x.text]) DEFINITIONS[x.text]=definition(x.text,x.room,x.area);
 function allCatalog(){
- const out=[];
- for(const r of catalogSeed){
-  let tasks=r[2],area=r[1];
-  if(!Array.isArray(tasks)&&Array.isArray(area)){tasks=area;area=SEED_ROOMS[r[0]]?.[1]||"Ganzes Haus";}
-  if(!Array.isArray(tasks))continue;
-  for(const t of tasks)out.push({text:t,room:r[0],area:area||""});
+ const out=[],seen=new Set();
+ function add(item){
+   if(!item||!item.text)return;
+   const base={...item,area:item.area||"Ganzes Haus"};
+   const key=catalogKey(base);
+   if((state.catalogDeleted||{})[key])return;
+   const edited=(state.catalogEdits||{})[key];
+   const x={...base,...(edited||{})};
+   const finalKey=catalogKey(x);
+   if((state.catalogDeleted||{})[finalKey])return;
+   if(seen.has(finalKey))return;
+   seen.add(finalKey); out.push(x);
  }
- for(const [t] of ROTATIONS)out.push({text:t,room:"Rotationsaufgabe",area:"Turnus"});
- for(const [,tasks] of DAILY)for(const t of tasks)out.push({text:t,room:"Ganzes Haus",area:"Alltag"});
- for(const c of state.custom)out.push({text:c.text,room:c.room,area:c.area,start:c.start||c.date||"",rec:c.rec||c.repeat||""});
- for(const w of windowCatalogEntries())out.push(w);
- for(const x of SEASONAL_SPECIALS)out.push({text:x.text,room:x.room,area:x.area,seasonal:true,seasonalKey:x.key});
+ for(const r of catalogWithExtras()){
+   const room=r[0]; let area=r[1],tasks=r[2];
+   if(!Array.isArray(tasks)&&Array.isArray(area)){tasks=area;area=SEED_ROOMS[room]?.[1]||"Ganzes Haus";}
+   if(!Array.isArray(tasks))continue;
+   for(const t of tasks)add({text:t,room,area:area||""});
+ }
+ for(const [t] of ROTATIONS)add({text:t,room:"Rotationsaufgabe",area:"Turnus"});
+ for(const [,tasks] of DAILY)for(const t of tasks)add({text:t,room:"Ganzes Haus",area:"Alltag"});
+ for(const c of state.custom||[])add({...c,editable:true});
+ for(const w of windowCatalogEntries())add(w);
+ for(const x of SEASONAL_SPECIALS)add({text:x.text,room:x.room,area:x.area,seasonal:true,seasonalKey:x.key});
  return out;
 }
+
 function openDetail(title,room="",area=""){
- const d=DEFINITIONS[title]||definition(title,room,area);
+ const cat=allCatalog().find(x=>x.text===title&&x.room===room&&x.area===area) || allCatalog().find(x=>x.text===title);
+ const d=cat?.description ? {...definition(title,room||cat.room,area||cat.area),what:cat.description,room:cat.room,area:cat.area} : (DEFINITIONS[title]||definition(title,room,area));
  document.getElementById("detailMeta").textContent=[room,area].filter(Boolean).join(" · ");
  document.getElementById("detailTitle").textContent=title;
  document.getElementById("detailContent").innerHTML=
@@ -1198,30 +1259,34 @@ function formatCatalogNextDate(d){
 
 function renderCatalog(){
  const main=document.getElementById("main");
- main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Jede einzelne Aufgabe hat eigene Details.</div></div><button class="btn" id="backToday">Heute</button></div>
+ main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier verwaltest du wirklich alle Aufgaben: hinzufügen, bearbeiten, löschen und alle Details ändern.</div></div><button class="btn" id="backToday">Heute</button></div>
+ <div class="actions" style="margin-top:15px"><button class="btn primary" id="catalogAdd">＋ Aufgabe hinzufügen</button></div>
  <div style="margin-top:15px"><input class="search" id="search" placeholder="Aufgabe, Raum, Bereich suchen …" autocomplete="off"></div>
  <div id="results" style="margin-top:12px"></div></div>`;
  const input=main.querySelector("#search"),results=main.querySelector("#results");
+ main.querySelector("#catalogAdd").onclick=()=>openCatalogEditor();
+ main.querySelector("#backToday").onclick=()=>{selectedTab="today";render()};
  function draw(){
   const q=input.value.trim().toLowerCase();
-  const arr=allCatalog().filter(x=>!q || [x.text,x.room,x.area].join(" ").toLowerCase().includes(q));
-  results.innerHTML=`<div class="small" style="padding:5px">${arr.length} Treffer</div>`;
-  arr.slice(0,80).forEach(x=>{
-   const planned=catalogPlannedToday(x);
-   const row=document.createElement("div");row.className="result";
-   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}</div><div class="meta nextDue">Nächster Termin: <b>${esc(formatCatalogNextDate(catalogNextDate(x)))}</b></div></div><button class="iconBtn">ⓘ</button><button class="iconBtn">${planned?(isDone(planned)?"✓":"Heute"):"＋"}</button>`;
+  const arr=allCatalog().filter(x=>!q || [x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(q));
+  results.innerHTML=`<div class="small" style="padding:5px">${arr.length} Aufgaben</div>`;
+  arr.slice(0,100).forEach(x=>{
+   const planned=catalogPlannedToday(x); const row=document.createElement("div");row.className="result";
+   const next=formatCatalogNextDate(catalogNextDate(x));
+   row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?` · ${esc(x.place)}`:""}</div><div class="meta nextDue">Nächster Termin: <b>${esc(next)}</b>${x.rec?` · alle ${esc(x.rec)} Tage`:""}</div></div><button class="iconBtn" title="Details">ⓘ</button><button class="iconBtn" title="Bearbeiten">✏️</button><button class="iconBtn" title="Löschen">🗑️</button>${planned?`<button class="iconBtn plannedToday" title="Heute geplant">${isDone(planned)?"✓":"Heute"}</button>`:""}`;
    row.children[1].onclick=()=>openDetail(x.text,x.room,x.area);
-   row.children[2].onclick=()=>addCatalogToToday(x);
-   if(planned){
-     row.children[2].classList.add("plannedToday");
-     row.children[2].title=isDone(planned)?"Heute bereits erledigt":"Heute bereits im Tagesplan";
-   }
+   row.children[2].onclick=()=>openCatalogEditor(x);
+   row.children[3].onclick=()=>{
+     if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;
+     if(x.editable && String(x.id||"").startsWith("custom|")){state.custom=(state.custom||[]).filter(c=>c.id!==x.id);}
+     else {const key=catalogKey(x);state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[key]=true;delete (state.catalogEdits||{})[key];}
+     save();draw();toast("Aufgabe gelöscht");
+   };
    results.appendChild(row);
   });
   if(!arr.length)results.innerHTML+=`<div class="empty">Nichts gefunden. ❤️</div>`;
  }
  input.oninput=draw;draw();
- main.querySelector("#backToday").onclick=()=>{selectedTab="today";render()};
  input.focus();
 }
 
