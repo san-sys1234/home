@@ -186,7 +186,7 @@ let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
 function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()}}
-function save(){localStorage.setItem(STORAGE,JSON.stringify(state));state.__planRevision=(state.__planRevision||0)+1;invalidatePlans()}
+function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
@@ -195,7 +195,7 @@ function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||s
 function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
 function unmarkDone(x){delete state.done[doneKey(x)]}
 function isPostponed(x){const p=state.postponed[taskId(x)];return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
-function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);state.postponed[taskId(x)]={...x,from:dayKey(),postponedUntil:until};save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
+function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);const id=taskId(x);state.postponed[id]={...x,from:dayKey(),postponedUntil:until};state.catalogEdits=state.catalogEdits||{};state.__planRevision=(state.__planRevision||0)+1;save();invalidatePlans();calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
 function syncCompletedDay(d=today){
@@ -285,7 +285,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v123|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v124|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -324,6 +324,16 @@ function buildIntelligentPlan(){
      }
    }
    if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);continue;}
+   // A user-set "Später" date is authoritative: never silently move it
+   // to another calendar day because of planner capacity.
+   if(postponedUntil){
+     const pd=fromKey(postponedUntil),pk=dayKey(pd);
+     if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
+       const a=days.get(pk);
+       if(!a.some(y=>taskId(y)===taskId(occ.x))){a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
+       continue;
+     }
+   }
    for(let delta=0;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
