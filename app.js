@@ -499,21 +499,31 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const due=nextDueLabel(x);el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div><div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div>`:""}${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(due)}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const hideRoom=!!opts.hideRoom;const due=nextDueLabel(x);el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div>`:""}${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(due)}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
 
+function focusRoomMatches(x,room){
+  if(!x || !room)return false;
+  if(x.room===room)return true;
+  // Window tasks are separate inventory entries, but belong to the same room.
+  if(x.window){
+    const text=String(x.text||"");
+    return text.includes(room);
+  }
+  return false;
+}
 function roomFocusTasks(room,d=today){
   if(!room)return [];
   return CATALOG
-    .filter(x=>x.room===room && !isDone(x) && !isPostponed(x))
+    .filter(x=>focusRoomMatches(x,room) && !isDone(x) && !isPostponed(x))
     .filter(x=>!recent(x,d,7))
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
 function renderRoomFocus(main, tasks){
   const card=document.createElement("div");
   card.className="card roomFocus";
-  const rooms=[...new Set(CATALOG.map(x=>x.room).filter(r=>r && r!=="Ganzes Haus"))].sort((a,b)=>a.localeCompare(b,"de"));
+  const rooms=[...new Set(CATALOG.map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
   const day=dayKey(today), selected=state.roomFocus?.[day]||"";
-  card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh seine offenen Aufgaben – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
+  card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh alle offenen Aufgaben dieses Raumes – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
   main.appendChild(card);
   const select=card.querySelector("#roomSelect");
   const renderSelected=()=>{
@@ -523,9 +533,12 @@ function renderRoomFocus(main, tasks){
     state.roomFocus=state.roomFocus||{};state.roomFocus[day]=room;save();
     const open=roomFocusTasks(room,today);
     const sec=document.createElement("section");sec.className="roomFocusTasks";
-    sec.innerHTML=`<div class="sectionTitle">${esc(room)} · heute freiwillig</div>`;
+    const heading=document.createElement("div");heading.className="sectionTitle";heading.textContent=`${room} · heute freiwillig`;sec.appendChild(heading);
     if(!open.length){const empty=document.createElement("div");empty.className="card empty";empty.textContent="In diesem Raum ist gerade nichts Sinnvolles offen. 🥰";sec.appendChild(empty)}
-    else open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true})));
+    else {
+      // All tasks are shown together under the selected room, including windows and other special tasks.
+      open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true,hideRoom:true})));
+    }
     main.appendChild(sec);
   };
   select.onchange=renderSelected;
