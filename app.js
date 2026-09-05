@@ -194,8 +194,21 @@ function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
 function unmarkDone(x){delete state.done[doneKey(x)]}
-function isPostponed(x){const p=state.postponed[taskId(x)];return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
-function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);const id=taskId(x);state.postponed[id]={...x,from:dayKey(),postponedUntil:until};state.catalogEdits=state.catalogEdits||{};state.__planRevision=(state.__planRevision||0)+1;save();invalidatePlans();calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
+function postponedEntry(x){
+ const exact=state.postponed?.[taskId(x)];
+ if(exact)return exact;
+ const key=String(x.key||"");
+ const sourceKey=String(x.sourceKey||"");
+ for(const p of Object.values(state.postponed||{})){
+   if(!p||!p.postponedUntil)continue;
+   if(key && String(p.key||"")===key)return p;
+   if(sourceKey && String(p.sourceKey||"")===sourceKey)return p;
+   if(String(p.text||"")===String(x.text||"") && String(p.room||"")===String(x.room||"") && (!x.area || !p.area || String(p.area)===String(x.area)))return p;
+ }
+ return null;
+}
+function isPostponed(x){const p=postponedEntry(x);return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
+function postponeTask(x){const next=rawNextDue(x,addDays(today,1));const until=dayKey(next);const id=taskId(x);state.postponed[id]={...x,key:x.key||id,from:dayKey(),postponedUntil:until};state.catalogEdits=state.catalogEdits||{};state.__planRevision=(state.__planRevision||0)+1;save();invalidatePlans();calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)}
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
 function syncCompletedDay(d=today){
@@ -244,7 +257,7 @@ function weeklyDate(x){const dow=WEEKDAYS[x.room];if(dow===undefined)return null
 function rotationAnchor(x){const idx=Math.max(0,ROTATIONS.findIndex(r=>r[0]===x.text));return addDays(fromKey("2026-09-07"),(idx*5)%150)}
 function explicitNext(x,ref){const start=/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")?fromKey(x.start):ref;const interval=catalogInterval(x);let d=new Date(start),last=lastDone(x);if(last&&fromKey(last)>=d)d=fromKey(last);while(d<ref)d=addDays(d,interval);if(last&&sameDay(d,fromKey(last)))d=addDays(d,interval);return d}
 function rawNextDue(x,ref=today){
- const postponed=state.postponed?.[taskId(x)];
+ const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  if(x.window)return windowDate(x,ref)||ref;
  if(x.start)return explicitNext(x,ref);
@@ -258,7 +271,7 @@ function rawNextDue(x,ref=today){
  return d;
 }
 function rawDueOn(x,d){
- const postponed=state.postponed?.[taskId(x)];
+ const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);return sameDay(pd,d);}
  if(x.area==="Alltag")return false;
  if(x.window)return sameDay(windowDate(x,d),d);
@@ -285,7 +298,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v124|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v125|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -306,7 +319,7 @@ function buildIntelligentPlan(){
  const maxLook=120;
  for(const occ of flex){
    let chosen=null;
-   const postponedUntil=state.postponed?.[taskId(occ.x)]?.postponedUntil;
+   const postponedUntil=postponedEntry(occ.x)?.postponedUntil;
    if(postponedUntil){
      const pd=fromKey(postponedUntil),pk=dayKey(pd);
      if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
@@ -372,7 +385,7 @@ function buildIntelligentPlan(){
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
 function scheduledForDate(d){return plannedForDate(d)}
 function nextDue(x,ref=today){
- const postponed=state.postponed?.[taskId(x)];
+ const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){
    const pd=fromKey(postponed.postponedUntil);
    if(pd>=ref)return pd;
