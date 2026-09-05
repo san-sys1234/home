@@ -320,7 +320,7 @@ function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wann
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v126|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length}
+function plannerKey(){return "v129|"+String(state.__planRevision||0)+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -420,11 +420,16 @@ function buildIntelligentPlan(){
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
 function scheduledForDate(d){return plannedForDate(d)}
 function nextDue(x,ref=today){
+ // A manually edited catalog start date is authoritative. Never let the
+ // intelligent planner replace it with an older/newly calculated date.
  const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){
    const pd=fromKey(postponed.postponedUntil);
    if(pd>=ref)return pd;
  }
+ // Explicit catalog dates (including edited seed tasks and custom tasks)
+ // must be read directly from the task definition.
+ if(x.start) return explicitNext(x,ref);
  const p=buildIntelligentPlan().next.get(taskId(x));
  if(p&&p>=ref)return p;
  return rawNextDue(x,ref);
