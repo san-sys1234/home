@@ -986,6 +986,17 @@ function scheduleAnchor(x){
 }
 function dateFromKey(k){ return new Date(k+'T12:00:00'); }
 function isSameDay(a,b){ return dayKey(a)===dayKey(b); }
+function weeklySlotFor(x, catalogList=null, referenceDate=today){
+ const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
+ const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+ if(dowByRoom[x.room]===undefined)return null;
+ const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
+ const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
+ const slot=nextWeekdayOnOrAfter(new Date(2026,7,31,12),dowByRoom[x.room]);
+ slot.setDate(slot.getDate()+Math.floor(idx/2)*7);
+ while(slot<ref)slot.setDate(slot.getDate()+7);
+ return slot;
+}
 function scheduledDateFor(x, referenceDate=today, catalogList=null){
  const ref=new Date(referenceDate); ref.setHours(12,0,0,0);
  if(x.area==='Alltag')return ref;
@@ -1027,9 +1038,8 @@ function scheduledDateFor(x, referenceDate=today, catalogList=null){
  if(dowByRoom[x.room]!==undefined){
    const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
    const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
-   let d=nextWeekdayOnOrAfter(ref,dowByRoom[x.room]);
-   d.setDate(d.getDate()+Math.floor(idx/2)*7);
-   return d;
+   const d=weeklySlotFor(x,catalogList,ref);
+   return d||ref;
  }
  const rot=ROTATIONS.find(r=>r[0]===x.text);
  if(rot){
@@ -1067,10 +1077,9 @@ function taskIsDueOnDate(x,d,catalogList=null){
  const dowByRoom={Wohnzimmer:1,Essbereich:1,Küche:1,'Gäste-WC':2,Kinderbad:2,Bad:2,WC:2,Schlafzimmer:3,Ankleidezimmer:3,'Kinderzimmer 1':3,'Kinderzimmer 2':3,Saunaraum:3,Treppenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
  if(dowByRoom[x.room]!==undefined){
    const items=(catalogList||allCatalog()).filter(y=>y.room===x.room&&!y.window&&!y.seasonal);
-   const idx=Math.max(0,items.findIndex(y=>y.key===x.key));
-   const slot=nextWeekdayOnOrAfter(new Date(2026,7,31,12),dowByRoom[x.room]);
-   slot.setDate(slot.getDate()+Math.floor(idx/2)*7);
-   return target>=slot && ((Math.round((target-slot)/86400000))%7===0);
+   const slot=weeklySlotFor(x,catalogList,new Date(2026,7,31,12));
+   if(!slot || target<slot)return false;
+   return (Math.round((target-slot)/86400000)%7)===0;
  }
  return isSameDay(scheduledDateFor(x,target,catalogList),target);
 }
