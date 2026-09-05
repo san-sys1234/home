@@ -160,7 +160,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",calendarYear:new Date().getFullYear()}}
+function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear()}}
 function loadState(){
  let raw=null;
  try{raw=JSON.parse(localStorage.getItem(STORAGE)||"null")}catch{}
@@ -170,7 +170,7 @@ function loadState(){
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  try{localStorage.setItem(STORAGE,JSON.stringify(s))}catch{}
@@ -380,13 +380,21 @@ function showEnergy(){
   let box=document.getElementById("energyBox");
   if(!box){box=document.createElement("div");box.id="energyBox";box.className="card";main.insertBefore(box,main.children[1]||null)}
   const day=dayKey();
-  if(state.energySkipDay!==day){state.energySkipDay=day;state.energySkipped=[];state.energyOffset=0}
+  if(state.energySkipDay!==day){state.energySkipDay=day;state.energySeen=[];state.energyOffset=0}
   const base=CATALOG.filter(x=>x.area!=="Alltag"&&!x.window&&!isDone(x)&&!isPostponed(x)&&!recent(x,today,7)).sort((a,b)=>nextDue(a)-nextDue(b)||String(a.id).localeCompare(String(b.id)));
+  const seen=new Set(Array.isArray(state.energySeen)?state.energySeen:[]);
   let candidates=[];
   if(base.length){
-    const offset=((Number(state.energyOffset)||0)%base.length+base.length)%base.length;
-    const count=Math.min(3,base.length);
-    for(let i=0;i<count;i++)candidates.push(base[(offset+i)%base.length]);
+    // Always prefer tasks not shown earlier today. Only reuse old suggestions
+    // when there are fewer than three genuinely new candidates available.
+    const fresh=base.filter(x=>!seen.has(taskId(x)));
+    const pool=fresh.length>=3?fresh:base;
+    const offset=((Number(state.energyOffset)||0)%pool.length+pool.length)%pool.length;
+    const count=Math.min(3,pool.length);
+    for(let i=0;i<count;i++){
+      const x=pool[(offset+i)%pool.length];
+      if(!candidates.some(y=>taskId(y)===taskId(x)))candidates.push(x);
+    }
   }
   box.innerHTML=`<div class="topline"><div><b>⚡ Ich habe Energie</b><div class="small">Nur wenn du möchtest – diese Aufgaben werden heute zusätzlich vorgezogen.</div></div><button class="btn" id="energyOther">↻ Andere 3</button></div>`;
   if(!candidates.length)box.innerHTML+=`<div class="empty">Gerade gibt es keine sinnvolle Zusatzaufgabe. 🥰</div>`;
@@ -395,12 +403,19 @@ function showEnergy(){
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · regulär ${esc(nextDueLabel(x))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
       state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
+      state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
       save();render();showEnergy();
     };
     box.appendChild(r);
   });
   box.querySelector("#energyOther").onclick=()=>{
-    if(base.length>0){state.energyOffset=(Number(state.energyOffset)||0)+3;save();showEnergy();}
+    if(base.length>0){
+      const ids=candidates.map(taskId);
+      state.energySeen=[...(state.energySeen||[]),...ids].slice(-200);
+      state.energyOffset=0;
+      save();
+      showEnergy();
+    }
   };
 }
 function openEditor(x=null){const edit=!!x,old=x||{},rooms=[...new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])].sort(),overlay=document.createElement("div");overlay.className="catalogEditorOverlay";overlay.id="editor";overlay.innerHTML=`<div class="catalogEditorSheet"><div class="sheetTop"><div><div class="small">${edit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${edit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="x">×</button></div><label class="editorLabel">Aufgabe<input id="t" value="${esc(old.text||"")}"></label><label class="editorLabel">Raum<input id="r" list="rooms" value="${esc(old.room||"")}"><datalist id="rooms">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label><label class="editorLabel">Bereich / Etage<input id="a" value="${esc(old.area||"")}"></label><label class="editorLabel">Genauer Ort<input id="p" value="${esc(old.place||"")}"></label><label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="d">${esc(old.description||"")}</textarea></label><div class="editorTwo"><label class="editorLabel">Erster Fälligkeitstermin<input id="s" type="date" value="${esc(old.start||nextDue(old))}"></label><label class="editorLabel">Periode (Tage)<input id="i" type="number" min="1" value="${old.interval||catalogInterval(old)||60}"></label></div><div class="editorHint">Dieser Termin ist die verbindliche Quelle. Kalender, Heute und Katalog berechnen daraus exakt dieselben Fälligkeiten.</div><div class="editorActions"><button class="btn" id="cancel">Abbrechen</button><button class="btn primary" id="saveTask">${edit?"Änderungen speichern":"Aufgabe speichern"}</button></div>${edit?`<button class="deleteBtn" id="del">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}</div>`;document.body.appendChild(overlay);const close=()=>overlay.remove();overlay.querySelector("#x").onclick=close;overlay.querySelector("#cancel").onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};overlay.querySelector("#saveTask").onclick=()=>{const text=overlay.querySelector("#t").value.trim(),room=overlay.querySelector("#r").value.trim(),area=overlay.querySelector("#a").value.trim(),place=overlay.querySelector("#p").value.trim(),description=overlay.querySelector("#d").value.trim(),start=overlay.querySelector("#s").value,interval=Math.max(1,Number(overlay.querySelector("#i").value)||60);if(!text||!room||!area||!start)return toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");if(edit){state.catalogEdits[old.key]={text,room,area,place,description,start,interval};if(old.source==="custom"){const c=state.custom.find(c=>(c.key||`custom|${c.id}`)===old.key);if(c)Object.assign(c,{text,room,area,place,description,start,interval})}}else{const id=`custom|${uid()}`;state.custom.push({id,key:id,text,room,area,place,description,start,interval})}save();refreshCatalog();close();render();toast(edit?"Aufgabe geändert ❤️":"Neue Aufgabe hinzugefügt ❤️")};if(edit)overlay.querySelector("#del").onclick=()=>{if(!confirm(`„${old.text}“ wirklich löschen?`))return;state.catalogDeleted[old.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==old.key);save();refreshCatalog();close();render();toast("Aufgabe gelöscht")}}
