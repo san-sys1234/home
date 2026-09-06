@@ -286,21 +286,19 @@ function postponedEntry(x){
 function isPostponed(x){const p=postponedEntry(x);return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
 function postponeTask(x){
  const day=dayKey();
- ensureTodayPlanSnapshot(today);
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
  state.todayPlanLock=state.todayPlanLock||{};
  state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
- // "Später" advances the task by its OWN recurrence interval. Never use
- // room-rotation heuristics here: the interval stored for the task is the
- // authoritative cadence. The new due date is measured from the action date.
- const cadence=Math.max(1,catalogInterval(x));
- const until=dayKey(addDays(today,cadence));const id=taskId(x);
+ // "Später" means: do not mark the task as done and do not change its
+ // recurrence/fälligkeit. Only move its CURRENT planned date. The next due
+ // date remains governed by the task's own cadence and changes only after
+ // completion. The new planned date is always today or later.
+ const due=nextDue(x,today);
+ const first=due>=today?due:addDays(today,1);
+ const until=dayKey(first);const id=taskId(x);
  delete state.done[doneKey(x)];
- state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day};
- state.catalogDates=state.catalogDates||{};state.catalogDates[id]=until;
- state.manualDates=state.manualDates||{};state.manualDates[id]=until;
- state.catalogEdits=state.catalogEdits||{};
- save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)
+ state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day,planningOnly:true};
+ save();render();toast(`Für später geplant · ${formatDateKey(until)} ❤️`)
 }
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
@@ -378,8 +376,6 @@ function raffstoreFirstDate(x,ref=today){
  return windowDate({window:true,windowKey:`${area}|${room}|${idx+1}`,windowGroup:group},ref);
 }
 function rawNextDue(x,ref=today){
- const postponed=postponedEntry(x);
- if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
  if(/^\d{4}-\d{2}-\d{2}$/.test(manual||""))return explicitNext({...x,start:manual},ref);
  if(x.start)return explicitNext(x,ref);
@@ -677,13 +673,11 @@ function scheduledForDate(d){return plannedForDate(d)}
 function normalizeDateKey(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):""}
 function nextDue(x,ref=today){
  // The lifecycle has a strict order:
- // 1) a postponed action has an immediate new due date;
- // 2) after completion, the next due date is completion + this task's interval;
+ // 1) after completion, the next due date is completion + this task's interval;
+ // 2) a postponement changes planning only; it never changes due date;
  // 3) only before the first action does the manually entered start date act as
  //    the initial due date. This prevents an old/manual anchor from overriding
  //    a newly calculated recurrence date.
- const postponed=postponedEntry(x);
- if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  const last=lastDone(x);
  if(last){
    const interval=Math.max(1,catalogInterval(x));
@@ -703,7 +697,11 @@ function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-di
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x);
  const due=nextDue(x,today);
- const d=plan.next.get(id);
+ // Completed tasks are no longer pending in the calendar, but they still
+ // need an immediate concrete planned date for their newly created cycle.
+ // For that next cycle, the due date itself is the first/most sensible plan
+ // unless the planner already selected another legal future date.
+ const d=plan.next.get(id) || (isDone(x)&&due>=today?due:null);
  // HARD UI INVARIANT: a planned date is never allowed in the past and must
  // remain within the absolute +/-30-day window around the CURRENT due date.
  if(d instanceof Date && d>=today && Math.abs(Math.round((d-due)/86400000))<=30) return d;
