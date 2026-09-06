@@ -244,9 +244,6 @@ function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
 function isDone(x,ref=today){
- // Array.filter passes index/array as extra arguments; only a real Date may
- // override the reference day. This keeps Today rendering stable.
- if(!(ref instanceof Date))ref=today;
  const l=lastDone(x);
  if(l)return l===dayKey(ref);
  return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
@@ -439,7 +436,7 @@ function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){return "v150|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
-function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
+function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -460,7 +457,7 @@ function buildIntelligentPlan(){
    }
  }
  // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
- for(const d of dates){const k=dayKey(d);if(d<today)continue;if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
+ for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
  // Flexible occurrences: create only the next required occurrence per task and
  // then place it on the first genuinely light day. This prevents a whole room
  // from landing on one anchor day.
@@ -505,7 +502,7 @@ function buildIntelligentPlan(){
      }
    }
    for(let delta=-30;delta<=maxLook;delta++){
-     const d=addDays(occ.base,delta),k=dayKey(d);if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
@@ -540,7 +537,7 @@ function buildIntelligentPlan(){
      const weight=taskWeight(occ.x), candidates=[];
      for(let delta=-30;delta<=30;delta++){
        const d=addDays(occ.base,delta),k=dayKey(d);
-       if(d<today||!days.has(k)|| (d.getDay()===0&&!state.sundayOptional[k])) continue;
+       if(!days.has(k)|| (d.getDay()===0&&!state.sundayOptional[k])) continue;
        const arr=days.get(k);
        if(arr.some(y=>taskId(y)===taskId(occ.x))) continue;
        const used=arr._weight||0, cap=dayBudget(d);
@@ -576,7 +573,7 @@ function buildIntelligentPlan(){
    const due=nextDue(x,today), candidates=[];
    for(let delta=-30;delta<=30;delta++){
      const d=addDays(due,delta),k=dayKey(d);
-     if(d<today||!days.has(k))continue;
+     if(!days.has(k))continue;
      if(d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
@@ -602,7 +599,7 @@ function buildIntelligentPlan(){
    const candidates=[];
    for(let delta2=-30;delta2<=30;delta2++){
      const d=addDays(due,delta2),k=dayKey(d);
-     if(d<today||!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
+     if(!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
@@ -656,7 +653,7 @@ function plannedDateForTask(x){
  for(let delta=0;delta<=30;delta++){
    for(const sign of [0,1,-1]){
      const dd=addDays(due,delta*sign);
-     if(dd<today||Math.abs(delta*sign)>30)continue;
+     if(Math.abs(delta*sign)>30)continue;
      const k=dayKey(dd),arr=plan.days.get(k);
      if(arr && (dd.getDay()!==0 || state.sundayOptional[k])) return dd;
    }
@@ -766,7 +763,7 @@ function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
   const sunday=today.getDay()===0;
-  const tasks=plannedToday(),done=tasks.filter(x=>isDone(x)).length;
+  const tasks=plannedToday(),done=tasks.filter(isDone).length;
   main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal")}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
@@ -774,7 +771,7 @@ function renderToday(){
   const groups={};
   for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
   for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
-  const completed=tasks.filter(x=>isDone(x));
+  const completed=tasks.filter(isDone);
   if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
   renderRoomFocus(main,tasks);
   renderPostponed(main);

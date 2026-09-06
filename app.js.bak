@@ -1,6 +1,6 @@
-/* Unser Zuhause – V148 · intelligenter Haushaltsplaner */
-const STORAGE="unser-zuhause-v147";
-const LEGACY_STORAGE="unser-zuhause-v146";
+/* Unser Zuhause – V149 · intelligenter Haushaltsplaner */
+const STORAGE="unser-zuhause-v149";
+const LEGACY_STORAGE="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
@@ -243,9 +243,30 @@ function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.se
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
-function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]}
+function isDone(x,ref=today){
+ // Array.filter passes index/array as extra arguments; only a real Date may
+ // override the reference day. This keeps Today rendering stable.
+ if(!(ref instanceof Date))ref=today;
+ const l=lastDone(x);
+ if(l)return l===dayKey(ref);
+ return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
+}
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
-function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey();delete state.postponed[taskId(x)];}
+function canonicalTaskFor(x){
+ const sourceKey=x?.sourceKey||x?.canonical;
+ if(!sourceKey)return null;
+ return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
+}
+function markDone(x){
+ const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const target=base||x;
+ const k=dayKey();
+ state.done[doneKey(target)]=true;
+ state.lastDone[lastKey(target)]=k;
+ if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;}
+ delete state.postponed[taskId(target)];
+ if(target!==x)delete state.postponed[taskId(x)];
+}
 function unmarkDone(x){delete state.done[doneKey(x)]}
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
@@ -267,24 +288,17 @@ function postponeTask(x){
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
  state.todayPlanLock=state.todayPlanLock||{};
  state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
- // "Später" is a real rescheduling action: move the task by one sensible
- // cadence, never merely to the next day. The normal rhythm is based on the
- // task type and, for room rotations, on that room's actual cycle.
- let cadence=7;
- if(x.window) cadence=180;
- else if(x.start) cadence=Math.max(7,catalogInterval(x));
- else if(x.source==="rotation") cadence=Math.max(7,catalogInterval(x));
- else if(BASEMENT.includes(x.room)) cadence=7*BASEMENT.length;
- else {
-   const items=roomItems(x.room);
-   if(items.length){ cadence=Math.max(7,Math.ceil(items.length/3)*7); }
-   else cadence=Math.max(7,catalogInterval(x));
- }
+ // "Später" advances the task by its OWN recurrence interval. Never use
+ // room-rotation heuristics here: the interval stored for the task is the
+ // authoritative cadence. The new due date is measured from the action date.
+ const cadence=Math.max(1,catalogInterval(x));
  const until=dayKey(addDays(today,cadence));const id=taskId(x);
  delete state.done[doneKey(x)];
- state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until};
+ state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day};
  state.catalogDates=state.catalogDates||{};state.catalogDates[id]=until;
- state.catalogEdits=state.catalogEdits||{};save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)
+ state.manualDates=state.manualDates||{};state.manualDates[id]=until;
+ state.catalogEdits=state.catalogEdits||{};
+ save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)
 }
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
@@ -295,7 +309,15 @@ function syncCompletedDay(d=today){
 function plannedTodayForDate(d){
  const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
 }
-function toggleTask(x){if(isDone(x)){unmarkDone(x);delete state.lastDone[lastKey(x)];}else markDone(x);syncCompletedDay(today);save();render()}
+function toggleTask(x){
+ const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const target=base||x;
+ if(isDone(x)){
+   unmarkDone(target);delete state.lastDone[lastKey(target)];
+   if(target!==x){unmarkDone(x);delete state.lastDone[lastKey(x)];}
+ }else markDone(x);
+ syncCompletedDay(today);save();render();
+}
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
@@ -416,8 +438,8 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v148|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
-function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
+function plannerKey(){return "v150|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -438,7 +460,7 @@ function buildIntelligentPlan(){
    }
  }
  // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
- for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
+ for(const d of dates){const k=dayKey(d);if(d<today)continue;if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
  // Flexible occurrences: create only the next required occurrence per task and
  // then place it on the first genuinely light day. This prevents a whole room
  // from landing on one anchor day.
@@ -483,7 +505,7 @@ function buildIntelligentPlan(){
      }
    }
    for(let delta=-30;delta<=maxLook;delta++){
-     const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     const d=addDays(occ.base,delta),k=dayKey(d);if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
@@ -518,7 +540,7 @@ function buildIntelligentPlan(){
      const weight=taskWeight(occ.x), candidates=[];
      for(let delta=-30;delta<=30;delta++){
        const d=addDays(occ.base,delta),k=dayKey(d);
-       if(!days.has(k)|| (d.getDay()===0&&!state.sundayOptional[k])) continue;
+       if(d<today||!days.has(k)|| (d.getDay()===0&&!state.sundayOptional[k])) continue;
        const arr=days.get(k);
        if(arr.some(y=>taskId(y)===taskId(occ.x))) continue;
        const used=arr._weight||0, cap=dayBudget(d);
@@ -554,7 +576,7 @@ function buildIntelligentPlan(){
    const due=nextDue(x,today), candidates=[];
    for(let delta=-30;delta<=30;delta++){
      const d=addDays(due,delta),k=dayKey(d);
-     if(!days.has(k))continue;
+     if(d<today||!days.has(k))continue;
      if(d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
@@ -580,7 +602,7 @@ function buildIntelligentPlan(){
    const candidates=[];
    for(let delta2=-30;delta2<=30;delta2++){
      const d=addDays(due,delta2),k=dayKey(d);
-     if(!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
+     if(d<today||!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
@@ -601,13 +623,21 @@ function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]
 function scheduledForDate(d){return plannedForDate(d)}
 function normalizeDateKey(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):""}
 function nextDue(x,ref=today){
- // A completed task starts a fresh recurrence cycle from its actual completion date.
- // A postponed task starts a fresh cycle from its new due date. Manual/start dates
- // are only anchors until the first completion/postponement has occurred.
+ // The lifecycle has a strict order:
+ // 1) a postponed action has an immediate new due date;
+ // 2) after completion, the next due date is completion + this task's interval;
+ // 3) only before the first action does the manually entered start date act as
+ //    the initial due date. This prevents an old/manual anchor from overriding
+ //    a newly calculated recurrence date.
  const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  const last=lastDone(x);
- if(last)return rawNextDue(x,ref);
+ if(last){
+   const interval=Math.max(1,catalogInterval(x));
+   let d=addDays(fromKey(last),interval);
+   while(d<ref)d=addDays(d,interval);
+   return d;
+ }
  const override=normalizeDateKey(state.manualDates?.[x.key]||state.catalogDates?.[x.key]);
  if(/^\d{4}-\d{2}-\d{2}$/.test(override||"")){const od=fromKey(override);if(od>=ref)return od;}
  if(x.manualStart&&normalizeDateKey(x.start)){const sd=fromKey(x.start);if(sd>=ref)return sd;}
@@ -618,8 +648,20 @@ function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
 function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=plannedForDate(d);calendarCache.days.set(k,v);return v}
 function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
- const d=buildIntelligentPlan().next.get(taskId(x));
- return d||null;
+ const plan=buildIntelligentPlan(),id=taskId(x);
+ const d=plan.next.get(id);
+ if(d)return d;
+ // Defensive UI fallback: an active task is never presented as unplanned.
+ const due=nextDue(x,today);
+ for(let delta=0;delta<=30;delta++){
+   for(const sign of [0,1,-1]){
+     const dd=addDays(due,delta*sign);
+     if(dd<today||Math.abs(delta*sign)>30)continue;
+     const k=dayKey(dd),arr=plan.days.get(k);
+     if(arr && (dd.getDay()!==0 || state.sundayOptional[k])) return dd;
+   }
+ }
+ return due;
 }
 function plannedDateLabel(x){
  const d=plannedDateForTask(x);
@@ -724,7 +766,7 @@ function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
   const sunday=today.getDay()===0;
-  const tasks=plannedToday(),done=tasks.filter(isDone).length;
+  const tasks=plannedToday(),done=tasks.filter(x=>isDone(x)).length;
   main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal")}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
@@ -732,7 +774,7 @@ function renderToday(){
   const groups={};
   for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
   for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
-  const completed=tasks.filter(isDone);
+  const completed=tasks.filter(x=>isDone(x));
   if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
   renderRoomFocus(main,tasks);
   renderPostponed(main);
@@ -793,7 +835,7 @@ function pullCatalogTaskToday(x){
   }
   const existing=state.todayExtras.some(e=>e.date===day && (e.sourceKey===x.key || e.text===x.text && e.room===x.room));
   if(existing){toast("Diese Aufgabe ist heute schon eingeplant ❤️");return;}
-  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,manual:true});
+  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
   state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
   save();
   toast(`„${x.text}“ für heute vorgezogen ❤️`);
