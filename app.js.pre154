@@ -1,5 +1,5 @@
-/* Unser Zuhause – V154 · intelligenter Haushaltsplaner */
-const STORAGE="unser-zuhause-v154";
+/* Unser Zuhause – V149 · intelligenter Haushaltsplaner */
+const STORAGE="unser-zuhause-v149";
 const LEGACY_STORAGE="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
@@ -438,7 +438,7 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v154|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){return "v150|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -616,57 +616,6 @@ function buildIntelligentPlan(){
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
- // FINAL GLOBAL INVARIANTS:
- // 1) no planned date may be in the past;
- // 2) every active non-daily task has a concrete planned date;
- // 3) the planned date is never more than +/-30 days from its CURRENT due date.
- // This pass is deliberately independent from all earlier planner heuristics so
- // stale data from older versions cannot leak into the calendar.
- for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x))continue;
-   const id=taskId(x),due=nextDue(x,today);
-   let pd=next.get(id);
-   const valid=pd instanceof Date && pd>=today && Math.abs(Math.round((pd-due)/86400000))<=30;
-   if(valid)continue;
-   if(pd instanceof Date){
-     const old=days.get(dayKey(pd));
-     if(old){const ix=old.findIndex(y=>taskId(y)===id);if(ix>=0){old.splice(ix,1);old._weight=Math.max(0,(old._weight||0)-taskWeight(x));}}
-   }
-   next.delete(id);
-   let best=null;
-   for(let delta=0;delta<=30;delta++){
-     for(const sign of delta===0?[1]:[1,-1]){
-       const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
-       if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-       if(d.getDay()===0&&!state.sundayOptional[k])continue;
-       const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
-       const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
-       const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-       const cap=dayBudget(d);
-       const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
-       const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
-       const score=(canFit?0:100000)+used*10+(sameTheme?0:20)+Math.abs(offset)*0.1;
-       if(!best||score<best.score)best={k,d,score};
-     }
-   }
-   // There should always be a legal future candidate in a 30-day window. If
-   // capacity is exhausted everywhere, use the least-loaded legal day rather
-   // than ever returning a past date or an unplanned state.
-   if(!best){
-     for(let delta=0;delta<=30;delta++){
-       for(const sign of delta===0?[1]:[1,-1]){
-         const d=addDays(due,delta*sign),k=dayKey(d);
-         if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-         if(d.getDay()===0&&!state.sundayOptional[k])continue;
-         const arr=days.get(k),score=(arr._weight||0)*10+Math.abs(delta*sign);
-         if(!best||score<best.score)best={k,d,score};
-       }
-     }
-   }
-   if(best){
-     const arr=days.get(best.k);arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(id,best.d);
-   }
- }
  plannerCache={key,days,next};
  return plannerCache;
 }
@@ -700,30 +649,19 @@ function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.yea
 function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x);
- const due=nextDue(x,today);
  const d=plan.next.get(id);
- // HARD UI INVARIANT: a planned date is never allowed in the past and must
- // remain within the absolute +/-30-day window around the CURRENT due date.
- if(d instanceof Date && d>=today && Math.abs(Math.round((d-due)/86400000))<=30) return d;
- // Repair any stale/legacy placement defensively. Search only today..due+30
- // while staying within +/-30 days of the due date.
+ if(d)return d;
+ // Defensive UI fallback: an active task is never presented as unplanned.
+ const due=nextDue(x,today);
  for(let delta=0;delta<=30;delta++){
-   for(const sign of delta===0?[1]:[1,-1]){
+   for(const sign of [0,1,-1]){
      const dd=addDays(due,delta*sign);
-     if(dd<today||Math.abs(Math.round((dd-due)/86400000))>30)continue;
+     if(dd<today||Math.abs(delta*sign)>30)continue;
      const k=dayKey(dd),arr=plan.days.get(k);
      if(arr && (dd.getDay()!==0 || state.sundayOptional[k])) return dd;
    }
  }
- // If the due date itself is already in the past by more than 30 days, the
- // recurring-date logic should normally have advanced it. As a final defensive
- // measure, use the earliest legal future day relative to today; never return a
- // past planned date or an "unplanned" marker.
- if(today>=due){
-   const dd=new Date(today);
-   if(Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
- }
- return d instanceof Date && d>=today ? d : new Date(today);
+ return due;
 }
 function plannedDateLabel(x){
  const d=plannedDateForTask(x);
