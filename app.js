@@ -1,6 +1,6 @@
 /* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
-const STORAGE="unser-zuhause-v155";
-const LEGACY_STORAGE="unser-zuhause-v154";
+const STORAGE="unser-zuhause-v160";
+const LEGACY_STORAGE="unser-zuhause-v159";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
@@ -442,7 +442,7 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v157|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){return "v160|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -450,8 +450,10 @@ function buildIntelligentPlan(){
  const addFixed=(k,x)=>{const arr=days.get(k);if(!arr)return;arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)};
  // Once the user postpones a task, keep the remaining tasks that were already
  // planned for today. Do not refill the freed capacity with new tasks.
- const lockedToday=[];
- if(lockedToday.length){
+ const todayLockKey=dayKey(today);
+ const lockedToday=Array.isArray(state.todayPlanLock?.[todayLockKey])?state.todayPlanLock[todayLockKey]:[];
+ const hasTodayLock=Array.isArray(state.todayPlanLock?.[todayLockKey]);
+ if(hasTodayLock){
    const lockedSet=new Set(lockedToday);
    for(const x of CATALOG){
      if(lockedSet.has(taskId(x))&&!isDone(x)&&!isPostponed(x)){
@@ -464,7 +466,21 @@ function buildIntelligentPlan(){
    }
  }
  // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
- for(const d of dates){const k=dayKey(d);if(d<today)continue;if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
+ // Once the user has used "Später" today, the current non-daily plan is frozen:
+ // never refill the freed slot with a different task. Daily routines remain independent.
+ const todayKey=dayKey(today);
+ const todayLock=Array.isArray(state.todayPlanLock?.[todayKey])?state.todayPlanLock[todayKey]:null;
+ for(const d of dates){
+   const k=dayKey(d);
+   if(d<today)continue;
+   if(d.getDay()===0&&!state.sundayOptional[k])continue;
+   for(const x of rawTasksForDate(d).filter(isFixedTask)){
+     if(k===todayKey && todayLock && !todayLock.includes(taskId(x)))continue;
+     addFixed(k,x);
+   }
+   const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));
+   if(season && !(k===todayKey && todayLock))addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true});
+ }
  // Flexible occurrences: create only the next required occurrence per task and
  // then place it on the first genuinely light day. This prevents a whole room
  // from landing on one anchor day.
@@ -510,7 +526,7 @@ function buildIntelligentPlan(){
    }
    for(let delta=-30;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
-     if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
+     if(k===todayKey&&hasTodayLock&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
      const weight=taskWeight(occ.x);
@@ -581,6 +597,7 @@ function buildIntelligentPlan(){
    for(let delta=-30;delta<=30;delta++){
      const d=addDays(due,delta),k=dayKey(d);
      if(d<today||!days.has(k))continue;
+     if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
      if(d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
