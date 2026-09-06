@@ -1,5 +1,5 @@
 /* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
-const STORAGE="unser-zuhause-v164";
+const STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE="unser-zuhause-v163";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
@@ -474,7 +474,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v164|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v165|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
@@ -756,21 +756,26 @@ function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.yea
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
- const plan=buildIntelligentPlan(),id=taskId(x);
+ const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
+ // The catalog must describe the exact same visible plan as Today. In particular,
+ // after "Später" has been used, a task that is excluded by today's lock is NOT
+ // allowed to keep showing "Geplant: heute" in the catalog.
+ const lockKey=dayKey(today);
+ const locked=Array.isArray(state.todayPlanLock?.[lockKey])?new Set(state.todayPlanLock[lockKey]):null;
+ const allowedToday=!locked || locked.has(id) || x.source==="daily" || x.source==="extra";
  const d=plan.next.get(id);
  if(d instanceof Date && d>=today){
-   const due=nextDue(x,today);
-   if(Math.abs(Math.round((d-due)/86400000))<=30)return d;
- }
- // The planner is the single source of truth. Never fabricate a date here:
- // a task is "Geplant" only when that exact task actually exists on that day
- // in the planner. The invariant pass in buildIntelligentPlan() guarantees
- // that active tasks receive a legal date.
- for(const [k,arr] of plan.days){
-   if(arr.some(y=>taskId(y)===id)){
-     const dd=fromKey(k),due=nextDue(x,today);
-     if(dd>=today && Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
+   const dk=dayKey(d);
+   if(dk!==lockKey || allowedToday){
+     if(Math.abs(Math.round((d-due)/86400000))<=30)return d;
    }
+ }
+ // Search the actual planner days, not a separately calculated fallback.
+ for(const [k,arr] of plan.days){
+   if(!arr.some(y=>taskId(y)===id))continue;
+   if(k===lockKey && !allowedToday)continue;
+   const dd=fromKey(k);
+   if(dd>=today && Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
  }
  return null;
 }
@@ -810,6 +815,18 @@ function plannedToday(){
  for(const x of plan){
    if(locked && x.source!=="daily" && x.source!=="extra" && !locked.has(taskId(x))) continue;
    out.push({...x,group:groupFor(x)});
+ }
+ // Final display invariant: every non-daily catalog task whose authoritative
+ // planned date is today must be present in Today. This is intentionally a
+ // second guard against any stale/legacy planner entry becoming visible only
+ // in the catalog. The today lock remains authoritative and can still exclude
+ // tasks that were not part of the frozen plan.
+ const visibleIds=new Set(out.map(taskId));
+ for(const x of CATALOG){
+   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
+   if(locked && !locked.has(taskId(x)))continue;
+   const pd=plannedDateForTask(x);
+   if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
  }
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
