@@ -552,23 +552,20 @@ function taskWeight(x){const t=(x.text||"").toLowerCase();
 }
 function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 1;return 2}
 function dayBudget(d){
+  // Hard workload ceiling. Sunday is household-free unless explicitly opened.
   if(d.getDay()===0 && !state.sundayOptional[dayKey(d)])return 0;
-  if(d.getDay()===0)return 3;
-  if(d.getDay()===6)return 3;
-  return 6;
+  if(d.getDay()===0)return 5;
+  if(d.getDay()===6)return 5;
+  return 10;
 }
 function maxTasksPerDay(d){
   if(d.getDay()===0 && !state.sundayOptional[dayKey(d)])return 0;
-  return d.getDay()===6?3:6;
+  return d.getDay()===0?3:(d.getDay()===6?3:6);
 }
-function isFixedTask(x){
-  // No recurring task is allowed to bypass the dose planner. Even a manually
-  // entered date is a preferred target, not permission to create an overloaded
-  // day. The planner may move it to the nearest sensible slot when necessary.
-  return false;
-}
-function plannerKey(){return "v152-dose|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})}
+function isFixedTask(x){return false;}
+function plannerKey(){return "v153-safe-dose|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})}
 function plannerHorizon(){
+  // Three-year rolling planning horizon, but with O(1) day-capacity checks.
   const start=fromKey("2026-09-01");
   const end=fromKey("2029-12-31");
   return {start,end};
@@ -583,21 +580,14 @@ function fixedOccurrenceDates(x,start,end){
   return out;
 }
 function flexibleOccurrenceDates(x,start,end){
-  // Flexible room/rotation tasks need a real long-term occurrence series too.
-  // They are not "fixed" to the day on which their room anchor happens to fall:
-  // that anchor is only the starting point. The dose planner is then allowed
-  // to distribute each occurrence to a nearby sensible day.
   const interval=Math.max(7,smartCadence(x));
   let first=null;
   if(BASEMENT.includes(x.room)){
     const idx=Math.max(0,BASEMENT.indexOf(x.room));
     first=addDays(fromKey("2026-09-04"),idx*7);
-  }else{
-    first=weeklyDate(x);
-  }
-  if(!first) first=addDays(start,hashTask(x.key)%interval);
-  let d=new Date(first);
-  const last=lastDone(x);
+  }else first=weeklyDate(x);
+  if(!first)first=addDays(start,hashTask(x.key)%interval);
+  let d=new Date(first),last=lastDone(x);
   if(last && fromKey(last)>d)d=fromKey(last);
   while(d<start)d=addDays(d,interval);
   if(last && sameDay(d,fromKey(last)))d=addDays(d,interval);
@@ -609,105 +599,150 @@ function idealOccurrenceDates(x,start,end){
   const fixed=fixedOccurrenceDates(x,start,end);
   if(fixed.length)return fixed;
   if(x.window){
-    const first=windowDate(x,start); if(!first)return [];
-    const out=[]; for(let d=new Date(first);d<=end;d=addDays(d,180))if(d>=start)out.push(new Date(d)); return out;
+    const first=windowDate(x,start);if(!first)return [];
+    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,180))if(d>=start)out.push(new Date(d));return out;
   }
   if(x.raffstore){
-    const first=raffstoreFirstDate(x,start); if(!first)return [];
-    const out=[]; for(let d=new Date(first);d<=end;d=addDays(d,365))if(d>=start)out.push(new Date(d)); return out;
+    const first=raffstoreFirstDate(x,start);if(!first)return [];
+    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,365))if(d>=start)out.push(new Date(d));return out;
   }
   if(x.start){
     const first=explicitNext(x,start),interval=Math.max(1,catalogInterval(x));
-    const out=[]; for(let d=new Date(first);d<=end;d=addDays(d,interval))if(d>=start)out.push(new Date(d)); return out;
+    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,interval))if(d>=start)out.push(new Date(d));return out;
   }
   if(x.source==="rotation"){
     const interval=Math.max(1,catalogInterval(x)),anchor=rotationAnchor(x),first=nextOccurrenceFromAnchor(anchor,interval,start,lastDone(x));
-    const out=[]; for(let d=new Date(first);d<=end;d=addDays(d,interval))out.push(new Date(d)); return out;
+    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,interval))out.push(new Date(d));return out;
   }
   return flexibleOccurrenceDates(x,start,end);
 }
-function placementScore(arr,x,d){
-  const cap=dayBudget(d),used=arr._weight||0,w=taskWeight(x);
-  if(isSundayUnavailable(d)||used+w>cap)return Infinity;
-  if(arr.length>=maxTasksPerDay(d))return Infinity;
-  const sameRoom=arr.filter(y=>y.room===x.room).reduce((n,y)=>n+taskWeight(y),0);
-  const roomLimit=w>=5?5:6;
-  if(sameRoom+w>roomLimit)return Infinity;
-  if(arr.some(y=>y.room===x.room&&taskWeight(y)>=5)&&w>=3)return Infinity;
-  if(arr.some(y=>taskWeight(y)>=5)&&w>=3)return Infinity;
-  let score=used*3+sameRoom*4+arr.length*2;
-  if(preferredWeekday(x)!==null&&d.getDay()===preferredWeekday(x))score-=3;
-  // Prefer close-to-ideal dates, but only after workload balance.
-  return score;
+
+// The previous planner repeatedly filtered/scanned each day's full task array.
+// With a multi-year horizon this became quadratic and could freeze mobile Safari.
+// Keep compact metadata per day instead: placement checks are constant-time.
+function plannerTheme(x){
+ const t=(x.text||"").toLowerCase(), room=x.room||"";
+ if(x.window||/\bfenster\b/.test(t))return "fenster";
+ if(x.raffstore||/raffstore/.test(t))return "raffstore";
+ if(/kamin|schornstein/.test(t))return "kamin";
+ if(/stuck/.test(t))return "stuck";
+ if(BASEMENT.includes(room))return "keller";
+ if(["Gäste-WC","Eltern-WC","Kinderbad","Bad"].includes(room)||/\b(wc|toilette|dusche|badewanne)\b/.test(t))return "bad";
+ if(["Wohnzimmer","Essbereich","Küche"].includes(room))return "eg-wohnen";
+ if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Saunaraum"].includes(room))return "og";
+ if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(room))return "eg-neben";
+ return room||"sonstiges";
+}
+function plannerThemeLabel(x){
+ const th=plannerTheme(x);
+ return ({fenster:"🪟 Fenstertag",raffstore:"☀️ Raffstore-Tag",kamin:"🔥 Kamintag",stuck:"🏛️ Stuck-Tag",keller:"🏡 Kellertag",bad:"🚿 Bad-/WC-Tag","eg-wohnen":"🍽️ EG-Wohn-/Küchentag",og:"🛏️ OG-Tag","eg-neben":"🚪 EG-Nebenräume"}[th]||`${x.room||"Haushalt"}-Tag`);
+}
+function seasonalTask(x){return !!(x.window||x.raffstore||x.seasonal||/fenster|raffstore/.test((x.text||"").toLowerCase()));}
+function ensureDayMeta(arr){
+ if(!arr._weight)arr._weight=0;
+ if(!arr._rooms)arr._rooms=new Map();
+ if(!arr._ids)arr._ids=new Set();
+ if(!arr._themes)arr._themes=new Map();
+ if(!arr._theme)arr._theme="";
+ if(!arr._themeLabel)arr._themeLabel="";
+ if(!arr._heavy)arr._heavy=false;
+ return arr;
+}
+function placementScoreFast(arr,x,d){
+ ensureDayMeta(arr);
+ const cap=dayBudget(d),w=taskWeight(x);
+ if(cap<=0 || isSundayUnavailable(d) || arr._weight+w>cap || arr.length>=maxTasksPerDay(d))return Infinity;
+ const room=x.room||"";
+ const sameRoom=arr._rooms.get(room)||0;
+ const theme=plannerTheme(x),sameTheme=arr._themes.get(theme)||0;
+ const roomLimit=w>=5?5:6;
+ if(sameRoom+w>roomLimit)return Infinity;
+ if(arr._heavy && w>=3)return Infinity;
+ // One dominant task (window/large job) can define the day and consume the capacity.
+ if(w>=5 && arr._heavy)return Infinity;
+ let score=arr._weight*3+sameRoom*4+arr.length*2;
+ if(arr.length){
+   if(arr._theme===theme)score-=18;
+   else score+=8;
+ }
+ if(sameTheme)score-=Math.min(12,sameTheme*3);
+ const pw=preferredWeekday(x);
+ if(pw!==null&&d.getDay()===pw)score-=3;
+ return score;
+}
+function addPlanned(arr,x,d){
+ ensureDayMeta(arr);
+ const id=taskId(x),w=taskWeight(x),room=x.room||"",theme=plannerTheme(x);
+ if(arr._ids.has(id))return false;
+ arr.push(x);arr._ids.add(id);arr._weight+=w;arr._rooms.set(room,(arr._rooms.get(room)||0)+w);arr._themes.set(theme,(arr._themes.get(theme)||0)+w);
+ if(!arr._theme){arr._theme=theme;arr._themeLabel=plannerThemeLabel(x)}
+ if(w>=5)arr._heavy=true;
+ return true;
+}
+function placementShiftWindow(x){
+ const interval=Math.max(7,catalogInterval(x));
+ // Seasonal tasks may move only a little: bundling must never turn spring into winter.
+ if(seasonalTask(x))return x.raffstore?14:10;
+ return Math.min(28,Math.max(3,Math.round(interval*0.35)));
 }
 function choosePlannedDate(days,ideal,x,start,end){
-  const interval=Math.max(7,smartCadence(x));
-  const maxShift=Math.min(120,Math.max(21,Math.round(interval*0.75)));
-  let best=null,bestScore=Infinity;
-  for(let delta=0;delta<=maxShift;delta++){
-    const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
-    for(const d of candidates){
-      if(d<start||d>end||isSundayUnavailable(d))continue;
-      const arr=days.get(dayKey(d)); if(!arr)continue;
-      const base=placementScore(arr,x,d); if(base===Infinity)continue;
-      const distance=delta;
-      const score=base + distance*0.35;
-      if(score<bestScore){bestScore=score;best=dayKey(d);}
-    }
-    if(best!==null && delta>=7 && bestScore<20)break;
-  }
-  return best;
+ const maxShift=placementShiftWindow(x);
+ let best=null,bestScore=Infinity;
+ for(let delta=0;delta<=maxShift;delta++){
+   const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
+   for(const d of candidates){
+     if(d<start||d>end||isSundayUnavailable(d))continue;
+     const arr=days.get(dayKey(d));if(!arr)continue;
+     const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;
+     const theme=plannerTheme(x);
+     const themeBonus=(arr._theme&&arr._theme===theme)?-25:0;
+     const score=sc+delta*0.8+themeBonus;
+     if(score<bestScore){bestScore=score;best=dayKey(d);}
+   }
+   if(best!==null && delta>=3 && bestScore<0)break;
+ }
+ return best;
 }
 function fallbackPlannedDate(days,ideal,x,start,end){
-  // Never drop an occurrence. Search outward on both sides so a full target
-  // date does not push a backlog into one huge future pile. Sundays stay free.
-  for(let delta=0;delta<=365;delta++){
-    const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
-    for(const d of candidates){
-      if(d<start||d>end||isSundayUnavailable(d))continue;
-      const arr=days.get(dayKey(d)); if(!arr)continue;
-      if(placementScore(arr,x,d)!==Infinity)return dayKey(d);
-    }
-  }
-  return null;
+ // If the preferred neighborhood is full, expand gradually rather than dumping work on one date.
+ const max=Math.min(120,Math.max(30,catalogInterval(x)));
+ let best=null,bestScore=Infinity;
+ for(let delta=0;delta<=max;delta++){
+   const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
+   for(const d of candidates){
+     if(d<start||d>end||isSundayUnavailable(d))continue;
+     const arr=days.get(dayKey(d));if(!arr)continue;
+     const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;
+     const score=sc+delta*1.2;
+     if(score<bestScore){bestScore=score;best=dayKey(d);}
+   }
+ }
+ return best;
 }
 function buildIntelligentPlan(){
-  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
-  const {start,end}=plannerHorizon(),days=new Map(),occurrences=new Map();
-  for(let d=new Date(start);d<=end;d=addDays(d,1))days.set(dayKey(d),[]);
-  const add=(d,x)=>{
-    const k=dayKey(d),arr=days.get(k);if(!arr)return;
-    if(!arr.some(y=>taskId(y)===taskId(x))){arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);}
-    const id=taskId(x),list=occurrences.get(id)||[];
-    if(!list.some(y=>sameDay(y,d))){list.push(new Date(d));occurrences.set(id,list)}
-  };
-  // Build every task's ideal occurrences first. Then distribute them globally.
-  // This prevents 100+ tasks from landing on one date merely because their
-  // individual interval happens to produce the same day.
-  const jobs=[];
-  for(const x of CATALOG){
-    const ideals=idealOccurrenceDates(x,start,end);
-    for(const ideal of ideals)jobs.push({x,ideal,fixed:isFixedTask(x)});
-  }
-  jobs.sort((a,b)=>{
-    if(a.fixed!==b.fixed)return a.fixed?-1:1;
-    const wa=taskWeight(a.x),wb=taskWeight(b.x); if(wa!==wb)return wb-wa;
-    return a.ideal-b.ideal || a.x.room.localeCompare(b.x.room,"de") || a.x.text.localeCompare(b.x.text,"de");
-  });
-  for(const job of jobs){
-    const {x,ideal}=job;
-    // Every recurring task goes through the same dose limiter. A manually
-    // selected date is the preferred target, but it must never be allowed to
-    // create 48/214-task days. If the target is full, move to the nearest
-    // sensible slot while preserving the task's rhythm as closely as possible.
-    let chosen=choosePlannedDate(days,ideal,x,start,end);
-    if(chosen===null)chosen=fallbackPlannedDate(days,ideal,x,start,end);
-    if(chosen!==null)add(fromKey(chosen),x);
-  }
-  for(const [,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b,"de"));
-  for(const [,list] of occurrences)list.sort((a,b)=>a-b);
-  const next=new Map();for(const [id,list] of occurrences){const n=list.find(d=>d>=today);if(n)next.set(id,new Date(n));}
-  plannerCache={key,days,next,occurrences};return plannerCache;
+ const key=plannerKey()+"|theme-bundle-v154";if(plannerCache.key===key)return plannerCache;
+ const {start,end}=plannerHorizon(),days=new Map(),occurrences=new Map();
+ for(let d=new Date(start);d<=end;d=addDays(d,1)){const arr=[];ensureDayMeta(arr);days.set(dayKey(d),arr);}
+ const jobs=[];
+ for(const x of CATALOG){
+   const ideals=idealOccurrenceDates(x,start,end);
+   for(const ideal of ideals)jobs.push({x,ideal});
+ }
+ // First place the tasks that are hardest to fit. Within equal weight, keep the original ideal date order.
+ jobs.sort((a,b)=>{const wa=taskWeight(a.x),wb=taskWeight(b.x);if(wa!==wb)return wb-wa;const sa=seasonalTask(a.x),sb=seasonalTask(b.x);if(sa!==sb)return sb-sa;return a.ideal-b.ideal||plannerTheme(a.x).localeCompare(plannerTheme(b.x),"de")||a.x.room.localeCompare(b.x.room,"de")||a.x.text.localeCompare(b.x.text,"de")});
+ for(const job of jobs){
+   const {x,ideal}=job;
+   let chosen=choosePlannedDate(days,ideal,x,start,end);
+   if(chosen===null)chosen=fallbackPlannedDate(days,ideal,x,start,end);
+   if(chosen===null)continue;
+   const d=fromKey(chosen),arr=days.get(chosen);
+   if(!addPlanned(arr,x,d))continue;
+   const id=taskId(x),list=occurrences.get(id)||[];list.push(new Date(d));occurrences.set(id,list);
+ }
+ for(const [,arr] of days){arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b,"de"));delete arr._rooms;delete arr._ids;delete arr._themes;delete arr._heavy;delete arr._weight;delete arr._theme;delete arr._themeLabel;}
+ for(const [,list] of occurrences)list.sort((a,b)=>a-b);
+ const next=new Map();for(const [id,list] of occurrences){const n=list.find(d=>d>=today);if(n)next.set(id,new Date(n));}
+ plannerCache={key,days,next,occurrences};return plannerCache;
 }
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
 
@@ -781,7 +816,13 @@ function attachDueEditor(el,x){
  };
 }
 
-function themeFor(d){if(d.getDay()===0)return DAY_THEME[0];if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);return DAY_THEME[d.getDay()]||""}
+function themeFor(d){
+ if(d.getDay()===0)return DAY_THEME[0];
+ const tasks=plannedForDate(d);
+ if(tasks.length){const first=tasks[0];if(taskWeight(first)>=5)return plannerThemeLabel(first);}
+ if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);
+ return DAY_THEME[d.getDay()]||"";
+}
 
 function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Alltag",area:"Haushalt",group,source:"daily",editable:false});return out}
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
