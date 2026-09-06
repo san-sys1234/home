@@ -1,8 +1,9 @@
-/* Unser Zuhause – V141 · Raumrotationen, Duplikate und Katalogbearbeitung bereinigt */
-const STORAGE="unser-zuhause-v141";
-const LEGACY_STORAGE="unser-zuhause-v140";
-const LEGACY_STORAGE_2="unser-zuhause-v139";
-const LEGACY_STORAGE_3="unser-zuhause-v109";
+/* Unser Zuhause – V142 · Katalog-Deduplizierung, Raumzuordnung und Fensterrotationen */
+const STORAGE="unser-zuhause-v142";
+const LEGACY_STORAGE="unser-zuhause-v141";
+const LEGACY_STORAGE_2="unser-zuhause-v140";
+const LEGACY_STORAGE_3="unser-zuhause-v139";
+const LEGACY_STORAGE_4="unser-zuhause-v109";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
  ["🍽️ Nach Mahlzeiten",["Geschirr in den Geschirrspüler","Tisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf abwischen"]],
@@ -319,9 +320,78 @@ function windowDate(x,ref=today){
  return d;
 }
 
-function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const normalizeTaskText=t=>String(t||"").toLowerCase().replace(/^[^a-zäöüß0-9]+/i,"").replace(/[^a-zäöüß0-9]+/gi," ").trim();
- const roomText=new Set(out.map(x=>`${x.room}|${normalizeTaskText(x.text)}`));
- for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${normalizeTaskText(r.text)}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
+function normalizeTaskText(t){return String(t||"").toLowerCase().replace(/[^a-zäöüß0-9]+/gi," ").trim()}
+function catalogDedupeKey(text,room){return `${String(room||"").trim()}|${normalizeTaskText(text)}`}
+function buildCatalog(){
+ const out=[];
+ const seen=new Map();
+ const add=(text,room,area,meta={})=>{
+   const key=meta.key||`seed|${room}|${text}`;
+   if(catalogDeleted(key))return null;
+   const e=editFor(key)||{};
+   const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";
+   const item={text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,raffstore:!!meta.raffstore,raffstoreWindowKey:meta.raffstoreWindowKey,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey};
+   const dk=catalogDedupeKey(item.text,item.room);
+   const existing=seen.get(dk);
+   if(existing){
+     // Prefer the original room task over a rotation/custom duplicate, but
+     // merge the rotation cadence and any user-entered date into it.
+     if(existing.source!=="rotation" && item.source==="rotation"){
+       if(!existing.interval && item.interval) existing.interval=item.interval;
+       if(!existing.start && item.start){existing.start=item.start;existing.manualStart=item.manualStart;}
+       return existing;
+     }
+     if(existing.source==="rotation" && item.source!=="rotation"){
+       if(!item.interval && existing.interval)item.interval=existing.interval;
+       if(!item.start && existing.start){item.start=existing.start;item.manualStart=existing.manualStart;}
+       const idx=out.indexOf(existing); if(idx>=0)out[idx]=item;
+       seen.set(dk,item); return item;
+     }
+     return existing;
+   }
+   seen.set(dk,item);out.push(item);return item;
+ };
+ // Seed tasks first so they remain the canonical editable room tasks.
+ for(const [room,area,tasks] of catalogSeed){
+   for(const text of tasks){
+     if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;
+     add(text,room,area,{key:`seed|${room}|${text}`});
+   }
+ }
+ // Rotations are integrated into the real room. If a same-named seed task
+ // exists, enrich that task with the rotation interval instead of creating a duplicate.
+ for(const r of ROTATIONS){
+   for(const room of r.rooms||[]){
+     const canonical=add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});
+     if(canonical && canonical.source!=="rotation"){
+       const rotationKey=`rotation|${room}|${r.text}`;
+       // Carry old manual settings from legacy rotation entries to the canonical room task.
+       const oldDate=state.manualDates?.[rotationKey]||state.catalogDates?.[rotationKey];
+       if(oldDate && !state.manualDates?.[canonical.key] && !state.catalogDates?.[canonical.key]){
+         state.manualDates=state.manualDates||{};state.catalogDates=state.catalogDates||{};
+         state.manualDates[canonical.key]=oldDate;state.catalogDates[canonical.key]=oldDate;
+         canonical.start=oldDate;canonical.manualStart=true;
+       }
+       const oldEdit=state.catalogEdits?.[rotationKey];
+       if(oldEdit && !state.catalogEdits?.[canonical.key]){
+         state.catalogEdits=state.catalogEdits||{};
+         state.catalogEdits[canonical.key]={...oldEdit,room:canonical.room,area:canonical.area,start:oldEdit.start||canonical.start,interval:oldEdit.interval||canonical.interval,manualStart:true};
+       }
+       if(state.catalogDeleted?.[rotationKey])delete state.catalogDeleted[rotationKey];
+     }
+   }
+ }
+ // Custom tasks are also deduplicated by room + normalized title. This prevents
+ // old legacy copies such as “🧺 Bettwäsche wechseln” from creating a second row.
+ for(const c of state.custom){
+   const key=c.key||`custom|${c.id}`;
+   if(catalogDeleted(key))continue;
+   add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description});
+ }
+ // Windows and Raffstores are always individual room tasks.
+ for(const w of WINDOW_TASKS)add(w.text,w.room,w.area,w);
+ return out;
+}
 function refreshCatalog(){
  CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
  invalidatePlans();
@@ -428,7 +498,7 @@ function buildIntelligentPlan(){
    }
  }
  // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
- for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
+ for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);}
  // Flexible occurrences: create only the next required occurrence per task and
  // then place it on the first genuinely light day. This prevents a whole room
  // from landing on one anchor day.
