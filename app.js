@@ -253,6 +253,12 @@ function isDone(x,ref=today){
  // Array.filter passes index/array as extra arguments; only a real Date may
  // override the reference day. This keeps Today rendering stable.
  if(!(ref instanceof Date))ref=today;
+ // Daily routines are occurrence-based: a routine completed on a previous
+ // day must NEVER remain completed today. Ignore legacy/global done flags for
+ // daily tasks and use only the completion date of the current occurrence.
+ if(x && (x.source==="daily" || String(x.key||"").startsWith("daily|") || String(x.id||"").startsWith("daily|"))){
+   return lastDone(x)===dayKey(ref);
+ }
  const l=lastDone(x);
  if(l)return l===dayKey(ref);
  return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
