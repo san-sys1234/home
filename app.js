@@ -1,6 +1,6 @@
 /* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
-const STORAGE="unser-zuhause-v165";
-const LEGACY_STORAGE="unser-zuhause-v163";
+const STORAGE="unser-zuhause-v167";
+const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
@@ -185,7 +185,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
+function defaultState(){return {done:{},lastDone:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -221,7 +221,7 @@ function loadState(){
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_2)||"null")}catch{}}
  const s=Object.assign(defaultState(),raw||{});
  migrateWCRoomNames(s);
- s.done=s.done||{};s.lastDone=s.lastDone||{};s.postponed=s.postponed||{};
+ s.done=s.done||{};s.lastDone=s.lastDone||{};s.dailyDone=s.dailyDone&&typeof s.dailyDone==="object"?s.dailyDone:{};s.postponed=s.postponed||{};
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
@@ -253,11 +253,12 @@ function isDone(x,ref=today){
  // Array.filter passes index/array as extra arguments; only a real Date may
  // override the reference day. This keeps Today rendering stable.
  if(!(ref instanceof Date))ref=today;
- // Daily routines are occurrence-based: a routine completed on a previous
- // day must NEVER remain completed today. Ignore legacy/global done flags for
- // daily tasks and use only the completion date of the current occurrence.
- if(x && (x.source==="daily" || String(x.key||"").startsWith("daily|") || String(x.id||"").startsWith("daily|"))){
-   return lastDone(x)===dayKey(ref);
+ // Daily routines have their own occurrence ledger. A routine is completed
+ // ONLY when today's exact daily occurrence was explicitly checked off.
+ // Legacy global done/lastDone flags are deliberately ignored here.
+ if(isDailyTask(x)){
+   const k=dayKey(ref),id=taskId(x);
+   return !!(state.dailyDone?.[k]?.[id]);
  }
  const l=lastDone(x);
  if(l)return l===dayKey(ref);
@@ -270,16 +271,30 @@ function canonicalTaskFor(x){
  return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
 }
 function markDone(x){
+ const k=dayKey();
+ // Daily routines are date-scoped occurrences, never recurring global flags.
+ if(isDailyTask(x)){
+   state.dailyDone=state.dailyDone&&typeof state.dailyDone==="object"?state.dailyDone:{};
+   state.dailyDone[k]=state.dailyDone[k]||{};
+   state.dailyDone[k][taskId(x)]=true;
+   return;
+ }
  const base=x.source==="extra"?canonicalTaskFor(x):null;
  const target=base||x;
- const k=dayKey();
  state.done[doneKey(target)]=true;
  state.lastDone[lastKey(target)]=k;
  if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;}
  delete state.postponed[taskId(target)];
  if(target!==x)delete state.postponed[taskId(x)];
 }
-function unmarkDone(x){delete state.done[doneKey(x)]}
+function unmarkDone(x){
+ if(isDailyTask(x)){
+   const k=dayKey();
+   if(state.dailyDone?.[k])delete state.dailyDone[k][taskId(x)];
+   return;
+ }
+ delete state.done[doneKey(x)];
+}
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
  if(exact)return exact;
