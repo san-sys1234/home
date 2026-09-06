@@ -1,10 +1,7 @@
-/* Unser Zuhause – V152 · stabiler, dosierter Langzeit-Planer */
-const STORAGE="unser-zuhause-v148";
-const LEGACY_STORAGE="unser-zuhause-v147";
-const LEGACY_STORAGE_2="unser-zuhause-v141";
-const LEGACY_STORAGE_3="unser-zuhause-v140";
-const LEGACY_STORAGE_4="unser-zuhause-v139";
-const LEGACY_STORAGE_5="unser-zuhause-v109";
+/* Unser Zuhause – V139 · WC- und Fenster-Zuordnung korrigiert */
+const STORAGE="unser-zuhause-v139";
+const LEGACY_STORAGE="unser-zuhause-v138";
+const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
  ["🍽️ Nach Mahlzeiten",["Geschirr in den Geschirrspüler","Tisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf abwischen"]],
@@ -186,7 +183,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{},__dosePlannerVersion:"v152"}}
+function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -218,9 +215,6 @@ function loadState(){
  try{raw=JSON.parse(localStorage.getItem(STORAGE)||"null")}catch{}
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE)||"null")}catch{}}
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_2)||"null")}catch{}}
- if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_3)||"null")}catch{}}
- if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_4)||"null")}catch{}}
- if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_5)||"null")}catch{}}
  const s=Object.assign(defaultState(),raw||{});
  migrateWCRoomNames(s);
  s.done=s.done||{};s.lastDone=s.lastDone||{};s.postponed=s.postponed||{};
@@ -240,25 +234,17 @@ let state=loadState();
 let selectedTab="today";
 let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
-let roomItemsCache={key:"",map:new Map()};
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};roomItemsCache={key:"",map:new Map()}}
+function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()}}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
-function isDone(x){
- const l=lastDone(x);
- // Recurring catalog tasks are completed for the current occurrence only.
- // The old permanent done-flag is kept as a legacy fallback when no completion
- // date exists, so old data is not lost.
- if(l)return l===dayKey();
- return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
-}
+function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]}
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
-function unmarkDone(x){delete state.done[doneKey(x)];delete state.lastDone[lastKey(x)];if(x.key)delete state.lastDone[x.key];if(x.id)delete state.lastDone[x.id]}
+function unmarkDone(x){delete state.done[doneKey(x)]}
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
  if(exact)return exact;
@@ -309,74 +295,9 @@ function toggleTask(x){if(isDone(x))unmarkDone(x);else markDone(x);syncCompleted
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
-function catalogInterval(x){
- if(Number(x.interval)>0)return Number(x.interval);
- return smartCadence(x);
-}
-function smartCadence(x){
- const t=(x.text||"").toLowerCase();
- const room=x.room||"";
- // Hygienically important rooms get a genuinely frequent rhythm; deep-care
- // details are deliberately slower so a bathroom does not become an all-day task.
- if(["Gäste-WC","Eltern-WC"].includes(room)){
-   if(/toilette|wc-bürste|waschbecken|boden (saugen|wischen)|lichtschalter|türklink/.test(t))return 7;
-   if(/armatur|spiegel|toilettenrand|dusche|badewanne/.test(t))return 14;
-   if(/fugen|silikon|sockelleiste|türrahmen|türblätter/.test(t))return 60;
- }
- if(["Kinderbad","Bad"].includes(room)){
-   if(/toilette|wc-bürste|waschbecken|boden (saugen|wischen)|dusche|badewanne/.test(t))return 7;
-   if(/armatur|spiegel|duschrinne|duschglas/.test(t))return 14;
-   if(/fugen|silikon|sockelleiste|türrahmen|türblätter/.test(t))return 60;
- }
- if(/bettwäsche/.test(t))return 14;
- if(/handtücher/.test(t))return 14;
- if(/kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;
- if(/kamin|schornstein/.test(t))return /kontrolle|wartung/.test(t)?365:30;
- if(/fenster/.test(t))return 180;
- if(/raffstore/.test(t))return 365;
- if(/toilette|wc-bürste/.test(t))return 14;
- if(/waschbecken|spüle|arbeitsfläche|esstisch|hochstuhl/.test(t))return 14;
- if(/boden (saugen|wischen)|ecken absaugen/.test(t))return 14;
- if(/spiegel/.test(t))return 30;
- if(/sockelleiste|spinnweb|lichtschalter|türklink/.test(t))return 30;
- if(/abwischen|abstauben|reinigen/.test(t))return 45;
- if(/türrahmen|türblätter|zargen|steckdosen/.test(t))return 90;
- if(/backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 90;
- if(/fugen|silikon/.test(t))return 90;
- if(/matratze|teppich|vorhang|decke|polster/.test(t))return 180;
- if(/lampe|vorhangstange|schiene/.test(t))return 180;
- return 60;
-}
-function hashTask(str){let h=2166136261;for(const ch of String(str||"")){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0;}
-function preferredWeekday(x){return WEEKDAYS[x.room]??null;}
-function roomTaskAnchor(x,interval){
- const base=fromKey("2026-09-07");
- const dow=preferredWeekday(x);
- if(dow!==null){
-   const roomBase=nextDow(base,dow);
-   const offset=(hashTask(x.key)%Math.max(1,interval));
-   // Keep weekly-ish work on its room day while using a stable week/interval phase.
-   if(interval<=21){
-     const weeks=Math.floor((hashTask(x.key)/7)%Math.max(1,Math.round(interval/7)));
-     return addDays(roomBase,weeks*7);
-   }
-   return addDays(roomBase,offset);
- }
- if(BASEMENT.includes(x.room)){
-   const roomIdx=BASEMENT.indexOf(x.room), first=fromKey("2026-09-04");
-   return addDays(first,roomIdx*7);
- }
- return addDays(base,hashTask(x.key)%Math.max(1,interval));
-}
-function nextOccurrenceFromAnchor(anchor,interval,ref,last){
- let d=new Date(anchor); const l=last?fromKey(last):null;
- if(l && l>=d) d=new Date(l);
- while(d<ref)d=addDays(d,interval);
- if(l && sameDay(d,l))d=addDays(d,interval);
- return d;
-}
+function catalogInterval(x){if(Number(x.interval)>0)return Number(x.interval);const t=(x.text||"").toLowerCase();if(/türklink|lichtschalter|steckdose|arbeitsfläche|esstisch|waschbecken|toilette|wc-bürste|boden saugen|boden wischen/.test(t))return 7;if(/sockelleiste|fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;if(/bettwäsche|handtücher|kaminholz|holz schlichten|direkt vor kamin/.test(t))return 14;if(/fenster|raffstore|vorhangstange|matratze|teppich|polster/.test(t))return 180;if(/türblätter|türrahmen|zargen|fugen|silikon|backofen|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna|stuck|lampe/.test(t))return 90;return 60}
 
-function windowEntries(){const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|Gäste-WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};const out=[];for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);const wk=`${area}|${room}|${i}`;out.push({key:`window|${area}|${room}|${i}`,text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room,area,place:`Fenster ${i}`,description:"Nur dieses Fenster bzw. diesen kleinen Fensterbereich gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.",window:true,windowKey:wk,windowGroup:map[area+"|"+room],source:"window",editable:true,interval:180});out.push({key:`raffstore|${area}|${room}|${i}`,text:`☀️ Raffstore ${area} · ${room}${count>1?" "+i:""}`,room,area,place:`Raffstore ${i}`,description:"Nur den zum jeweiligen Fenster gehörenden Raffstore/Sonnenschutz reinigen und nach Herstellerangabe pflegen. Lamellen vorsichtig behandeln; bei empfindlichen Oberflächen keine ungeeigneten Reiniger verwenden.",raffstore:true,raffstoreWindowKey:wk,source:"raffstore",editable:true,interval:365});}return out}
+function windowEntries(){const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|Gäste-WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};const out=[];for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);const wk=`${area}|${room}|${i}`;out.push({key:`window|${area}|${room}|${i}`,text:`🪟 Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`,room,area,place:`Fenster ${i}`,description:"Nur dieses Fenster bzw. diesen kleinen Fensterbereich gründlich reinigen – innen, außen nur wenn sicher, inklusive Fensterbank sowie Rahmen und Falz dieses Fensters.",window:true,windowKey:wk,windowGroup:map[area+"|"+room],source:"window",editable:false,interval:180});out.push({key:`raffstore|${area}|${room}|${i}`,text:`☀️ Raffstore ${area} · ${room}${count>1?" "+i:""}`,room,area,place:`Raffstore ${i}`,description:"Nur den zum jeweiligen Fenster gehörenden Raffstore/Sonnenschutz reinigen und nach Herstellerangabe pflegen. Lamellen vorsichtig behandeln; bei empfindlichen Oberflächen keine ungeeigneten Reiniger verwenden.",raffstore:true,raffstoreWindowKey:wk,source:"raffstore",editable:false,interval:365});}return out}
 const WINDOW_TASKS=windowEntries();
 const WINDOW_GROUP_DATES={};for(const s of SEASONAL_SPECIALS){if(!WINDOW_GROUP_DATES[s.key])WINDOW_GROUP_DATES[s.key]=[];WINDOW_GROUP_DATES[s.key].push(...s.dates)}for(const k in WINDOW_GROUP_DATES)WINDOW_GROUP_DATES[k]=[...new Set(WINDOW_GROUP_DATES[k])].sort();
 function windowDate(x,ref=today){
@@ -396,85 +317,14 @@ function windowDate(x,ref=today){
  return d;
 }
 
-function normalizeTaskText(t){return String(t||"").toLowerCase().replace(/[^a-zäöüß0-9]+/gi," ").trim()}
-function catalogDedupeKey(text,room){return `${String(room||"").trim()}|${normalizeTaskText(text)}`}
-function buildCatalog(){
- const out=[];
- const seen=new Map();
- const add=(text,room,area,meta={})=>{
-   const key=meta.key||`seed|${room}|${text}`;
-   if(catalogDeleted(key))return null;
-   const e=editFor(key)||{};
-   const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";
-   const item={text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,raffstore:!!meta.raffstore,raffstoreWindowKey:meta.raffstoreWindowKey,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey};
-   const dk=catalogDedupeKey(item.text,item.room);
-   const existing=seen.get(dk);
-   if(existing){
-     // Prefer the original room task over a rotation/custom duplicate, but
-     // merge the rotation cadence and any user-entered date into it.
-     if(existing.source!=="rotation" && item.source==="rotation"){
-       if(!existing.interval && item.interval) existing.interval=item.interval;
-       if(!existing.start && item.start){existing.start=item.start;existing.manualStart=item.manualStart;}
-       return existing;
-     }
-     if(existing.source==="rotation" && item.source!=="rotation"){
-       if(!item.interval && existing.interval)item.interval=existing.interval;
-       if(!item.start && existing.start){item.start=existing.start;item.manualStart=existing.manualStart;}
-       const idx=out.indexOf(existing); if(idx>=0)out[idx]=item;
-       seen.set(dk,item); return item;
-     }
-     return existing;
-   }
-   seen.set(dk,item);out.push(item);return item;
- };
- // Seed tasks first so they remain the canonical editable room tasks.
- for(const [room,area,tasks] of catalogSeed){
-   for(const text of tasks){
-     if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;
-     add(text,room,area,{key:`seed|${room}|${text}`});
-   }
- }
- // Rotations are integrated into the real room. If a same-named seed task
- // exists, enrich that task with the rotation interval instead of creating a duplicate.
- for(const r of ROTATIONS){
-   for(const room of r.rooms||[]){
-     const canonical=add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});
-     if(canonical && canonical.source!=="rotation"){
-       const rotationKey=`rotation|${room}|${r.text}`;
-       // Carry old manual settings from legacy rotation entries to the canonical room task.
-       const oldDate=state.manualDates?.[rotationKey]||state.catalogDates?.[rotationKey];
-       if(oldDate && !state.manualDates?.[canonical.key] && !state.catalogDates?.[canonical.key]){
-         state.manualDates=state.manualDates||{};state.catalogDates=state.catalogDates||{};
-         state.manualDates[canonical.key]=oldDate;state.catalogDates[canonical.key]=oldDate;
-         canonical.start=oldDate;canonical.manualStart=true;
-       }
-       const oldEdit=state.catalogEdits?.[rotationKey];
-       if(oldEdit && !state.catalogEdits?.[canonical.key]){
-         state.catalogEdits=state.catalogEdits||{};
-         state.catalogEdits[canonical.key]={...oldEdit,room:canonical.room,area:canonical.area,start:oldEdit.start||canonical.start,interval:oldEdit.interval||canonical.interval,manualStart:true};
-       }
-       if(state.catalogDeleted?.[rotationKey])delete state.catalogDeleted[rotationKey];
-     }
-   }
- }
- // Custom tasks are also deduplicated by room + normalized title. This prevents
- // old legacy copies such as “🧺 Bettwäsche wechseln” from creating a second row.
- for(const c of state.custom){
-   const key=c.key||`custom|${c.id}`;
-   if(catalogDeleted(key))continue;
-   add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description});
- }
- // Windows and Raffstores are always individual room tasks.
- for(const w of WINDOW_TASKS)add(w.text,w.room,w.area,w);
- return out;
-}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const roomText=new Set(out.map(x=>`${x.room}|${x.text}`));for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${r.text}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:false,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
 function refreshCatalog(){
  CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
  invalidatePlans();
 }
 refreshCatalog();
 
-function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&!x.raffstore&&x.area!=="Alltag")}
+function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&!x.raffstore&&x.source!=="rotation"&&x.area!=="Alltag")}
 function basementRoom(d){const base=fromKey("2026-09-04"),diff=Math.round((d-base)/86400000);return BASEMENT[((Math.floor(diff/7)%BASEMENT.length)+BASEMENT.length)%BASEMENT.length]}
 function weeklyDate(x){const dow=WEEKDAYS[x.room];if(dow===undefined)return null;const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));return addDays(nextDow(fromKey("2026-08-31"),dow),Math.floor(idx/3)*7)}
 function rotationAnchor(x){const idx=Math.max(0,ROTATIONS.findIndex(r=>r[0]===x.text));return addDays(fromKey("2026-09-07"),(idx*5)%150)}
@@ -489,15 +339,6 @@ function raffstoreFirstDate(x,ref=today){
  return windowDate({window:true,windowKey:`${area}|${room}|${idx+1}`,windowGroup:group},ref);
 }
 function rawNextDue(x,ref=today){
- const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
- if(/^\d{4}-\d{2}-\d{2}$/.test(manual||"")){
-   const start=fromKey(manual),interval=catalogInterval(x),last=lastDone(x);
-   let d=new Date(start);
-   if(last&&fromKey(last)>=d)d=fromKey(last);
-   while(d<ref)d=addDays(d,interval);
-   if(last&&sameDay(d,fromKey(last)))d=addDays(d,interval);
-   return d;
- }
  const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
  if(x.window)return windowDate(x,ref)||ref;
@@ -552,330 +393,135 @@ function taskWeight(x){const t=(x.text||"").toLowerCase();
  return 1;
 }
 function roomCap(x){if(x.window)return 1;if(/boden|fenster|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 1;return 2}
-function dayBudget(d){
-  // Hard workload ceiling. Sunday is household-free unless explicitly opened.
-  if(d.getDay()===0 && !state.sundayOptional[dayKey(d)])return 0;
-  if(d.getDay()===0)return 5;
-  if(d.getDay()===6)return 5;
-  return 10;
-}
-function maxTasksPerDay(d){
-  if(d.getDay()===0 && !state.sundayOptional[dayKey(d)])return 0;
-  return d.getDay()===0?3:(d.getDay()===6?3:6);
-}
-function isFixedTask(x){return false;}
-function plannerKey(){return "v153-safe-dose|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})}
-function plannerHorizon(){
-  // Three-year rolling planning horizon, but with O(1) day-capacity checks.
-  const start=fromKey("2026-09-01");
-  const end=fromKey("2029-12-31");
-  return {start,end};
-}
-function isSundayUnavailable(d){return d.getDay()===0 && !state.sundayOptional[dayKey(d)];}
-function fixedOccurrenceDates(x,start,end){
-  const out=[];
-  const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
-  if(!manual)return out;
-  const interval=Math.max(1,catalogInterval(x)),first=fromKey(manual);
-  for(let d=new Date(first);d<=end;d=addDays(d,interval))if(d>=start)out.push(new Date(d));
-  return out;
-}
-function flexibleOccurrenceDates(x,start,end){
-  const interval=Math.max(7,smartCadence(x));
-  let first=null;
-  if(BASEMENT.includes(x.room)){
-    const idx=Math.max(0,BASEMENT.indexOf(x.room));
-    first=addDays(fromKey("2026-09-04"),idx*7);
-  }else first=weeklyDate(x);
-  if(!first)first=addDays(start,hashTask(x.key)%interval);
-  let d=new Date(first),last=lastDone(x);
-  if(last && fromKey(last)>d)d=fromKey(last);
-  while(d<start)d=addDays(d,interval);
-  if(last && sameDay(d,fromKey(last)))d=addDays(d,interval);
-  const out=[];
-  for(;d<=end;d=addDays(d,interval))out.push(new Date(d));
-  return out;
-}
-function idealOccurrenceDates(x,start,end){
-  const fixed=fixedOccurrenceDates(x,start,end);
-  if(fixed.length)return fixed;
-  if(x.window){
-    const first=windowDate(x,start);if(!first)return [];
-    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,180))if(d>=start)out.push(new Date(d));return out;
-  }
-  if(x.raffstore){
-    const first=raffstoreFirstDate(x,start);if(!first)return [];
-    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,365))if(d>=start)out.push(new Date(d));return out;
-  }
-  if(x.start){
-    const first=explicitNext(x,start),interval=Math.max(1,catalogInterval(x));
-    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,interval))if(d>=start)out.push(new Date(d));return out;
-  }
-  if(x.source==="rotation"){
-    const interval=Math.max(1,catalogInterval(x)),anchor=rotationAnchor(x),first=nextOccurrenceFromAnchor(anchor,interval,start,lastDone(x));
-    const out=[];for(let d=new Date(first);d<=end;d=addDays(d,interval))out.push(new Date(d));return out;
-  }
-  return flexibleOccurrenceDates(x,start,end);
-}
-
-// The previous planner repeatedly filtered/scanned each day's full task array.
-// With a multi-year horizon this became quadratic and could freeze mobile Safari.
-// Keep compact metadata per day instead: placement checks are constant-time.
-function plannerTheme(x){
- const t=(x.text||"").toLowerCase(), room=x.room||"";
- if(x.window||/\bfenster\b/.test(t))return "fenster";
- if(x.raffstore||/raffstore/.test(t))return "raffstore";
- if(/kamin|schornstein/.test(t))return "kamin";
- if(/stuck/.test(t))return "stuck";
- if(BASEMENT.includes(room))return "keller";
- if(["Gäste-WC","Eltern-WC","Kinderbad","Bad"].includes(room)||/\b(wc|toilette|dusche|badewanne)\b/.test(t))return "bad";
- if(["Wohnzimmer","Essbereich","Küche"].includes(room))return "eg-wohnen";
- if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Saunaraum"].includes(room))return "og";
- if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(room))return "eg-neben";
- return room||"sonstiges";
-}
-function plannerThemeLabel(x){
- const th=plannerTheme(x);
- return ({fenster:"🪟 Fenstertag",raffstore:"☀️ Raffstore-Tag",kamin:"🔥 Kamintag",stuck:"🏛️ Stuck-Tag",keller:"🏡 Kellertag",bad:"🚿 Bad-/WC-Tag","eg-wohnen":"🍽️ EG-Wohn-/Küchentag",og:"🛏️ OG-Tag","eg-neben":"🚪 EG-Nebenräume"}[th]||`${x.room||"Haushalt"}-Tag`);
-}
-function seasonalTask(x){return !!(x.window||x.raffstore||x.seasonal||/fenster|raffstore/.test((x.text||"").toLowerCase()));}
-function ensureDayMeta(arr){
- if(!arr._weight)arr._weight=0;
- if(!arr._rooms)arr._rooms=new Map();
- if(!arr._ids)arr._ids=new Set();
- if(!arr._themes)arr._themes=new Map();
- if(!arr._theme)arr._theme="";
- if(!arr._themeLabel)arr._themeLabel="";
- if(!arr._heavy)arr._heavy=false;
- return arr;
-}
-function placementScoreFast(arr,x,d){
- ensureDayMeta(arr);
- const cap=dayBudget(d),w=taskWeight(x);
- if(cap<=0 || isSundayUnavailable(d) || arr._weight+w>cap || arr.length>=maxTasksPerDay(d))return Infinity;
- const room=x.room||"";
- const sameRoom=arr._rooms.get(room)||0;
- const theme=plannerTheme(x),sameTheme=arr._themes.get(theme)||0;
- const roomLimit=w>=5?5:6;
- if(sameRoom+w>roomLimit)return Infinity;
- if(arr._heavy && w>=3)return Infinity;
- // One dominant task (window/large job) can define the day and consume the capacity.
- if(w>=5 && arr._heavy)return Infinity;
- let score=arr._weight*3+sameRoom*4+arr.length*2;
- if(arr.length){
-   if(arr._theme===theme)score-=18;
-   else score+=8;
- }
- if(sameTheme)score-=Math.min(12,sameTheme*3);
- const pw=preferredWeekday(x);
- if(pw!==null&&d.getDay()===pw)score-=3;
- return score;
-}
-function addPlanned(arr,x,d){
- ensureDayMeta(arr);
- const id=taskId(x),w=taskWeight(x),room=x.room||"",theme=plannerTheme(x);
- if(arr._ids.has(id))return false;
- arr.push(x);arr._ids.add(id);arr._weight+=w;arr._rooms.set(room,(arr._rooms.get(room)||0)+w);arr._themes.set(theme,(arr._themes.get(theme)||0)+w);
- if(!arr._theme){arr._theme=theme;arr._themeLabel=plannerThemeLabel(x)}
- if(w>=5)arr._heavy=true;
- return true;
-}
-function placementShiftWindow(x){
- const interval=Math.max(7,catalogInterval(x));
- // Seasonal tasks may move only a little: bundling must never turn spring into winter.
- if(seasonalTask(x))return x.raffstore?14:10;
- return Math.min(28,Math.max(3,Math.round(interval*0.35)));
-}
-function choosePlannedDate(days,ideal,x,start,end){
- const maxShift=placementShiftWindow(x);
- let best=null,bestScore=Infinity;
- for(let delta=0;delta<=maxShift;delta++){
-   const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
-   for(const d of candidates){
-     if(d<start||d>end||isSundayUnavailable(d))continue;
-     const arr=days.get(dayKey(d));if(!arr)continue;
-     const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;
-     const theme=plannerTheme(x);
-     const themeBonus=(arr._theme&&arr._theme===theme)?-25:0;
-     const score=sc+delta*0.8+themeBonus;
-     if(score<bestScore){bestScore=score;best=dayKey(d);}
-   }
-   if(best!==null && delta>=3 && bestScore<0)break;
- }
- return best;
-}
-function fallbackPlannedDate(days,ideal,x,start,end){
- // If the preferred neighborhood is full, expand gradually rather than dumping work on one date.
- const max=Math.min(120,Math.max(30,catalogInterval(x)));
- let best=null,bestScore=Infinity;
- for(let delta=0;delta<=max;delta++){
-   const candidates=delta===0?[ideal]:[addDays(ideal,-delta),addDays(ideal,delta)];
-   for(const d of candidates){
-     if(d<start||d>end||isSundayUnavailable(d))continue;
-     const arr=days.get(dayKey(d));if(!arr)continue;
-     const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;
-     const score=sc+delta*1.2;
-     if(score<bestScore){bestScore=score;best=dayKey(d);}
-   }
- }
- return best;
-}
-function placementScoreFast(arr,x,d){
- ensureDayMeta(arr);const cap=dayBudget(d),w=taskWeight(x);
- if(cap<=0||isSundayUnavailable(d)||arr._weight+w>cap||arr.length>=maxTasksPerDay(d))return Infinity;
- const room=x.room||"",theme=plannerTheme(x),sameRoom=arr._rooms.get(room)||0,sameTheme=arr._themes.get(theme)||0;
- const roomLimit=w>=5?10:6;if(sameRoom+w>roomLimit)return Infinity;if(w>=5&&sameRoom>0)return Infinity;if(arr._heavy&&w>=3)return Infinity;
- let score=arr._weight*3+sameRoom*4+arr.length*2;if(arr.length)score+=arr._theme===theme?-24:10;if(sameTheme)score-=Math.min(14,sameTheme*3);
- const pw=preferredWeekday(x);if(pw!==null&&d.getDay()===pw)score-=4;return score;
-}
-function addPlanned(arr,x,d){
- ensureDayMeta(arr);const id=taskId(x),w=taskWeight(x),room=x.room||"",theme=plannerTheme(x);if(arr._ids.has(id))return false;
- arr.push(x);arr._ids.add(id);arr._weight+=w;arr._rooms.set(room,(arr._rooms.get(room)||0)+w);arr._themes.set(theme,(arr._themes.get(theme)||0)+w);if(!arr._theme){arr._theme=theme;arr._themeLabel=plannerThemeLabel(x)}if(w>=5)arr._heavy=true;return true;
-}
-function placementOffsets(x){const max=seasonalTask(x)?(x.raffstore?14:10):Math.min(21,Math.max(3,Math.round(catalogInterval(x)*0.2)));const out=[0];for(let i=1;i<=max;i++)out.push(-i,i);return out;}
-function placeNearIdeal(days,ideal,x,start,end){
- let best=null,bestScore=Infinity;for(const delta of placementOffsets(x)){const d=addDays(ideal,delta);if(d<start||d>end||isSundayUnavailable(d))continue;const arr=days.get(dayKey(d));if(!arr)continue;const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;const score=sc+Math.abs(delta)*0.8+((arr._theme&&arr._theme===plannerTheme(x))?-28:0);if(score<bestScore){bestScore=score;best=dayKey(d)}}return best;
-}
-function placeOverflow(days,ideal,x,start,end){const max=seasonalTask(x)?21:90;for(let delta=1;delta<=max;delta++){for(const sign of [1,-1]){const d=addDays(ideal,delta*sign);if(d<start||d>end||isSundayUnavailable(d))continue;const arr=days.get(dayKey(d));if(!arr)continue;if(placementScoreFast(arr,x,d)!==Infinity)return dayKey(d)}}return null;}
-function idealNextDate(x,start,end){
- const fixed=fixedOccurrenceDates(x,start,end); if(fixed.length)return fixed[0];
- if(x.window)return windowDate(x,start)||null;
- if(x.raffstore)return raffstoreFirstDate(x,start)||null;
- if(x.start)return explicitNext(x,start);
- if(x.source==="rotation"){
-   const interval=Math.max(1,catalogInterval(x));
-   const anchor=rotationAnchor(x);
-   return nextOccurrenceFromAnchor(anchor,interval,start,lastDone(x));
- }
- const flex=flexibleOccurrenceDates(x,start,end);return flex[0]||null;
-}
+function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 3;if(d.getDay()===3)return 6;return 6}
+function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
+function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
+function plannerKey(){return "v132|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
- const key=plannerKey()+"|living-theme-planner-v156";
- if(plannerCache.key===key)return plannerCache;
- const {start,end}=plannerHorizon(),days=new Map(),occurrences=new Map();
- for(let d=new Date(start);d<=end;d=addDays(d,1)){const arr=[];ensureDayMeta(arr);days.set(dayKey(d),arr)}
- // IMPORTANT: the calendar stores the next planned occurrence of each task,
- // not every theoretical recurrence for the next three years. After completion
- // the next occurrence is planned again. This keeps the planner fast on iPhone
- // and, more importantly, lets the dose planner distribute the whole household
- // instead of creating thousands of duplicate future instances.
- const jobs=[];
- for(const x of CATALOG){
-   const ideal=idealNextDate(x,start,end);
-   if(ideal)jobs.push({x,ideal});
- }
- // Hard/seasonal work first; then theme/room bundling can fill the remaining
- // capacity around it. Every catalog task gets exactly one visible next date.
- jobs.sort((a,b)=>{
-   const wa=taskWeight(a.x),wb=taskWeight(b.x);if(wa!==wb)return wb-wa;
-   const sa=seasonalTask(a.x),sb=seasonalTask(b.x);if(sa!==sb)return sb-sa;
-   return a.ideal-b.ideal||plannerTheme(a.x).localeCompare(plannerTheme(b.x),"de")||String(a.x.room).localeCompare(String(b.x.room),"de")||String(a.x.text).localeCompare(String(b.x.text),"de");
- });
- const overflow=[];
- for(const job of jobs){
-   const {x,ideal}=job;
-   let chosen=placeNearIdeal(days,ideal,x,start,end);
-   if(chosen===null)chosen=placeOverflow(days,ideal,x,start,end);
-   if(chosen===null)overflow.push(job); else {
-     const arr=days.get(chosen);
-     if(addPlanned(arr,x,fromKey(chosen))){const id=taskId(x);occurrences.set(id,[fromKey(chosen)]);}else overflow.push(job);
+ const key=plannerKey();if(plannerCache.key===key)return plannerCache;
+ const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
+ const addFixed=(k,x)=>{const arr=days.get(k);if(!arr)return;arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)};
+ // Once the user postpones a task, keep the remaining tasks that were already
+ // planned for today. Do not refill the freed capacity with new tasks.
+ const lockedToday=state.todayPlanLock?.[dayKey(today)]||[];
+ if(lockedToday.length){
+   const lockedSet=new Set(lockedToday);
+   for(const x of CATALOG){
+     if(lockedSet.has(taskId(x))&&!isDone(x)&&!isPostponed(x)){
+       const arr=days.get(dayKey(today));
+       if(arr&&!arr.some(y=>taskId(y)===taskId(x))){arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);}
+     }
    }
  }
- // Remaining tasks are spread through the horizon in a single bounded pass.
- // No recursive/expensive search and never dump everything on one date.
- let cursor=0;const dateKeys=[...days.keys()];
- for(const job of overflow){
+ // Fixed/seasonal work goes first. A mighty fixed task essentially owns the day.
+ for(const d of dates){const k=dayKey(d);if(d.getDay()===0&&!state.sundayOptional[k])continue;for(const x of rawTasksForDate(d).filter(isFixedTask))addFixed(k,x);const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));if(season)addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true})}
+ // Flexible occurrences: create only the next required occurrence per task and
+ // then place it on the first genuinely light day. This prevents a whole room
+ // from landing on one anchor day.
+ const flex=[];
+ for(const x of CATALOG.filter(x=>x.area!=="Alltag"&&!isFixedTask(x))){
+   let base=rawNextDue(x,today);
+   if(base<start)base=start;
+   flex.push({x,base});
+ }
+ flex.sort((a,b)=>a.base-b.base||taskWeight(b.x)-taskWeight(a.x)||a.x.room.localeCompare(b.x.room,"de"));
+ const maxLook=120;
+ for(const occ of flex){
    let chosen=null;
-   for(let tries=0;tries<dateKeys.length;tries++){
-     const k=dateKeys[(cursor+tries)%dateKeys.length],d=fromKey(k);
-     if(d<start||d>end||isSundayUnavailable(d))continue;
-     const arr=days.get(k);if(placementScoreFast(arr,job.x,d)!==Infinity){chosen=k;cursor=(cursor+tries+1)%dateKeys.length;break;}
+   const postponedUntil=postponedEntry(occ.x)?.postponedUntil;
+   if(postponedUntil){
+     const pd=fromKey(postponedUntil),pk=dayKey(pd);
+     if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
+       const arr=days.get(pk);
+       const weight=taskWeight(occ.x);
+       const used=arr._weight||0;
+       const hasMighty=arr.some(y=>y.window||taskWeight(y)>=5);
+       const hasLarge=arr.some(y=>taskWeight(y)>=3);
+       const cap=dayBudget(pd);
+       const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
+       const roomLimit=(weight>=5||hasMighty)?1:6;
+       if(!arr.some(y=>taskId(y)===taskId(occ.x)) && !(hasMighty&&weight>1) && !(weight>=5&&arr.length) && !(hasLarge&&weight>=3) && used+weight<=cap && sameRoomWeight+weight<=roomLimit){
+         chosen=pk;
+       }
+     }
    }
-   if(chosen){const arr=days.get(chosen);if(addPlanned(arr,job.x,fromKey(chosen)))occurrences.set(taskId(job.x),[fromKey(chosen)]);}
+   if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);continue;}
+   // A user-set "Später" date is authoritative: never silently move it
+   // to another calendar day because of planner capacity.
+   if(postponedUntil){
+     const pd=fromKey(postponedUntil),pk=dayKey(pd);
+     if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
+       const a=days.get(pk);
+       if(!a.some(y=>taskId(y)===taskId(occ.x))){a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
+       continue;
+     }
+   }
+   for(let delta=0;delta<=maxLook;delta++){
+     const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
+     const arr=days.get(k);
+     if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
+     const weight=taskWeight(occ.x);
+     const used=arr._weight||0;
+     const hasMighty=arr.some(y=>y.window||taskWeight(y)>=5);
+     const hasLarge=arr.some(y=>taskWeight(y)>=3);
+     const cap=dayBudget(d);
+     // One mighty task = the day's housework. Only a tiny add-on is allowed.
+     if(hasMighty){if(weight>1)continue;}
+     if(weight>=5 && arr.length)continue;
+     if(hasLarge && weight>=3)continue;
+     if(used+weight>cap)continue;
+     // Efficient room grouping: tasks from the same room may be bundled
+     // when the remaining daily capacity allows it. A room package is capped
+     // at roughly one normal work block; mighty/large work still dominates.
+     const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
+     const roomLimit=(weight>=5||hasMighty)?1:6;
+     if(sameRoomWeight+weight>roomLimit)continue;
+     chosen=k;break;
+   }
+   if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
  }
- for(const [,arr] of days){arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b,"de"));delete arr._rooms;delete arr._ids;delete arr._themes;delete arr._heavy;delete arr._weight;delete arr._theme;delete arr._themeLabel;}
- const next=new Map();for(const [id,list] of occurrences){if(list[0]>=today)next.set(id,new Date(list[0]))}
- plannerCache={key,days,next,occurrences};return plannerCache;
+ for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
+ const next=new Map();
+ for(const [k,arr] of days){
+   for(const y of arr){
+     const id=taskId(y);
+     if(!next.has(id)){const d=fromKey(k);if(d>=today)next.set(id,d);}
+   }
+ }
+ plannerCache={key,days,next};
+ return plannerCache;
 }
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
-
 function scheduledForDate(d){return plannedForDate(d)}
 function nextDue(x,ref=today){
- const plan=buildIntelligentPlan();
- const occ=plan.occurrences.get(taskId(x))||[];
- const past=latestDateOnOrBefore(occ,ref);
- const last=lastDone(x);
- // If an occurrence is overdue and still open, keep showing that actual due
- // date. Do not hide it by jumping to the next future occurrence.
- if(past && (!last || fromKey(last)<past) && !isPostponed(x))return past;
+ // A catalog date override is the strongest manual source of truth.
+ const override=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
+ if(/^\d{4}-\d{2}-\d{2}$/.test(override||"")){const od=fromKey(override);if(od>=ref)return od;}
+ // A manually edited catalog start date is the user's explicit anchor.
+ // If it is today or in the future, show that exact date everywhere.
+ // Only after that date has passed does the normal interval advance it.
  const postponed=postponedEntry(x);
- if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
- const n=occ.find(d=>d>=ref);
- if(n)return new Date(n);
- const fixed=fixedOccurrenceDates(x,ref,addDays(ref,3650));if(fixed.length)return fixed[0];
- const flex=flexibleOccurrenceDates(x,ref,addDays(ref,3650));return flex[0]||ref;
+ if(postponed?.postponedUntil){
+   const pd=fromKey(postponed.postponedUntil);
+   if(pd>=ref)return pd;
+ }
+ if(x.manualStart && /^\d{4}-\d{2}-\d{2}$/.test(x.start||"")){
+   const sd=fromKey(x.start);
+   if(sd>=ref)return sd;
+ }
+ // Explicit catalog dates (including edited seed tasks and custom tasks)
+ // remain the authoritative anchor once their first date has passed.
+ if(x.start) return explicitNext(x,ref);
+ const p=buildIntelligentPlan().next.get(taskId(x));
+ if(p&&p>=ref)return p;
+ return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function rawTasksForDate(d){return plannedForDate(d)}
-function calendarTasksForDate(d){
- const year=d.getFullYear();
- if(calendarCache.year!==year)calendarCache={year,days:new Map()};
- const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);
- const v=[...plannedForDate(d)];
- v.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b.room,"de")||a.text.localeCompare(b.text,"de"));
- calendarCache.days.set(k,v);return v;
-}
-
-function knownTasksForDate(d){
- const k=dayKey(d), planned=calendarTasksForDate(d);
- const seen=new Set(planned.map(taskId));
- const out=[...planned];
- const candidates=[...dailyTasks(),...CATALOG];
- for(const e of (state.todayExtras||[])){if(e.date===k)candidates.push({...e,key:e.id,source:"extra"});}
- for(const x of candidates){
-   const id=taskId(x);
-   if(seen.has(id))continue;
-   if(lastDone(x)===k){out.push(x);seen.add(id);}
- }
- return out;
-}
-function completedTasksForDate(d){
- const k=dayKey(d),seen=new Set(),out=[];
- const candidates=[...dailyTasks(),...CATALOG];
- for(const e of (state.todayExtras||[])){if(e.date===k)candidates.push({...e,key:e.id,source:"extra"});}
- for(const x of candidates){const id=taskId(x);if(seen.has(id))continue;if(lastDone(x)===k){out.push(x);seen.add(id);}}
- return out;
-}
+function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=plannedForDate(d);calendarCache.days.set(k,v);return v}
 function nextDueLabel(x){return nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
-function nextDueInputValue(x){const d=nextDue(x);return dayKey(d)}
-function setTaskTargetDate(x,date){
- if(!/^\d{4}-\d{2}-\d{2}$/.test(date||""))return;
- state.manualDates=state.manualDates||{};state.catalogDates=state.catalogDates||{};
- state.manualDates[x.key]=date;state.catalogDates[x.key]=date;
- state.catalogEdits=state.catalogEdits||{};
- state.catalogEdits[x.key]={...(state.catalogEdits[x.key]||{}),start:date,manualStart:true};
- state.__planRevision=(state.__planRevision||0)+1;
- save();refreshCatalog();render();
- toast(`Termin auf ${formatDate(fromKey(date))} gesetzt ❤️`);
-}
-function attachDueEditor(el,x){
- const btn=el.querySelector(".dueEdit"); if(!btn)return;
- btn.onclick=()=>{
-   const wrap=document.createElement("div");wrap.className="duePickerInline";
-   wrap.innerHTML=`<input type="date" value="${esc(nextDueInputValue(x))}"><button class="btn primary">Speichern</button><button class="btn">Abbrechen</button>`;
-   btn.replaceWith(wrap);
-   const inp=wrap.querySelector("input"),saveBtn=wrap.querySelector(".primary"),cancel=wrap.querySelector(".btn:not(.primary)");
-   saveBtn.onclick=()=>setTaskTargetDate(x,inp.value);cancel.onclick=()=>render();
- };
-}
-
-function themeFor(d){
- if(d.getDay()===0)return DAY_THEME[0];
- const tasks=plannedForDate(d);
- if(tasks.length){const first=tasks[0];if(taskWeight(first)>=5)return plannerThemeLabel(first);}
- if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);
- return DAY_THEME[d.getDay()]||"";
-}
+function themeFor(d){if(d.getDay()===0)return DAY_THEME[0];if(d.getDay()===5)return DAY_THEME[5]+" · "+basementRoom(d);return DAY_THEME[d.getDay()]||""}
 
 function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Alltag",area:"Haushalt",group,source:"daily",editable:false});return out}
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
@@ -883,14 +529,9 @@ function groupFor(x){if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))re
 function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:groupFor(x)}))}
 function ensureTodayPlanSnapshot(d=today){
  const k=dayKey(d);state.todayPlanSnapshot=state.todayPlanSnapshot||{};
- if(state.__dosePlannerVersion!=="v148"){state.todayPlanSnapshot={};state.__dosePlannerVersion="v146";}
  if(Array.isArray(state.todayPlanSnapshot[k]))return state.todayPlanSnapshot[k];
- // Include today's scheduled tasks AND anything whose last scheduled date has
- // already passed without completion. Nothing can disappear merely because a
- // previous day was too full.
- const candidates=CATALOG.filter(x=>taskDueTodayOrOverdue(x,d)&&!isDone(x)&&!isPostponed(x));
- const dose=chooseTodayDose(d,[...new Map(candidates.map(x=>[taskId(x),x])).values()]);
- state.todayPlanSnapshot[k]=[...new Set(dose.map(taskId))];
+ const ids=plannedForDate(d).map(taskId);
+ state.todayPlanSnapshot[k]=[...new Set(ids)];
  try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
  return state.todayPlanSnapshot[k];
 }
@@ -899,10 +540,7 @@ function plannedToday(){
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
  const snapshot=new Set(ensureTodayPlanSnapshot(d));
- // Preserve the day's original dose once it has been created. On a later
- // render, completing one task must not cause another unrelated task to
- // replace it automatically.
- const plan=CATALOG.filter(x=>snapshot.has(taskId(x))&&!isDone(x));
+ const plan=CATALOG.filter(x=>snapshot.has(taskId(x)));
  for(const x of plan)out.push({...x,group:groupFor(x)});
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
@@ -927,7 +565,7 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const hideRoom=!!opts.hideRoom;const due=nextDueLabel(x);el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Geplant: <b>${esc(due)}</b> <button class="dueEdit" title="Termin ändern">✏️</button></div>`:""}${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(due)}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);attachDueEditor(el,x);swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const hideRoom=!!opts.hideRoom;const due=nextDueLabel(x);el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div>`:""}${isDone(x)?`<div class="meta nextDue">Nächster Termin: <b>${esc(due)}</b></div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room)return false;
@@ -947,7 +585,7 @@ function roomFocusTasks(room,d=today){
 function renderRoomFocus(main, tasks){
   const card=document.createElement("div");
   card.className="card roomFocus";
-  const rooms=[...new Set(CATALOG.map(x=>x.room).filter(r=>r && !/ganzes haus|gesamtes haus|rotationsaufgabe|keller allgemein/i.test(String(r)) && !String(r).includes(" + ") && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
+  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && r!=="Rotationsaufgabe" && r!=="Keller allgemein" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
   const day=dayKey(today), selected=state.roomFocus?.[day]||"";
   card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh alle offenen Aufgaben dieses Raumes – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
   main.appendChild(card);
@@ -1036,7 +674,7 @@ function showEnergy(){
     }
   };
 }
-function openEditor(x=null){const edit=!!x,old=x||{},rooms=[...new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])].sort(),overlay=document.createElement("div");overlay.className="catalogEditorOverlay";overlay.id="editor";overlay.innerHTML=`<div class="catalogEditorSheet"><div class="sheetTop"><div><div class="small">${edit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${edit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="x">×</button></div><label class="editorLabel">Aufgabe<input id="t" value="${esc(old.text||"")}"></label><label class="editorLabel">Raum<input id="r" list="rooms" value="${esc(old.room||"")}"><datalist id="rooms">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label><label class="editorLabel">Bereich / Etage<input id="a" value="${esc(old.area||"")}"></label><label class="editorLabel">Genauer Ort<input id="p" value="${esc(old.place||"")}"></label><label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="d">${esc(old.description||"")}</textarea></label><div class="editorTwo"><label class="editorLabel">Erster Fälligkeitstermin<input id="s" type="date" value="${esc(state.manualDates?.[old.key]||state.catalogDates?.[old.key]||old.start||nextDue(old))}"></label><label class="editorLabel">Periode (Tage)<input id="i" type="number" min="1" value="${old.interval||catalogInterval(old)||60}"></label></div><div class="editorHint">Dieser Termin ist dein Wunschtermin. Der Planer verteilt die Aufgabe bei Überlastung auf einen sinnvollen freien Termin. Kalender und Heute zeigen immer den tatsächlich geplanten Termin.</div><div class="editorActions"><button class="btn" id="cancel">Abbrechen</button><button class="btn primary" id="saveTask">${edit?"Änderungen speichern":"Aufgabe speichern"}</button></div>${edit?`<button class="deleteBtn" id="del">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}</div>`;document.body.appendChild(overlay);const close=()=>overlay.remove();overlay.querySelector("#x").onclick=close;overlay.querySelector("#cancel").onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};overlay.querySelector("#saveTask").onclick=()=>{const text=overlay.querySelector("#t").value.trim(),room=overlay.querySelector("#r").value.trim(),area=overlay.querySelector("#a").value.trim(),place=overlay.querySelector("#p").value.trim(),description=overlay.querySelector("#d").value.trim(),start=overlay.querySelector("#s").value,interval=Math.max(1,Number(overlay.querySelector("#i").value)||60);if(!text||!room||!area||!start)return toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");if(edit){state.manualDates=state.manualDates||{};state.catalogDates=state.catalogDates||{};state.manualDates[old.key]=start;state.catalogDates[old.key]=start;state.catalogEdits[old.key]={text,room,area,place,description,start,interval,manualStart:true};if(old.source==="custom"){const c=state.custom.find(c=>(c.key||`custom|${c.id}`)===old.key);if(c)Object.assign(c,{text,room,area,place,description,start,interval})}}else{const id=`custom|${uid()}`;state.custom.push({id,key:id,text,room,area,place,description,start,interval,manualStart:true});state.manualDates=state.manualDates||{};state.manualDates[id]=start;state.catalogDates=state.catalogDates||{};state.catalogDates[id]=start}save();refreshCatalog();close();render();toast(edit?"Aufgabe geändert ❤️":"Neue Aufgabe hinzugefügt ❤️")};if(edit)overlay.querySelector("#del").onclick=()=>{if(!confirm(`„${old.text}“ wirklich löschen?`))return;state.catalogDeleted[old.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==old.key);save();refreshCatalog();close();render();toast("Aufgabe gelöscht")}}
+function openEditor(x=null){const edit=!!x,old=x||{},rooms=[...new Set([...Object.keys(SEED_ROOMS),...state.custom.map(c=>c.room).filter(Boolean)])].sort(),overlay=document.createElement("div");overlay.className="catalogEditorOverlay";overlay.id="editor";overlay.innerHTML=`<div class="catalogEditorSheet"><div class="sheetTop"><div><div class="small">${edit?"Aufgabe bearbeiten":"Neue Aufgabe"}</div><h2>${edit?"✏️ Aufgabe ändern":"＋ Aufgabe hinzufügen"}</h2></div><button class="close" id="x">×</button></div><label class="editorLabel">Aufgabe<input id="t" value="${esc(old.text||"")}"></label><label class="editorLabel">Raum<input id="r" list="rooms" value="${esc(old.room||"")}"><datalist id="rooms">${rooms.map(r=>`<option value="${esc(r)}">`).join("")}</datalist></label><label class="editorLabel">Bereich / Etage<input id="a" value="${esc(old.area||"")}"></label><label class="editorLabel">Genauer Ort<input id="p" value="${esc(old.place||"")}"></label><label class="editorLabel">Beschreibung / genaue Durchführung<textarea id="d">${esc(old.description||"")}</textarea></label><div class="editorTwo"><label class="editorLabel">Erster Fälligkeitstermin<input id="s" type="date" value="${esc(state.manualDates?.[old.key]||state.catalogDates?.[old.key]||old.start||nextDue(old))}"></label><label class="editorLabel">Periode (Tage)<input id="i" type="number" min="1" value="${old.interval||catalogInterval(old)||60}"></label></div><div class="editorHint">Dieser Termin ist die verbindliche Quelle. Kalender, Heute und Katalog berechnen daraus exakt dieselben Fälligkeiten.</div><div class="editorActions"><button class="btn" id="cancel">Abbrechen</button><button class="btn primary" id="saveTask">${edit?"Änderungen speichern":"Aufgabe speichern"}</button></div>${edit?`<button class="deleteBtn" id="del">🗑️ Aufgabe aus dem Katalog löschen</button>`:""}</div>`;document.body.appendChild(overlay);const close=()=>overlay.remove();overlay.querySelector("#x").onclick=close;overlay.querySelector("#cancel").onclick=close;overlay.onclick=e=>{if(e.target===overlay)close()};overlay.querySelector("#saveTask").onclick=()=>{const text=overlay.querySelector("#t").value.trim(),room=overlay.querySelector("#r").value.trim(),area=overlay.querySelector("#a").value.trim(),place=overlay.querySelector("#p").value.trim(),description=overlay.querySelector("#d").value.trim(),start=overlay.querySelector("#s").value,interval=Math.max(1,Number(overlay.querySelector("#i").value)||60);if(!text||!room||!area||!start)return toast("Bitte Aufgabe, Raum, Bereich und Termin ausfüllen ❤️");if(edit){state.manualDates=state.manualDates||{};state.catalogDates=state.catalogDates||{};state.manualDates[old.key]=start;state.catalogDates[old.key]=start;state.catalogEdits[old.key]={text,room,area,place,description,start,interval,manualStart:true};if(old.source==="custom"){const c=state.custom.find(c=>(c.key||`custom|${c.id}`)===old.key);if(c)Object.assign(c,{text,room,area,place,description,start,interval})}}else{const id=`custom|${uid()}`;state.custom.push({id,key:id,text,room,area,place,description,start,interval,manualStart:true});state.manualDates=state.manualDates||{};state.manualDates[id]=start;state.catalogDates=state.catalogDates||{};state.catalogDates[id]=start}save();refreshCatalog();close();render();toast(edit?"Aufgabe geändert ❤️":"Neue Aufgabe hinzugefügt ❤️")};if(edit)overlay.querySelector("#del").onclick=()=>{if(!confirm(`„${old.text}“ wirklich löschen?`))return;state.catalogDeleted[old.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==old.key);save();refreshCatalog();close();render();toast("Aufgabe gelöscht")}}
 function pullCatalogTaskToday(x){
   const day=dayKey(today);
   if(today.getDay()===0 && !state.sundayOptional[day]){
@@ -1049,12 +687,12 @@ function pullCatalogTaskToday(x){
   save();
   toast(`„${x.text}“ für heute vorgezogen ❤️`);
 }
-function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die einzige Stelle zum Hinzufügen, Bearbeiten und Löschen.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Geplant: <b>${esc(nextDueLabel(x))}</b> <button class="dueEdit" title="Termin ändern">✏️</button></div></div><div class="catalogActions">${x.editable?`<button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>`:""}<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button><button class="iconBtn info" title="Info">ⓘ</button></div>`;if(x.editable){r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}}}r.querySelector(".pullToday").onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r);attachDueEditor(r,x)})};q.oninput=draw;draw()}
+function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die einzige Stelle zum Hinzufügen, Bearbeiten und Löschen.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Nächster Termin: <b>${esc(nextDueLabel(x))}</b></div></div><div class="catalogActions">${x.editable?`<button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>`:""}<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button><button class="iconBtn info" title="Info">ⓘ</button></div>`;if(x.editable){r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}}}r.querySelector(".pullToday").onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
 
 function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
-function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = an diesem Tag fällige Aufgaben</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),completed=completedTasksForDate(d),el=document.createElement("button");el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(state.completedDays[dayKey(d)]||completed.length?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed.length?`<span class="dayMark">✓ ${completed.length}</span>`:""}`;el.onclick=()=>showCalendarDay(d);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
-function showCalendarDay(d){const box=document.getElementById("detailDay"),planned=calendarTasksForDate(d),completed=completedTasksForDate(d),k=dayKey(d),byPlanned={},byCompleted={};planned.forEach(x=>(byPlanned[x.room]??=[]).push(x));completed.forEach(x=>(byCompleted[x.room]??=[]).push(x));const dateText=d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"});const plannedHtml=planned.length?Object.entries(byPlanned).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} geplante Aufgaben</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}${lastDone(x)===k?`<br><span class="small">✓ Erledigt am ${esc(dateText)}</span>`:""}</div>`).join("")}</div>`).join(""):``;const completedHtml=completed.length?Object.entries(byCompleted).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} erledigt</b>${arr.map(x=>`<div class="detailTask">✓ ${esc(x.text)}<br><span class="small">Erledigt am ${esc(dateText)}</span></div>`).join("")}</div>`).join(""):``;box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}</h3><div class="small">${esc(themeFor(d))}</div>${plannedHtml?`<div style="margin-top:14px"><b>📋 Geplant</b>${plannedHtml}</div>`:""}${completedHtml?`<div style="margin-top:18px"><b>✅ Erledigt</b>${completedHtml}</div>`:""}${!planned.length&&!completed.length?`<div class="empty">Für diesen Tag sind keine geplanten oder erledigten Aufgaben gespeichert.</div>`:""}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(state.completedDays[dayKey(d)]?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),by={};tasks.forEach(x=>(by[x.room]??=[]).push(x));box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}</h3><div class="small">${esc(themeFor(d))}</div>${tasks.length?Object.entries(by).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} geplante Aufgaben</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}<br><span class="small">Geplant am: ${esc(d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}))}</span></div>`).join("")}</div>`).join(""):`<div class="empty">Keine fest eingeplanten Aufgaben.</div>`}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
 
 function render(){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;const main=document.getElementById("main");if(main){main.innerHTML=`<div class="card"><div class="empty">Einen Moment ❤️<br><span class="small">Ich bereite deinen Haushaltsplan vor …</span></div></div>`;}requestAnimationFrame(()=>setTimeout(()=>{try{render()}catch(err){console.error(err);if(main)main.innerHTML=`<div class="card"><div class="empty">Da ist etwas schiefgelaufen 😮‍💨<br><span class="small">Bitte den Bereich noch einmal öffnen.</span></div></div>`}},0))});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
