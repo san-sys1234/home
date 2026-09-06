@@ -1,4 +1,4 @@
-/* Unser Zuhause – V155 · intelligenter Haushaltsplaner */
+/* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
 const STORAGE="unser-zuhause-v155";
 const LEGACY_STORAGE="unser-zuhause-v154";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -289,13 +289,19 @@ function postponeTask(x){
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
  state.todayPlanLock=state.todayPlanLock||{};
  state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
- // "Später" means: do not mark the task as done and do not change its
- // recurrence/fälligkeit. Only move its CURRENT planned date. The next due
- // date remains governed by the task's own cadence and changes only after
- // completion. The new planned date is always today or later.
+ // "Später" verschiebt ausschließlich die aktuelle Planung. Die Fälligkeit
+ // bleibt unverändert und wird erst nach echtem "Erledigt" neu berechnet.
  const due=nextDue(x,today);
- const first=due>=today?due:addDays(today,1);
- const until=dayKey(first);const id=taskId(x);
+ // Never leave the task on today's date: "Später" must actually move the
+ // current occurrence to a future planning date. Prefer the first legal day
+ // after the current due date, while respecting the hard +/-30 day window.
+ let planned=addDays(due,1);
+ for(let i=0;i<=30;i++){
+   const candidate=addDays(due,1+i);
+   if(candidate>=today && Math.abs(Math.round((candidate-due)/86400000))<=30 &&
+      (candidate.getDay()!==0 || state.sundayOptional[dayKey(candidate)])){planned=candidate;break;}
+ }
+ const until=dayKey(planned);const id=taskId(x);
  delete state.done[doneKey(x)];
  state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day,planningOnly:true};
  save();render();toast(`Für später geplant · ${formatDateKey(until)} ❤️`)
@@ -434,9 +440,9 @@ function taskWeight(x){const t=(x.text||"").toLowerCase();
 }
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
-function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
+function isFixedTask(x){return x.window||x.source==="seasonal"}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v155|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){return "v157|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -464,7 +470,7 @@ function buildIntelligentPlan(){
  // from landing on one anchor day.
  const flex=[];
  for(const x of CATALOG.filter(x=>x.area!=="Alltag"&&!isFixedTask(x))){
-   let base=rawNextDue(x,today);
+   let base=nextDue(x,today);
    if(base<start)base=start;
    flex.push({x,base});
  }
