@@ -240,9 +240,10 @@ let state=loadState();
 let selectedTab="today";
 let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
+let roomItemsCache={key:"",map:new Map()};
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()}}
+function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()};roomItemsCache={key:"",map:new Map()}}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
@@ -719,29 +720,81 @@ function fallbackPlannedDate(days,ideal,x,start,end){
  }
  return best;
 }
+function placementScoreFast(arr,x,d){
+ ensureDayMeta(arr);const cap=dayBudget(d),w=taskWeight(x);
+ if(cap<=0||isSundayUnavailable(d)||arr._weight+w>cap||arr.length>=maxTasksPerDay(d))return Infinity;
+ const room=x.room||"",theme=plannerTheme(x),sameRoom=arr._rooms.get(room)||0,sameTheme=arr._themes.get(theme)||0;
+ const roomLimit=w>=5?10:6;if(sameRoom+w>roomLimit)return Infinity;if(w>=5&&sameRoom>0)return Infinity;if(arr._heavy&&w>=3)return Infinity;
+ let score=arr._weight*3+sameRoom*4+arr.length*2;if(arr.length)score+=arr._theme===theme?-24:10;if(sameTheme)score-=Math.min(14,sameTheme*3);
+ const pw=preferredWeekday(x);if(pw!==null&&d.getDay()===pw)score-=4;return score;
+}
+function addPlanned(arr,x,d){
+ ensureDayMeta(arr);const id=taskId(x),w=taskWeight(x),room=x.room||"",theme=plannerTheme(x);if(arr._ids.has(id))return false;
+ arr.push(x);arr._ids.add(id);arr._weight+=w;arr._rooms.set(room,(arr._rooms.get(room)||0)+w);arr._themes.set(theme,(arr._themes.get(theme)||0)+w);if(!arr._theme){arr._theme=theme;arr._themeLabel=plannerThemeLabel(x)}if(w>=5)arr._heavy=true;return true;
+}
+function placementOffsets(x){const max=seasonalTask(x)?(x.raffstore?14:10):Math.min(21,Math.max(3,Math.round(catalogInterval(x)*0.2)));const out=[0];for(let i=1;i<=max;i++)out.push(-i,i);return out;}
+function placeNearIdeal(days,ideal,x,start,end){
+ let best=null,bestScore=Infinity;for(const delta of placementOffsets(x)){const d=addDays(ideal,delta);if(d<start||d>end||isSundayUnavailable(d))continue;const arr=days.get(dayKey(d));if(!arr)continue;const sc=placementScoreFast(arr,x,d);if(sc===Infinity)continue;const score=sc+Math.abs(delta)*0.8+((arr._theme&&arr._theme===plannerTheme(x))?-28:0);if(score<bestScore){bestScore=score;best=dayKey(d)}}return best;
+}
+function placeOverflow(days,ideal,x,start,end){const max=seasonalTask(x)?21:90;for(let delta=1;delta<=max;delta++){for(const sign of [1,-1]){const d=addDays(ideal,delta*sign);if(d<start||d>end||isSundayUnavailable(d))continue;const arr=days.get(dayKey(d));if(!arr)continue;if(placementScoreFast(arr,x,d)!==Infinity)return dayKey(d)}}return null;}
+function idealNextDate(x,start,end){
+ const fixed=fixedOccurrenceDates(x,start,end); if(fixed.length)return fixed[0];
+ if(x.window)return windowDate(x,start)||null;
+ if(x.raffstore)return raffstoreFirstDate(x,start)||null;
+ if(x.start)return explicitNext(x,start);
+ if(x.source==="rotation"){
+   const interval=Math.max(1,catalogInterval(x));
+   const anchor=rotationAnchor(x);
+   return nextOccurrenceFromAnchor(anchor,interval,start,lastDone(x));
+ }
+ const flex=flexibleOccurrenceDates(x,start,end);return flex[0]||null;
+}
 function buildIntelligentPlan(){
- const key=plannerKey()+"|theme-bundle-v154";if(plannerCache.key===key)return plannerCache;
+ const key=plannerKey()+"|living-theme-planner-v156";
+ if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon(),days=new Map(),occurrences=new Map();
- for(let d=new Date(start);d<=end;d=addDays(d,1)){const arr=[];ensureDayMeta(arr);days.set(dayKey(d),arr);}
+ for(let d=new Date(start);d<=end;d=addDays(d,1)){const arr=[];ensureDayMeta(arr);days.set(dayKey(d),arr)}
+ // IMPORTANT: the calendar stores the next planned occurrence of each task,
+ // not every theoretical recurrence for the next three years. After completion
+ // the next occurrence is planned again. This keeps the planner fast on iPhone
+ // and, more importantly, lets the dose planner distribute the whole household
+ // instead of creating thousands of duplicate future instances.
  const jobs=[];
  for(const x of CATALOG){
-   const ideals=idealOccurrenceDates(x,start,end);
-   for(const ideal of ideals)jobs.push({x,ideal});
+   const ideal=idealNextDate(x,start,end);
+   if(ideal)jobs.push({x,ideal});
  }
- // First place the tasks that are hardest to fit. Within equal weight, keep the original ideal date order.
- jobs.sort((a,b)=>{const wa=taskWeight(a.x),wb=taskWeight(b.x);if(wa!==wb)return wb-wa;const sa=seasonalTask(a.x),sb=seasonalTask(b.x);if(sa!==sb)return sb-sa;return a.ideal-b.ideal||plannerTheme(a.x).localeCompare(plannerTheme(b.x),"de")||a.x.room.localeCompare(b.x.room,"de")||a.x.text.localeCompare(b.x.text,"de")});
+ // Hard/seasonal work first; then theme/room bundling can fill the remaining
+ // capacity around it. Every catalog task gets exactly one visible next date.
+ jobs.sort((a,b)=>{
+   const wa=taskWeight(a.x),wb=taskWeight(b.x);if(wa!==wb)return wb-wa;
+   const sa=seasonalTask(a.x),sb=seasonalTask(b.x);if(sa!==sb)return sb-sa;
+   return a.ideal-b.ideal||plannerTheme(a.x).localeCompare(plannerTheme(b.x),"de")||String(a.x.room).localeCompare(String(b.x.room),"de")||String(a.x.text).localeCompare(String(b.x.text),"de");
+ });
+ const overflow=[];
  for(const job of jobs){
    const {x,ideal}=job;
-   let chosen=choosePlannedDate(days,ideal,x,start,end);
-   if(chosen===null)chosen=fallbackPlannedDate(days,ideal,x,start,end);
-   if(chosen===null)continue;
-   const d=fromKey(chosen),arr=days.get(chosen);
-   if(!addPlanned(arr,x,d))continue;
-   const id=taskId(x),list=occurrences.get(id)||[];list.push(new Date(d));occurrences.set(id,list);
+   let chosen=placeNearIdeal(days,ideal,x,start,end);
+   if(chosen===null)chosen=placeOverflow(days,ideal,x,start,end);
+   if(chosen===null)overflow.push(job); else {
+     const arr=days.get(chosen);
+     if(addPlanned(arr,x,fromKey(chosen))){const id=taskId(x);occurrences.set(id,[fromKey(chosen)]);}else overflow.push(job);
+   }
+ }
+ // Remaining tasks are spread through the horizon in a single bounded pass.
+ // No recursive/expensive search and never dump everything on one date.
+ let cursor=0;const dateKeys=[...days.keys()];
+ for(const job of overflow){
+   let chosen=null;
+   for(let tries=0;tries<dateKeys.length;tries++){
+     const k=dateKeys[(cursor+tries)%dateKeys.length],d=fromKey(k);
+     if(d<start||d>end||isSundayUnavailable(d))continue;
+     const arr=days.get(k);if(placementScoreFast(arr,job.x,d)!==Infinity){chosen=k;cursor=(cursor+tries+1)%dateKeys.length;break;}
+   }
+   if(chosen){const arr=days.get(chosen);if(addPlanned(arr,job.x,fromKey(chosen)))occurrences.set(taskId(job.x),[fromKey(chosen)]);}
  }
  for(const [,arr] of days){arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b,"de"));delete arr._rooms;delete arr._ids;delete arr._themes;delete arr._heavy;delete arr._weight;delete arr._theme;delete arr._themeLabel;}
- for(const [,list] of occurrences)list.sort((a,b)=>a-b);
- const next=new Map();for(const [id,list] of occurrences){const n=list.find(d=>d>=today);if(n)next.set(id,new Date(n));}
+ const next=new Map();for(const [id,list] of occurrences){if(list[0]>=today)next.set(id,new Date(list[0]))}
  plannerCache={key,days,next,occurrences};return plannerCache;
 }
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
