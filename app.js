@@ -1,4 +1,4 @@
-/* Unser Zuhause – V148 · stabiler, inkrementeller Langzeit-Planer */
+/* Unser Zuhause – V152 · stabiler, dosierter Langzeit-Planer */
 const STORAGE="unser-zuhause-v148";
 const LEGACY_STORAGE="unser-zuhause-v147";
 const LEGACY_STORAGE_2="unser-zuhause-v141";
@@ -186,7 +186,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{},__dosePlannerVersion:"v145"}}
+function defaultState(){return {done:{},lastDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{},__dosePlannerVersion:"v152"}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -567,7 +567,7 @@ function isFixedTask(x){
   // day. The planner may move it to the nearest sensible slot when necessary.
   return false;
 }
-function plannerKey(){return "v150-dose|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})}
+function plannerKey(){return "v152-dose|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})}
 function plannerHorizon(){
   const start=fromKey("2026-09-01");
   const end=fromKey("2029-12-31");
@@ -580,6 +580,29 @@ function fixedOccurrenceDates(x,start,end){
   if(!manual)return out;
   const interval=Math.max(1,catalogInterval(x)),first=fromKey(manual);
   for(let d=new Date(first);d<=end;d=addDays(d,interval))if(d>=start)out.push(new Date(d));
+  return out;
+}
+function flexibleOccurrenceDates(x,start,end){
+  // Flexible room/rotation tasks need a real long-term occurrence series too.
+  // They are not "fixed" to the day on which their room anchor happens to fall:
+  // that anchor is only the starting point. The dose planner is then allowed
+  // to distribute each occurrence to a nearby sensible day.
+  const interval=Math.max(7,smartCadence(x));
+  let first=null;
+  if(BASEMENT.includes(x.room)){
+    const idx=Math.max(0,BASEMENT.indexOf(x.room));
+    first=addDays(fromKey("2026-09-04"),idx*7);
+  }else{
+    first=weeklyDate(x);
+  }
+  if(!first) first=addDays(start,hashTask(x.key)%interval);
+  let d=new Date(first);
+  const last=lastDone(x);
+  if(last && fromKey(last)>d)d=fromKey(last);
+  while(d<start)d=addDays(d,interval);
+  if(last && sameDay(d,fromKey(last)))d=addDays(d,interval);
+  const out=[];
+  for(;d<=end;d=addDays(d,interval))out.push(new Date(d));
   return out;
 }
 function idealOccurrenceDates(x,start,end){
