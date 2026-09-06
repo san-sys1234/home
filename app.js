@@ -1,5 +1,5 @@
 /* Unser Zuhause – V144 · intelligenter Haushaltsplaner */
-const STORAGE="unser-zuhause-v144";
+const STORAGE="unser-zuhause-v146";
 const LEGACY_STORAGE="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
@@ -243,7 +243,7 @@ function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
 function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]}
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
-function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey()}
+function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey();delete state.postponed[taskId(x)];}
 function unmarkDone(x){delete state.done[doneKey(x)]}
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
@@ -279,7 +279,9 @@ function postponeTask(x){
    else cadence=Math.max(7,catalogInterval(x));
  }
  const until=dayKey(addDays(today,cadence));const id=taskId(x);
+ delete state.done[doneKey(x)];
  state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until};
+ state.catalogDates=state.catalogDates||{};state.catalogDates[id]=until;
  state.catalogEdits=state.catalogEdits||{};save();render();toast(`Für heute verschoben · neu fällig ${formatDateKey(until)} ❤️`)
 }
 function restorePostponed(id){delete state.postponed[id];save();render()}
@@ -291,7 +293,7 @@ function syncCompletedDay(d=today){
 function plannedTodayForDate(d){
  const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
 }
-function toggleTask(x){if(isDone(x))unmarkDone(x);else markDone(x);syncCompletedDay(today);save();render()}
+function toggleTask(x){if(isDone(x)){unmarkDone(x);delete state.lastDone[lastKey(x)];}else markDone(x);syncCompletedDay(today);save();render()}
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
@@ -564,10 +566,15 @@ function buildIntelligentPlan(){
 function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
 function scheduledForDate(d){return plannedForDate(d)}
 function nextDue(x,ref=today){
- const override=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
- if(/^\d{4}-\d{2}-\d{2}$/.test(override||"")){const od=fromKey(override);if(od>=ref)return od;}
+ // A completed task starts a fresh recurrence cycle from its actual completion date.
+ // A postponed task starts a fresh cycle from its new due date. Manual/start dates
+ // are only anchors until the first completion/postponement has occurred.
  const postponed=postponedEntry(x);
  if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);if(pd>=ref)return pd;}
+ const last=lastDone(x);
+ if(last)return rawNextDue(x,ref);
+ const override=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
+ if(/^\d{4}-\d{2}-\d{2}$/.test(override||"")){const od=fromKey(override);if(od>=ref)return od;}
  if(x.manualStart&&/^\d{4}-\d{2}-\d{2}$/.test(x.start||"")){const sd=fromKey(x.start);if(sd>=ref)return sd;}
  if(x.start)return explicitNext(x,ref);
  return rawNextDue(x,ref);
@@ -605,7 +612,7 @@ function ensureTodayPlanSnapshot(d=today){
  return state.todayPlanSnapshot[k];
 }
 function plannedToday(){
- const d=today;if(d.getDay()===0&&!state.sundayOptional[dayKey(d)])return [];
+ const d=today;
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
  const snapshot=new Set(ensureTodayPlanSnapshot(d));
