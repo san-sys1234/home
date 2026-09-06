@@ -1,7 +1,8 @@
-/* Unser Zuhause – V154 · intelligenter Haushaltsplaner */
-const STORAGE="unser-zuhause-v154";
-const LEGACY_STORAGE="unser-zuhause-v148";
-const LEGACY_STORAGE_OLD="unser-zuhause-v139";
+/* Unser Zuhause – V155 · intelligenter Haushaltsplaner */
+const STORAGE="unser-zuhause-v155";
+const LEGACY_STORAGE="unser-zuhause-v154";
+const LEGACY_STORAGE_OLD="unser-zuhause-v148";
+const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
  ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
@@ -216,6 +217,7 @@ function loadState(){
  try{raw=JSON.parse(localStorage.getItem(STORAGE)||"null")}catch{}
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE)||"null")}catch{}}
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_OLD)||"null")}catch{}}
+ if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_OLD2)||"null")}catch{}}
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_2)||"null")}catch{}}
  const s=Object.assign(defaultState(),raw||{});
  migrateWCRoomNames(s);
@@ -438,7 +440,7 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v154|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){return "v155|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -446,7 +448,7 @@ function buildIntelligentPlan(){
  const addFixed=(k,x)=>{const arr=days.get(k);if(!arr)return;arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)};
  // Once the user postpones a task, keep the remaining tasks that were already
  // planned for today. Do not refill the freed capacity with new tasks.
- const lockedToday=state.todayPlanLock?.[dayKey(today)]||[];
+ const lockedToday=[];
  if(lockedToday.length){
    const lockedSet=new Set(lockedToday);
    for(const x of CATALOG){
@@ -743,19 +745,15 @@ function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))
 function groupFor(x){if(x.window)return "🪟 Fenster & Glas";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
 function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:groupFor(x)}))}
 function ensureTodayPlanSnapshot(d=today){
- const k=dayKey(d);state.todayPlanSnapshot=state.todayPlanSnapshot||{};
- if(Array.isArray(state.todayPlanSnapshot[k]))return state.todayPlanSnapshot[k];
- const ids=plannedForDate(d).map(taskId);
- state.todayPlanSnapshot[k]=[...new Set(ids)];
- try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
- return state.todayPlanSnapshot[k];
+ // Legacy compatibility only. Today is intentionally NOT snapshot-based anymore.
+ // Keep the helper for old data, but always derive the visible plan live.
+ return plannedForDate(d).map(taskId);
 }
 function plannedToday(){
  const d=today;
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
- const snapshot=new Set(ensureTodayPlanSnapshot(d));
- const plan=CATALOG.filter(x=>snapshot.has(taskId(x)));
+ const plan=plannedForDate(d);
  for(const x of plan)out.push({...x,group:groupFor(x)});
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
@@ -855,7 +853,7 @@ function showEnergy(){
   if(!box){box=document.createElement("div");box.id="energyBox";box.className="card";main.insertBefore(box,main.children[1]||null)}
   const day=dayKey();
   if(state.energySkipDay!==day){state.energySkipDay=day;state.energySeen=[];state.energyOffset=0}
-  const todayIds=new Set(ensureTodayPlanSnapshot(today));
+  const todayIds=new Set(plannedToday().filter(x=>x.source!=="daily"&&x.source!=="extra").map(taskId));
   const extraIds=new Set(state.todayExtras.filter(e=>e.date===day).map(e=>e.sourceKey||e.key||taskId(e)));
   const base=CATALOG.filter(x=>x.area!=="Alltag"&&!x.window&&!isDone(x)&&!isPostponed(x)&&!todayIds.has(taskId(x))&&!extraIds.has(taskId(x))&&!recent(x,today,7)).sort((a,b)=>nextDue(a)-nextDue(b)||String(a.id).localeCompare(String(b.id)));
   const seen=new Set(Array.isArray(state.energySeen)?state.energySeen:[]);
