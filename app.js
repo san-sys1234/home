@@ -1,6 +1,6 @@
 /* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
-const STORAGE="unser-zuhause-v160";
-const LEGACY_STORAGE="unser-zuhause-v159";
+const STORAGE="unser-zuhause-v161";
+const LEGACY_STORAGE="unser-zuhause-v160";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
@@ -240,7 +240,11 @@ let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlans(){calendarCache={year:null,days:new Map()};plannerCache={key:null,days:new Map(),next:new Map()}}
+function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
+// UI-only saves should not throw away the expensive planner cache. The planner
+// itself is keyed by the state that actually affects scheduling, so it will
+// automatically rebuild when a scheduling input changes.
+function invalidatePlans(){calendarCache={year:null,days:new Map()}}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
@@ -364,6 +368,7 @@ function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const 
 function refreshCatalog(){
  CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
  invalidatePlans();
+ invalidatePlanner();
 }
 refreshCatalog();
 
@@ -442,7 +447,11 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v160|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){
+ // Do not key the expensive planner off the generic save revision: toggling a
+ // UI state (e.g. opening Erledigt) must not force a full year re-plan.
+ return "v162|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+}
 function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -470,11 +479,13 @@ function buildIntelligentPlan(){
  // never refill the freed slot with a different task. Daily routines remain independent.
  const todayKey=dayKey(today);
  const todayLock=Array.isArray(state.todayPlanLock?.[todayKey])?state.todayPlanLock[todayKey]:null;
+ const fixedTasks=CATALOG.filter(isFixedTask);
  for(const d of dates){
    const k=dayKey(d);
    if(d<today)continue;
    if(d.getDay()===0&&!state.sundayOptional[k])continue;
-   for(const x of rawTasksForDate(d).filter(isFixedTask)){
+   for(const x of fixedTasks){
+     if(!rawDueOn(x,d))continue;
      if(k===todayKey && todayLock && !todayLock.includes(taskId(x)))continue;
      addFixed(k,x);
    }
@@ -776,7 +787,16 @@ function plannedToday(){
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
  const plan=plannedForDate(d);
- for(const x of plan)out.push({...x,group:groupFor(x)});
+ // Once "Später" is used today, the non-daily plan for today is a fixed set.
+ // Never let the planner refill a freed slot with another task. The planner
+ // already respects this lock when calculating dates; this second guard keeps
+ // the Today view stable even if an older cached/legacy plan contains extras.
+ const lockKey=dayKey(d);
+ const locked=Array.isArray(state.todayPlanLock?.[lockKey]) ? new Set(state.todayPlanLock[lockKey]) : null;
+ for(const x of plan){
+   if(locked && x.source!=="daily" && x.source!=="extra" && !locked.has(taskId(x))) continue;
+   out.push({...x,group:groupFor(x)});
+ }
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
 }
