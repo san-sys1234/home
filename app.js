@@ -243,9 +243,27 @@ function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.se
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
-function isDone(x){return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]}
+function isDone(x,ref=today){
+ const l=lastDone(x);
+ if(l)return l===dayKey(ref);
+ return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
+}
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
-function markDone(x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=dayKey();delete state.postponed[taskId(x)];}
+function canonicalTaskFor(x){
+ const sourceKey=x?.sourceKey||x?.canonical;
+ if(!sourceKey)return null;
+ return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
+}
+function markDone(x){
+ const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const target=base||x;
+ const k=dayKey();
+ state.done[doneKey(target)]=true;
+ state.lastDone[lastKey(target)]=k;
+ if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;}
+ delete state.postponed[taskId(target)];
+ if(target!==x)delete state.postponed[taskId(x)];
+}
 function unmarkDone(x){delete state.done[doneKey(x)]}
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
@@ -288,7 +306,15 @@ function syncCompletedDay(d=today){
 function plannedTodayForDate(d){
  const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
 }
-function toggleTask(x){if(isDone(x)){unmarkDone(x);delete state.lastDone[lastKey(x)];}else markDone(x);syncCompletedDay(today);save();render()}
+function toggleTask(x){
+ const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const target=base||x;
+ if(isDone(x)){
+   unmarkDone(target);delete state.lastDone[lastKey(target)];
+   if(target!==x){unmarkDone(x);delete state.lastDone[lastKey(x)];}
+ }else markDone(x);
+ syncCompletedDay(today);save();render();
+}
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
@@ -409,7 +435,7 @@ function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin
 function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
 function isFixedTask(x){return x.window||x.source==="seasonal"||x.source==="custom"||!!x.start}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
-function plannerKey(){return "v149|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+Object.keys(state.lastDone||{}).length+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
+function plannerKey(){return "v150|"+String(state.__planRevision||0)+"|"+JSON.stringify(state.manualDates||{})+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+Object.keys(state.catalogDeleted||{}).length+"|"+state.custom.length+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})}
 function plannerHorizon(){return {start:fromKey("2026-09-01"),end:fromKey("2027-12-31")}}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
@@ -806,7 +832,7 @@ function pullCatalogTaskToday(x){
   }
   const existing=state.todayExtras.some(e=>e.date===day && (e.sourceKey===x.key || e.text===x.text && e.room===x.room));
   if(existing){toast("Diese Aufgabe ist heute schon eingeplant ❤️");return;}
-  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,manual:true});
+  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
   state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
   save();
   toast(`„${x.text}“ für heute vorgezogen ❤️`);
