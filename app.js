@@ -1,5 +1,5 @@
-/* Unser Zuhause – V141 · intelligenter Haushaltsplaner */
-const STORAGE="unser-zuhause-v141";
+/* Unser Zuhause – V144 · intelligenter Haushaltsplaner */
+const STORAGE="unser-zuhause-v144";
 const LEGACY_STORAGE="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
@@ -442,11 +442,13 @@ function buildIntelligentPlan(){
    flex.push({x,base});
  }
  flex.sort((a,b)=>a.base-b.base||taskWeight(b.x)-taskWeight(a.x)||a.x.room.localeCompare(b.x.room,"de"));
- const maxLook=120;
+ const maxLook=30;
  for(const occ of flex){
    let chosen=null;
    const postponedUntil=postponedEntry(occ.x)?.postponedUntil;
-   if(postponedUntil){
+   const postponedDelta=postponedUntil?Math.round((fromKey(postponedUntil)-occ.base)/86400000):null;
+   const validPostponed=postponedUntil && Math.abs(postponedDelta)<=30;
+   if(validPostponed){
      const pd=fromKey(postponedUntil),pk=dayKey(pd);
      if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
        const arr=days.get(pk);
@@ -465,7 +467,7 @@ function buildIntelligentPlan(){
    if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);continue;}
    // A user-set "Später" date is authoritative: never silently move it
    // to another calendar day because of planner capacity.
-   if(postponedUntil){
+   if(validPostponed){
      const pd=fromKey(postponedUntil),pk=dayKey(pd);
      if(days.has(pk) && (pd.getDay()!==0 || state.sundayOptional[pk])){
        const a=days.get(pk);
@@ -473,7 +475,7 @@ function buildIntelligentPlan(){
        continue;
      }
    }
-   for(let delta=0;delta<=maxLook;delta++){
+   for(let delta=-30;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===dayKey(today)&&lockedToday.length&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
@@ -503,10 +505,9 @@ function buildIntelligentPlan(){
    }
    if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
    else {
-     // Every active task must always receive a concrete planned date. If no
-     // perfectly balanced slot exists, choose the least-loaded valid day
-     // within the strict +/-30-day tolerance. Prefer a day where the task
-     // can stand alone; only use a capacity-overflow fallback as a last resort.
+     // Every active task must always receive a concrete planned date. The +/-30-day
+     // tolerance is an absolute hard limit: no candidate outside this window
+     // may ever be considered. Prefer the least-loaded valid day inside it.
      const weight=taskWeight(occ.x), candidates=[];
      for(let delta=-30;delta<=30;delta++){
        const d=addDays(occ.base,delta),k=dayKey(d);
@@ -523,7 +524,7 @@ function buildIntelligentPlan(){
      }
      candidates.sort((a,b)=>a.score-b.score);
      const fb=candidates[0];
-     if(fb){const a=days.get(fb.k);a.push(occ.x);a._weight=(a._weight||0)+weight;chosen=fb.k;}
+     if(fb && Math.abs(fb.delta)<=30){const a=days.get(fb.k);a.push(occ.x);a._weight=(a._weight||0)+weight;chosen=fb.k;}
    }
  }
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
@@ -533,6 +534,29 @@ function buildIntelligentPlan(){
      const id=taskId(y);
      if(!next.has(id)){const d=fromKey(k);if(d>=today)next.set(id,d);}
    }
+ }
+ // HARD GUARANTEE: every active catalog task receives a concrete planned date.
+ // Never expose an unplanned state. If an earlier placement was impossible,
+ // place the task on the least-loaded valid day within the absolute +/-30 day
+ // window around its actual due date. This fallback may relax capacity, but
+ // it may NEVER relax the 30-day boundary or create an invalid Sunday plan.
+ for(const x of CATALOG){
+   if(x.area==="Alltag"||isDone(x))continue;
+   const id=taskId(x);
+   if(next.has(id))continue;
+   const due=nextDue(x,today), candidates=[];
+   for(let delta=-30;delta<=30;delta++){
+     const d=addDays(due,delta),k=dayKey(d);
+     if(!days.has(k))continue;
+     if(d.getDay()===0&&!state.sundayOptional[k])continue;
+     const arr=days.get(k);
+     if(arr.some(y=>taskId(y)===id))continue;
+     const used=arr._weight||0, sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
+     candidates.push({k,delta,used,sameTheme});
+   }
+   candidates.sort((a,b)=> (a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
+   const fb=candidates[0];
+   if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
  plannerCache={key,days,next};
  return plannerCache;
@@ -557,7 +581,7 @@ function plannedDateForTask(x){
 }
 function plannedDateLabel(x){
  const d=plannedDateForTask(x);
- return d?d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"Noch nicht geplant";
+ return d?d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
 }
 function themeFor(d){
  if(d.getDay()===0)return DAY_THEME[0];
