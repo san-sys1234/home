@@ -517,7 +517,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v174|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v176|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -835,6 +835,35 @@ function plannedDateForTask(x){
    if(k===lockKey && !allowedToday)continue;
    const dd=fromKey(k);
    if(dd>=today && Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
+ }
+ // Absolute display invariant: an active task may NEVER be shown without a
+ // concrete plan. If an older/overloaded planner state somehow failed to expose
+ // a date, allocate one directly into the same planner cache. This is a final
+ // safety net, not a second planning system: Today, calendar and catalog all
+ // read the same mutated plan object afterwards.
+ if(!isDailyTask(x)){
+   let fallbackDue=due instanceof Date && !Number.isNaN(due.getTime())?due:new Date(today);
+   let best=null;
+   for(let delta=0;delta<=30;delta++){
+     for(const sign of delta===0?[1]:[1,-1]){
+       const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
+       if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
+       if(d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(k===lockKey&&locked&&!locked.has(id))continue;
+       const arr=plan.days.get(k);
+       if(arr.some(y=>taskId(y)===id))continue;
+       const used=arr._weight||0, sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
+       const score=used*10+(sameTheme?0:20)+Math.abs(delta);
+       if(!best||score<best.score)best={k,d,score};
+     }
+   }
+   if(best){
+     const arr=plan.days.get(best.k);
+     arr.push(x);
+     arr._weight=(arr._weight||0)+taskWeight(x);
+     plan.next.set(id,best.d);
+     return best.d;
+   }
  }
  return null;
 }
