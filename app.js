@@ -898,7 +898,7 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const hideRoom=!!opts.hideRoom;const due=nextDueLabel(x);const planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons"><button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue;const hideRoom=!!opts.hideRoom;const showPullToday=!!opts.showPullToday;const due=nextDueLabel(x);const planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room)return false;
@@ -910,8 +910,10 @@ function focusRoomMatches(x,room){
 }
 function roomFocusTasks(room,d=today){
   if(!room)return [];
+  const day=dayKey(d);
   return CATALOG
     .filter(x=>focusRoomMatches(x,room) && !isDone(x) && !isPostponed(x))
+    .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
     .filter(x=>!recent(x,d,7))
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
@@ -933,8 +935,8 @@ function renderRoomFocus(main, tasks){
     const heading=document.createElement("div");heading.className="sectionTitle";heading.textContent=`${room} · heute freiwillig`;sec.appendChild(heading);
     if(!open.length){const empty=document.createElement("div");empty.className="card empty";empty.textContent="In diesem Raum ist gerade nichts Sinnvolles offen. 🥰";sec.appendChild(empty)}
     else {
-      // All tasks are shown together under the selected room, including windows and other special tasks.
-      open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true,hideRoom:true})));
+      // All open tasks are shown together under the selected room. They can also be pulled into the real Today plan.
+      open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true,hideRoom:true,showPullToday:true})));
     }
     main.appendChild(sec);
   };
@@ -959,7 +961,15 @@ function renderToday(){
   const groups={};
   for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
   for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
-  const completed=tasks.filter(x=>isDone(x));
+  // The general Today → Erledigt section is the single home for every task
+  // actually completed today, including voluntary room-focus tasks that were
+  // not part of the regular Today plan. This keeps room focus as a view, not
+  // as a second completion hierarchy.
+  const completedMap=new Map();
+  for(const x of tasks)if(isDone(x))completedMap.set(taskId(x),x);
+  for(const x of CATALOG)if(isDone(x) && !isPostponed(x))completedMap.set(taskId(x),x);
+  for(const e of (state.todayExtras||[]).filter(e=>e.date===dayKey(today) && isDone({...e,key:e.id,source:"extra"})))completedMap.set(taskId({...e,key:e.id,source:"extra"}),{...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
+  const completed=[...completedMap.values()];
   if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
   renderRoomFocus(main,tasks);
   renderPostponed(main);
