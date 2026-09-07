@@ -1060,7 +1060,7 @@ function showEnergy(){
   if(!candidates.length)box.innerHTML+=`<div class="empty">Gerade gibt es keine sinnvolle Zusatzaufgabe. 🥰</div>`;
   candidates.forEach(x=>{
     const r=document.createElement("div");r.className="result";
-    r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · regulär ${esc(nextDueLabel(x))}</div></div><button class="btn primary">Heute vorziehen</button>`;
+    r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · Fällig: ${esc(nextDueLabel(x))} · Geplant: ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
       state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
       state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
