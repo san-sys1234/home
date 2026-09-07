@@ -517,7 +517,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v176|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v177|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1010,10 +1010,21 @@ function renderToday(){
   // actually completed today, including voluntary room-focus tasks that were
   // not part of the regular Today plan. This keeps room focus as a view, not
   // as a second completion hierarchy.
+  // One completed task = one row.  Room-focus / Today-extra occurrences may
+  // point to the same canonical catalog task, so taskId alone is not enough
+  // for deduplication.  Always collapse extras to their canonical source key.
   const completedMap=new Map();
-  for(const x of tasks)if(isDone(x))completedMap.set(taskId(x),x);
-  for(const x of CATALOG)if(isDone(x) && !isPostponed(x))completedMap.set(taskId(x),x);
-  for(const e of (state.todayExtras||[]).filter(e=>e.date===dayKey(today) && isDone({...e,key:e.id,source:"extra"})))completedMap.set(taskId({...e,key:e.id,source:"extra"}),{...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
+  const completionId=(x)=>{
+    if(x?.source==="extra") return String(x.sourceKey||x.canonical||taskId(x));
+    return String(x?.sourceKey||taskId(x));
+  };
+  for(const x of tasks)if(isDone(x))completedMap.set(completionId(x),x);
+  for(const x of CATALOG)if(isDone(x) && !isPostponed(x))completedMap.set(completionId(x),x);
+  for(const e of (state.todayExtras||[]).filter(e=>e.date===dayKey(today) && isDone({...e,key:e.id,source:"extra"}))){
+    const extra={...e,key:e.id,source:"extra",group:"Heute zusätzlich"};
+    const id=completionId(extra);
+    if(!completedMap.has(id))completedMap.set(id,extra);
+  }
   const completed=[...completedMap.values()];
   if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
   renderRoomFocus(main,tasks);
