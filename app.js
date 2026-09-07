@@ -517,9 +517,25 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v170|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v174|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
-function plannerHorizon(){return {start:new Date(today.getFullYear(),today.getMonth(),today.getDate(),12),end:fromKey("2027-12-31")}}
+function plannerHorizon(){
+ const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
+ // The planner must be able to place EVERY active catalog task. A fixed
+ // calendar end can leave long-interval tasks (e.g. annual tasks) without a
+ // plan. Extend the horizon far enough beyond the furthest current due date
+ // to guarantee a legal +/-30-day planning window.
+ let end=fromKey("2027-12-31");
+ for(const x of CATALOG){
+   if(x.area==="Alltag"||isInvalidLegacyTask(x))continue;
+   const due=nextDue(x,today);
+   if(due instanceof Date && !Number.isNaN(due.getTime())){
+     const candidate=addDays(due,30);
+     if(candidate>end)end=candidate;
+   }
+ }
+ return {start,end};
+}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -668,7 +684,7 @@ function buildIntelligentPlan(){
  // window around its actual due date. This fallback may relax capacity, but
  // it may NEVER relax the 30-day boundary or create an invalid Sunday plan.
  for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x))continue;
+   if(x.area==="Alltag")continue;
    const id=taskId(x);
    if(next.has(id))continue;
    const due=nextDue(x,today), candidates=[];
@@ -723,7 +739,7 @@ function buildIntelligentPlan(){
  // This pass is deliberately independent from all earlier planner heuristics so
  // stale data from older versions cannot leak into the calendar.
  for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x))continue;
+   if(x.area==="Alltag")continue;
    const id=taskId(x),due=nextDue(x,today);
    let pd=next.get(id);
    const valid=pd instanceof Date && pd>=today && Math.abs(Math.round((pd-due)/86400000))<=30;
