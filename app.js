@@ -255,7 +255,7 @@ function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map(
 // UI-only saves should not throw away the expensive planner cache. The planner
 // itself is keyed by the state that actually affects scheduling, so it will
 // automatically rebuild when a scheduling input changes.
-function invalidatePlans(){calendarCache={year:null,days:new Map()}}
+function invalidatePlans(){calendarCache={year:null,days:new Map()};invalidatePlanner()}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
@@ -355,12 +355,15 @@ function postponeTask(x){
  // "Später" verschiebt ausschließlich die aktuelle Planung. Die Fälligkeit
  // bleibt unverändert und wird erst nach echtem "Erledigt" neu berechnet.
  const due=nextDue(x,today);
- // Never leave the task on today's date: "Später" must actually move the
- // current occurrence to a future planning date. Prefer the first legal day
- // after the current due date, while respecting the hard +/-30 day window.
- let planned=addDays(due,1);
+ // "Später" moves the CURRENT planned occurrence, not the recurrence/fällig date.
+ // Read the exact date currently shown by the planner before changing state.
+ const currentPlan=plannerCache.key===plannerKey()?plannerCache.next.get(taskId(x)):buildIntelligentPlan().next.get(taskId(x));
+ const currentBase=currentPlan instanceof Date && currentPlan>=today?currentPlan:due;
+ // Move at least one day into the future, but never more than 30 days away from
+ // the actual due date. This user choice becomes authoritative until completion.
+ let planned=addDays(currentBase,1);
  for(let i=0;i<=30;i++){
-   const candidate=addDays(due,1+i);
+   const candidate=addDays(currentBase,1+i);
    if(candidate>=today && Math.abs(Math.round((candidate-due)/86400000))<=30 &&
       (candidate.getDay()!==0 || state.sundayOptional[dayKey(candidate)])){planned=candidate;break;}
  }
@@ -984,7 +987,7 @@ function roomFocusTasks(room,d=today){
   if(!room)return [];
   const day=dayKey(d);
   return CATALOG
-    .filter(x=>focusRoomMatches(x,room) && !isDone(x) && !isPostponed(x))
+    .filter(x=>focusRoomMatches(x,room) && !isDone(x))
     .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
     .filter(x=>!recent(x,d,7))
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
