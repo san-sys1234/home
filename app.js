@@ -347,6 +347,19 @@ function postponedEntry(x){
  return null;
 }
 function isPostponed(x){const p=postponedEntry(x);return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
+function postponedTodayEntries(){
+ const k=dayKey();
+ const out=[];
+ const seen=new Set();
+ for(const [id,p] of Object.entries(state.postponed||{})){
+   if(!p||p.actionDate!==k||!p.postponedUntil||p.postponedUntil<=k)continue;
+   const tid=taskId(p)||id;
+   if(seen.has(tid))continue;
+   seen.add(tid);
+   out.push({...p,key:p.key||tid,source:p.source||"postponed",_postponedId:id});
+ }
+ return out.sort((a,b)=>String(a.postponedUntil).localeCompare(String(b.postponedUntil))||String(a.text||"").localeCompare(String(b.text||""),"de"));
+}
 function postponeTask(x){
  const day=dayKey();
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
@@ -515,8 +528,9 @@ function rawDueOn(x,d){
    const diff=Math.round((d-anchor)/86400000);
    return diff>=0&&diff%interval===0;
  }
- const postponed=postponedEntry(x);
- if(postponed?.postponedUntil){const pd=fromKey(postponed.postponedUntil);return sameDay(pd,d);}
+ // A "Später" date is a planning override only. It must NEVER become the
+ // task's recurrence/fällig date. The planner below places the occurrence on
+ // that explicit planned date; rawDueOn remains purely cadence-based.
  if(x.area==="Alltag")return false;
  if(x.window)return sameDay(windowDate(x,d),d);
  if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}
@@ -547,7 +561,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v177|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v182|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -947,7 +961,16 @@ function plannedToday(){
    if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
  }
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
- const seen=new Set();return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return !isPostponed(x)})
+ const seen=new Set();return out.filter(x=>{
+   const id=taskId(x);
+   if(seen.has(id))return false;
+   seen.add(id);
+   const p=postponedEntry(x);
+   // A postponed task is hidden only during the day on which the user pressed
+   // “Später”. On its authoritative new planned date it must re-enter Today.
+   if(p&&p.postponedUntil&&p.postponedUntil>dayKey(d))return false;
+   return true;
+ })
 }
 
 function definition(x){const t=x.text.toLowerCase();let what=x.description||x.text,belongs=[x.place?"Genauer Ort: "+x.place:"genau der genannte Bereich bzw. Gegenstand"],not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"],care=["Material- und Herstellerangaben haben Vorrang."];if(x.window){
@@ -1033,6 +1056,34 @@ function renderToday(){
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
+  // “Später” is a same-day action log, not a second scheduling system.
+  // Entries remain visible in Today on the day the user postponed them, so the
+  // user can reopen them if desired. At the next calendar day this section is
+  // automatically empty; the stored postponedUntil date remains untouched and
+  // controls when the task returns to the real Today/calendar plan.
+  const postponedToday=postponedTodayEntries();
+  if(postponedToday.length){
+    const card=document.createElement("div");
+    card.className="card";
+    card.innerHTML=`<div class="topline"><b>↩️ Später (${postponedToday.length})</b><button class="btn" id="po">Ausblenden</button></div>`;
+    const body=document.createElement("div");
+    body.dataset.postponedBody="1";
+    postponedToday.forEach(x=>{
+      const row=document.createElement("div");
+      row.className="result";
+      row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room||"")}${x.area?" · "+esc(x.area):""} · verschoben heute</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn" data-reopen="1">Wieder öffnen</button>`;
+      row.querySelector('[data-reopen="1"]').onclick=()=>restorePostponed(x._postponedId||taskId(x));
+      body.appendChild(row);
+    });
+    card.appendChild(body);
+    main.appendChild(card);
+    card.querySelector("#po").onclick=()=>{
+      const body=card.querySelector('[data-postponed-body="1"]');
+      const hidden=body.style.display==="none";
+      body.style.display=hidden?"":"none";
+      card.querySelector("#po").textContent=hidden?"Ausblenden":"Anzeigen";
+    };
+  }
   const groups={};
   for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
   for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
@@ -1058,11 +1109,11 @@ function renderToday(){
   const completed=[...completedMap.values()];
   if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
   renderRoomFocus(main,tasks);
-  renderPostponed(main);
+  // The “Später” section above is intentionally scoped to today's action date.
+  // Its stored planned date is never changed by the midnight reset.
   main.querySelector("#energy").onclick=showEnergy;
   main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()};
 }
-function renderPostponed(main){const arr=Object.entries(state.postponed||{}).filter(([,x])=>isPostponed(x));if(!arr.length)return;const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="topline"><b>↩ Später (${arr.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.postponedOpen)arr.forEach(([id,x])=>{const r=document.createElement("div");r.className="result";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · verschoben am ${esc(x.from)} · neu fällig ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn">Wieder öffnen</button>`;r.querySelector("button").onclick=()=>restorePostponed(id);c.appendChild(r)});main.appendChild(c);c.querySelector("#po").onclick=()=>{state.postponedOpen=!state.postponedOpen;save();render()}}
 function showEnergy(){
   const main=document.getElementById("main");
   let box=document.getElementById("energyBox");
@@ -1126,6 +1177,23 @@ function renderWeek(){const main=document.getElementById("main"),base=addDays(to
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(state.completedDays[dayKey(d)]?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
 function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),by={};tasks.forEach(x=>(by[x.room]??=[]).push(x));box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}</h3><div class="small">${esc(themeFor(d))}</div>${tasks.length?Object.entries(by).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} geplante Aufgaben</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}<br><span class="small">Geplant am: ${esc(d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}))}</span></div>`).join("")}</div>`).join(""):`<div class="empty">Keine fest eingeplanten Aufgaben.</div>`}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
 
-function render(){document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
+function syncCurrentDay(){
+ const now=new Date();now.setHours(12,0,0,0);
+ const nk=dayKey(now);
+ if(dayKey(today)!==nk){
+   today=now;
+   // Old same-day UI state must never carry into a new calendar day. The
+   // postponed records themselves are intentionally retained because their
+   // postponedUntil date is the authoritative plan.
+   state.completedOpen=false;
+   state.postponedOpen=false;
+   state.energySkipDay="";
+   state.energySeen=[];
+   state.energyOffset=0;
+   save();
+ }
+}
+function render(){syncCurrentDay();document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
+setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
