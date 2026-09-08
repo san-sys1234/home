@@ -1100,6 +1100,18 @@ function renderToday(){
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
+  // Regular Today tasks: daily routines and scheduled tasks are rendered here
+  // before the collapsed summary sections. Keep this as the authoritative
+  // visible task list; V187 accidentally omitted this block.
+  const groups={};
+  for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
+  for(const [g,arr] of Object.entries(groups)){
+    const sec=document.createElement("section");
+    sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;
+    arr.forEach(x=>sec.appendChild(taskRow(x)));
+    main.appendChild(sec);
+  }
+
   // Erledigt stays before the optional room-focus area, and both collapsible
   // UI sections are intentionally transient: they are not persisted across
   // app restarts or tab changes.
@@ -1240,5 +1252,5 @@ function syncCurrentDay(){
 }
 function render(){syncCurrentDay();document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
