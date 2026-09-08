@@ -561,7 +561,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v182|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v185|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -831,7 +831,22 @@ function buildIntelligentPlan(){
  plannerCache={key,days,next};
  return plannerCache;
 }
-function plannedForDate(d){return buildIntelligentPlan().days.get(dayKey(d))||[]}
+function plannedForDate(d){
+ const arr=buildIntelligentPlan().days.get(dayKey(d))||[];
+ // A user-postponed date is authoritative. Even if an older planner/cache
+ // failed to place the task, the task must still appear on that exact date in
+ // Today, the room view, week view and calendar. This is not a new plan: it is
+ // simply the persisted user choice being surfaced everywhere consistently.
+ const k=dayKey(d),seen=new Set(arr.map(taskId));
+ for(const p of Object.values(state.postponed||{})){
+   if(!p||String(p.postponedUntil)!==k)continue;
+   const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
+   if(seen.has(id))continue;
+   const x=CATALOG.find(y=>taskId(y)===id) || CATALOG.find(y=>String(y.key||'')===String(p.key||'')) || CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
+   if(x && !isDone(x)){arr.push(x);seen.add(taskId(x));}
+ }
+ return arr;
+}
 function scheduledForDate(d){return plannedForDate(d)}
 function normalizeDateKey(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):""}
 function nextDue(x,ref=today){
@@ -1013,10 +1028,13 @@ function roomFocusTasks(room,d=today){
     .filter(x=>focusRoomMatches(x,room) && !isDone(x))
     .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
     .filter(x=>{
-      // A task that was postponed is still genuinely open. Its lastDone value
-      // may point to yesterday (legacy/previous-cycle data), but that must NOT
-      // hide it from the voluntary room view.
-      if(postponedEntry(x))return true;
+      // Postponed tasks remain open. In addition, an authoritative plan for
+      // this exact room/date must always be visible here, even if a legacy
+      // lastDone/recent marker would otherwise hide it.
+      const p=postponedEntry(x);
+      if(p && String(p.postponedUntil)===day)return true;
+      const pd=plannedDateForTask(x);
+      if(pd && dayKey(pd)===day)return true;
       return !recent(x,d,7);
     })
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
