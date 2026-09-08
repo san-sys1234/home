@@ -225,7 +225,7 @@ function loadState(){
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  // Alte generische „Ganzes Haus“-/„Keller allgemein“-Aufgaben dürfen nicht wieder im Katalog auftauchen.
@@ -561,7 +561,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v185|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v186|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -580,6 +580,8 @@ function plannerHorizon(){
  }
  return {start,end};
 }
+function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
+function nearbyCategoryPenalty(days,k,cat){let penalty=0;for(const off of [-1,1]){const a=days.get(dayKey(addDays(fromKey(k),off)));if(a&&dominantCategory(a)===cat)penalty+=12}return penalty}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -685,7 +687,7 @@ function buildIntelligentPlan(){
      const roomLimit=(weight>=5||hasMighty)?1:6;
      if(sameRoomWeight+weight>roomLimit)continue;
      const targetGroup=groupFor(occ.x);
-     const sameTheme=arr.some(y=>groupFor(y)===targetGroup);
+     const sameTheme=arr.some(y=>taskCategory(y)===targetGroup);
      const emptyDay=arr.length===0;
      if(!sameTheme && !emptyDay && weight<=3)continue;
      chosen=k;break;
@@ -705,7 +707,7 @@ function buildIntelligentPlan(){
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
        const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
-       const sameTheme=arr.some(y=>groupFor(y)===groupFor(occ.x));
+       const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
        const score=(canFit?0:100000)+(sameTheme?0:20)+used*10+Math.abs(delta)*0.1;
        candidates.push({k,score,canFit,used,delta});
      }
@@ -739,7 +741,7 @@ function buildIntelligentPlan(){
      if(d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
-     const used=arr._weight||0, sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
+     const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
      candidates.push({k,delta,used,sameTheme});
    }
    candidates.sort((a,b)=> (a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
@@ -911,7 +913,7 @@ function plannedDateForTask(x){
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
-       const used=arr._weight||0, sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
+       const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
        const score=used*10+(sameTheme?0:20)+Math.abs(delta);
        if(!best||score<best.score)best={k,d,score};
      }
@@ -932,17 +934,35 @@ function plannedDateLabel(x){
 }
 function themeFor(d){
  if(d.getDay()===0)return DAY_THEME[0];
- const tasks=plannedForDate(d);
+ const tasks=plannedForDate(d).filter(x=>x.source!=="rotation");
  if(!tasks.length)return "✨ Leichter Haushalt";
- const scores={};
- for(const x of tasks){const g=groupFor(x);scores[g]=(scores[g]||0)+taskWeight(x);}
- return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||"✨ Leichter Haushalt";
+ const cat=dominantCategory(tasks);
+ if(cat)return cat;
+ return "✨ Leichter Haushalt";
 }
 
 function dailyTasks(){const out=[];for(const [group,tasks] of DAILY)for(const text of tasks)out.push({key:`daily|${text}`,id:`daily|${text}`,text,room:"Alltag",area:"Haushalt",group,source:"daily",editable:false});return out}
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
 function groupFor(x){if(x.window)return "🪟 Fenster & Glas";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
-function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:groupFor(x)}))}
+// A task category is deliberately more granular than the room/floor group. It is
+// used by the planner to bundle compatible work together, while groupFor()
+// remains useful for room/floor context elsewhere in the app.
+function taskCategory(x){const t=(x.text||"").toLowerCase();
+ if(x.window)return "🪟 Fenster & Glas";
+ if(x.raffstore)return "☀️ Sonnenschutz";
+ if(/toilette|wc|wc-bürste|wc bürste|waschbecken|armatur|papierhalter/.test(t))return "🚿 Sanitär & WCs";
+ if(/dusche|duschglas|duschrinne|badewanne|badewannenarmatur|fuge|silikon/.test(t))return "🛁 Dusche, Wanne & Fugen";
+ if(/boden|sockelleisten|stufen|stiege|ecken absaugen|unter bett|unter möbeln|unter schränken/.test(t))return "🧹 Böden & Sockelleisten";
+ if(/bettwäsche|handtücher|decke|vorhang|wäsche|waschmaschine|trockner|waschmittel|wäschekörbe/.test(t))return "🧺 Textilien & Wäsche";
+ if(/kühlschrank|gefrierfach|herd|kochfeld|dunstabzug|backofen|mikrowelle|spüle|mülleimer|arbeitsplatten|fronten|schubladen innen|sockelleisten reinigen/.test(t))return "🍽️ Küche & Geräte";
+ if(/vorrat|mindesthaltbarkeit|packungen|ordnen|sortieren|kleidung|spielzeug|bücher|schreibtisch|papier|regal|schrank|schubladen|ablage|jacken|schuhe/.test(t))return "📦 Ordnung & Organisation";
+ if(/staub|abstauben|entstauben|spinnweben|lichtschalter|türklink|türrahmen|türblätter|handlauf|geländer|fensterbank|spiegel|oberflächen|dekor/.test(t))return "✨ Staub & Oberflächen";
+ if(/kamin|ruß|asche/.test(t))return "🔥 Kamin & Feuerstelle";
+ if(/sauna/.test(t))return "🧖 Sauna";
+ if(/technik|zugänge|komponenten/.test(t))return "🔧 Technik & Keller";
+ return groupFor(x);
+}
+function weeklyCandidates(d){return plannedForDate(d).filter(x=>!x.window&&x.source!=="rotation").map(x=>({...x,group:taskCategory(x)}))}
 function ensureTodayPlanSnapshot(d=today){
  // Legacy compatibility only. Today is intentionally NOT snapshot-based anymore.
  // Keep the helper for old data, but always derive the visible plan live.
@@ -1080,44 +1100,9 @@ function renderToday(){
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
-  // “Später” is a same-day action log, not a second scheduling system.
-  // Entries remain visible in Today on the day the user postponed them, so the
-  // user can reopen them if desired. At the next calendar day this section is
-  // automatically empty; the stored postponedUntil date remains untouched and
-  // controls when the task returns to the real Today/calendar plan.
-  const postponedToday=postponedTodayEntries();
-  if(postponedToday.length){
-    const card=document.createElement("div");
-    card.className="card";
-    card.innerHTML=`<div class="topline"><b>↩️ Später (${postponedToday.length})</b><button class="btn" id="po">Ausblenden</button></div>`;
-    const body=document.createElement("div");
-    body.dataset.postponedBody="1";
-    postponedToday.forEach(x=>{
-      const row=document.createElement("div");
-      row.className="result";
-      row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room||"")}${x.area?" · "+esc(x.area):""} · verschoben heute</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn" data-reopen="1">Wieder öffnen</button>`;
-      row.querySelector('[data-reopen="1"]').onclick=()=>restorePostponed(x._postponedId||taskId(x));
-      body.appendChild(row);
-    });
-    card.appendChild(body);
-    main.appendChild(card);
-    card.querySelector("#po").onclick=()=>{
-      const body=card.querySelector('[data-postponed-body="1"]');
-      const hidden=body.style.display==="none";
-      body.style.display=hidden?"":"none";
-      card.querySelector("#po").textContent=hidden?"Ausblenden":"Anzeigen";
-    };
-  }
-  const groups={};
-  for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
-  for(const [g,arr] of Object.entries(groups)){const sec=document.createElement("section");sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;arr.forEach(x=>sec.appendChild(taskRow(x)));main.appendChild(sec)}
-  // The general Today → Erledigt section is the single home for every task
-  // actually completed today, including voluntary room-focus tasks that were
-  // not part of the regular Today plan. This keeps room focus as a view, not
-  // as a second completion hierarchy.
-  // One completed task = one row.  Room-focus / Today-extra occurrences may
-  // point to the same canonical catalog task, so taskId alone is not enough
-  // for deduplication.  Always collapse extras to their canonical source key.
+  // Erledigt stays before the optional room-focus area, and both collapsible
+  // UI sections are intentionally transient: they are not persisted across
+  // app restarts or tab changes.
   const completedMap=new Map();
   const completionId=(x)=>{
     if(x?.source==="extra") return String(x.sourceKey||x.canonical||taskId(x));
@@ -1131,8 +1116,44 @@ function renderToday(){
     if(!completedMap.has(id))completedMap.set(id,extra);
   }
   const completed=[...completedMap.values()];
-  if(completed.length){const card=document.createElement("div");card.className="card";card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));main.appendChild(card);card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;save();render()}}
+  if(completed.length){
+    const card=document.createElement("div");
+    card.className="card";
+    card.innerHTML=`<div class="topline"><b>✓ Erledigt (${completed.length})</b><button class="btn" id="co">${state.completedOpen?"Ausblenden":"Anzeigen"}</button></div>`;
+    if(state.completedOpen)completed.forEach(x=>card.appendChild(taskRow(x)));
+    main.appendChild(card);
+    card.querySelector("#co").onclick=()=>{state.completedOpen=!state.completedOpen;render()};
+  }
+
+  // Room focus remains above the optional "Später" log so that Später is
+  // visually the final section of Today.
   renderRoomFocus(main,tasks);
+
+  // “Später” is a same-day action log, not a second scheduling system. It is
+  // deliberately the LAST section in Today. Its expanded/collapsed state is
+  // transient and resets when the user changes tabs or restarts the app.
+  const postponedToday=postponedTodayEntries();
+  if(postponedToday.length){
+    const card=document.createElement("div");
+    card.className="card";
+    card.innerHTML=`<div class="topline"><b>↩️ Später (${postponedToday.length})</b><button class="btn" id="po">${state.postponedOpen?"Ausblenden":"Anzeigen"}</button></div>`;
+    const body=document.createElement("div");
+    body.dataset.postponedBody="1";
+    body.style.display=state.postponedOpen?"":"none";
+    postponedToday.forEach(x=>{
+      const row=document.createElement("div");
+      row.className="result";
+      row.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room||"")}${x.area?" · "+esc(x.area):""} · verschoben heute</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(formatDateKey(x.postponedUntil))}</div></div><button class="btn" data-reopen="1">Wieder öffnen</button>`;
+      row.querySelector('[data-reopen="1"]').onclick=()=>restorePostponed(x._postponedId||taskId(x));
+      body.appendChild(row);
+    });
+    card.appendChild(body);
+    main.appendChild(card);
+    card.querySelector("#po").onclick=()=>{
+      state.postponedOpen=!state.postponedOpen;
+      render();
+    };
+  }
   // The “Später” section above is intentionally scoped to today's action date.
   // Its stored planned date is never changed by the midnight reset.
   main.querySelector("#energy").onclick=showEnergy;
