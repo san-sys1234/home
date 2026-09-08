@@ -1012,7 +1012,13 @@ function roomFocusTasks(room,d=today){
   return CATALOG
     .filter(x=>focusRoomMatches(x,room) && !isDone(x))
     .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
-    .filter(x=>!recent(x,d,7))
+    .filter(x=>{
+      // A task that was postponed is still genuinely open. Its lastDone value
+      // may point to yesterday (legacy/previous-cycle data), but that must NOT
+      // hide it from the voluntary room view.
+      if(postponedEntry(x))return true;
+      return !recent(x,d,7);
+    })
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
 function renderRoomFocus(main, tasks){
