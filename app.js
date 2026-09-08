@@ -185,7 +185,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
+function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -221,7 +221,7 @@ function loadState(){
  if(!raw){try{raw=JSON.parse(localStorage.getItem(LEGACY_STORAGE_2)||"null")}catch{}}
  const s=Object.assign(defaultState(),raw||{});
  migrateWCRoomNames(s);
- s.done=s.done||{};s.lastDone=s.lastDone||{};s.dailyDone=s.dailyDone&&typeof s.dailyDone==="object"?s.dailyDone:{};s.postponed=s.postponed||{};
+ s.done=s.done||{};s.lastDone=s.lastDone||{};s.completionHistory=s.completionHistory&&typeof s.completionHistory==='object'?s.completionHistory:{};s.dailyDone=s.dailyDone&&typeof s.dailyDone==="object"?s.dailyDone:{};s.postponed=s.postponed||{};
  s.custom=Array.isArray(s.custom)?s.custom.filter(c=>!isInvalidLegacyTask(c)):[];
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
@@ -281,31 +281,58 @@ function canonicalTaskFor(x){
  if(!sourceKey)return null;
  return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
 }
+function recordCompletion(x,dateKey){
+ const id=taskId(x); if(!id)return;
+ state.completionHistory=state.completionHistory&&typeof state.completionHistory==='object'?state.completionHistory:{};
+ const arr=Array.isArray(state.completionHistory[id])?state.completionHistory[id].slice():[];
+ if(!arr.includes(dateKey)) arr.push(dateKey);
+ arr.sort((a,b)=>String(b).localeCompare(String(a)));
+ state.completionHistory[id]=arr.slice(0,20);
+}
+function completionHistoryFor(x){
+ const id=taskId(x), out=[];
+ const add=v=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(v))&&!out.includes(String(v)))out.push(String(v))};
+ const saved=state.completionHistory?.[id];
+ if(Array.isArray(saved))saved.forEach(add);
+ // Backfill the current known completion for older data.
+ add(lastDone(x));
+ // Daily routines have date-scoped completion records.
+ if(isDailyTask(x)) for(const [d,items] of Object.entries(state.dailyDone||{})) if(items&&items[id])add(d);
+ out.sort((a,b)=>b.localeCompare(a));
+ return out.slice(0,2);
+}
 function markDone(x){
  const k=dayKey();
- // Daily routines are date-scoped occurrences, never recurring global flags.
+ // Daily routines are independent calendar-day occurrences. A routine is
+ // completed only for the exact day on which it was checked off.
  if(isDailyTask(x)){
-   state.dailyDone=state.dailyDone&&typeof state.dailyDone==="object"?state.dailyDone:{};
+   state.dailyDone=state.dailyDone&&typeof state.dailyDone==='object'?state.dailyDone:{};
    state.dailyDone[k]=state.dailyDone[k]||{};
    state.dailyDone[k][taskId(x)]=true;
+   recordCompletion(x,k);
    return;
  }
  const base=x.source==="extra"?canonicalTaskFor(x):null;
  const target=base||x;
  state.done[doneKey(target)]=true;
  state.lastDone[lastKey(target)]=k;
- if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;}
+ recordCompletion(target,k);
+ if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);}
  delete state.postponed[taskId(target)];
  if(target!==x)delete state.postponed[taskId(x)];
 }
+
 function unmarkDone(x){
+ const k=dayKey(),id=taskId(x);
  if(isDailyTask(x)){
-   const k=dayKey();
-   if(state.dailyDone?.[k])delete state.dailyDone[k][taskId(x)];
+   if(state.dailyDone?.[k])delete state.dailyDone[k][id];
+   if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
    return;
  }
  delete state.done[doneKey(x)];
+ if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
 }
+
 function postponedEntry(x){
  const exact=state.postponed?.[taskId(x)];
  if(exact)return exact;
@@ -925,7 +952,7 @@ function definition(x){const t=x.text.toLowerCase();let what=x.description||x.te
    belongs=x.windowSide==="innen"?[x.place||"genanntes Fenster","Fensterglas innen","Rahmen und Falz","Fensterbank"]:[x.place||"genanntes Fenster","Fensterglas außen","zugänglicher Rahmen und Falz"];
    not=["Keine anderen Fenster des Hauses zusätzlich","Keine unsicheren Außen-/Höhenarbeiten"]
 }else if(/kamin|asche|ruß|feuerraum|rost/.test(t)){what=x.description||"Den genannten Kaminbereich nur vollständig erkaltet und sicher reinigen.";not=["Heiße Asche oder Glut anfassen","Feuerraum bei brennendem Feuer reinigen"];care=["Herstellerangaben beachten; fachgerechte Kontrolle/Wartung nach Vorgabe."]}else if(/lichtschalter|steckdose/.test(t)){what=x.description||"Nur die zugängliche Außenfläche vorsichtig abwischen.";not=["Schalter/Steckdose öffnen","Flüssigkeit in Öffnungen bringen"]}else if(/sauna/.test(t)){what=x.description||"Saunaraum im genannten Umfang reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Saunaofen zerlegen"];care=["Holz und Saunaofen ausschließlich nach Herstellerangaben behandeln."]}else if(/toilette|wc-bürste/.test(t)){what=x.description||"Das genannte WC-Element gründlich hygienisch reinigen.";care=["Handschuhe tragen. Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]}return {what,belongs,not,care}}
-function openDetail(x){const d=definition(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · "+(isDailyTask(x)?"Fälligkeit: täglich":"nächster Termin: "+nextDueLabel(x));document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
+function openDetail(x){const d=definition(x),hist=completionHistoryFor(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · "+(isDailyTask(x)?"Fälligkeit: täglich":"nächster Termin: "+nextDueLabel(x));document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Zuletzt erledigt</b><div>${hist.length?hist.map((v,i)=>`<div style="margin-top:6px"><b>${i===0?"Letztes Mal":"Davor"}:</b> ${esc(formatDateKey(v))}</div>`).join(""):"Noch keine Erledigung gespeichert."}</div><div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
 function swipeRow(el,x){
   let sx=0,sy=0,dx=0,drag=false,moved=false;
   const c=el.querySelector(".taskContent"),bg=el.querySelector(".swipeBg");
