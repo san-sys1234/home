@@ -1,0 +1,271 @@
+  const k=dayKey();
+  if(!state.__dailyLedgerRepairV168){
+    if(state.dailyDone && state.dailyDone[k]) delete state.dailyDone[k];
+    state.__dailyLedgerRepairV168=true;
+    try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+  }
+})();
+let selectedTab="today";
+let catalogSearchTerm="";
+let today=new Date();today.setHours(12,0,0,0);
+let CATALOG=[];
+let calendarCache={year:null,days:new Map()};
+let plannerCache={key:null,days:new Map(),next:new Map()};
+function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
+// UI-only saves should not throw away the expensive planner cache. The planner
+// itself is keyed by the state that actually affects scheduling, so it will
+// automatically rebuild when a scheduling input changes.
+function invalidatePlans(){calendarCache={year:null,days:new Map()};invalidatePlanner()}
+function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
+function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
+function doneKey(x){return "done|"+taskId(x)}
+function lastKey(x){return "last|"+taskId(x)}
+function isDone(x,ref=today){
+ // Array.filter passes index/array as extra arguments; only a real Date may
+ // override the reference day. This keeps Today rendering stable.
+ if(!(ref instanceof Date))ref=today;
+ // Daily routines have their own occurrence ledger. A routine is completed
+ // ONLY when today's exact daily occurrence was explicitly checked off.
+ // Legacy global done/lastDone flags are deliberately ignored here.
+ if(isDailyTask(x)){
+   const k=dayKey(ref),id=taskId(x);
+   return !!(state.dailyDone?.[k]?.[id]);
+ }
+ const l=lastDone(x);
+ if(l)return l===dayKey(ref);
+ return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
+}
+function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
+function canonicalTaskFor(x){
+ const sourceKey=x?.sourceKey||x?.canonical;
+ if(!sourceKey)return null;
+ return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
+}
+function recordCompletion(x,dateKey){
+ const id=taskId(x); if(!id)return;
+ state.completionHistory=state.completionHistory&&typeof state.completionHistory==='object'?state.completionHistory:{};
+ const arr=Array.isArray(state.completionHistory[id])?state.completionHistory[id].slice():[];
+ if(!arr.includes(dateKey)) arr.push(dateKey);
+ arr.sort((a,b)=>String(b).localeCompare(String(a)));
+ state.completionHistory[id]=arr.slice(0,20);
+}
+function completionHistoryFor(x){
+ const id=taskId(x), out=[];
+ const add=v=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(v))&&!out.includes(String(v)))out.push(String(v))};
+ const saved=state.completionHistory?.[id];
+ if(Array.isArray(saved))saved.forEach(add);
+ // Backfill the current known completion for older data.
+ add(lastDone(x));
+ // Daily routines have date-scoped completion records.
+ if(isDailyTask(x)) for(const [d,items] of Object.entries(state.dailyDone||{})) if(items&&items[id])add(d);
+ out.sort((a,b)=>b.localeCompare(a));
+ return out.slice(0,2);
+}
+function markDone(x){
+ const k=dayKey();
+ // Daily routines are independent calendar-day occurrences. A routine is
+ // completed only for the exact day on which it was checked off.
+ if(isDailyTask(x)){
+   state.dailyDone=state.dailyDone&&typeof state.dailyDone==='object'?state.dailyDone:{};
+   state.dailyDone[k]=state.dailyDone[k]||{};
+   state.dailyDone[k][taskId(x)]=true;
+   recordCompletion(x,k);
+   return;
+ }
+ const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const target=base||x;
+ state.done[doneKey(target)]=true;
+ state.lastDone[lastKey(target)]=k;
+ recordCompletion(target,k);
+ if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);}
+ delete state.postponed[taskId(target)];
+ if(target!==x)delete state.postponed[taskId(x)];
+}
+
+function unmarkDone(x){
+ const k=dayKey(),id=taskId(x);
+ if(isDailyTask(x)){
+   if(state.dailyDone?.[k])delete state.dailyDone[k][id];
+   if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
+   return;
+ }
+ delete state.done[doneKey(x)];
+ if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
+}
+
+function postponedEntry(x){
+ const exact=state.postponed?.[taskId(x)];
+ if(exact)return exact;
+ const key=String(x.key||"");
+ const sourceKey=String(x.sourceKey||"");
+ for(const p of Object.values(state.postponed||{})){
+   if(!p||!p.postponedUntil)continue;
+   if(key && String(p.key||"")===key)return p;
+   if(sourceKey && String(p.sourceKey||"")===sourceKey)return p;
+   if(String(p.text||"")===String(x.text||"") && String(p.room||"")===String(x.room||"") && (!x.area || !p.area || String(p.area)===String(x.area)))return p;
+ }
+ return null;
+}
+function isPostponed(x){const p=postponedEntry(x);return !!(p&&p.postponedUntil&&p.postponedUntil>dayKey())}
+function postponedTodayEntries(){
+ const k=dayKey();
+ const out=[];
+ const seen=new Set();
+ for(const [id,p] of Object.entries(state.postponed||{})){
+   if(!p||p.actionDate!==k||!p.postponedUntil||p.postponedUntil<=k)continue;
+   const tid=taskId(p)||id;
+   if(seen.has(tid))continue;
+   seen.add(tid);
+   out.push({...p,key:p.key||tid,source:p.source||"postponed",_postponedId:id});
+ }
+ return out.sort((a,b)=>String(a.postponedUntil).localeCompare(String(b.postponedUntil))||String(a.text||"").localeCompare(String(b.text||""),"de"));
+}
+function postponeTask(x){
+ const day=dayKey();
+ const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
+ state.todayPlanLock=state.todayPlanLock||{};
+ state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
+ // "Später" verschiebt ausschließlich die aktuelle Planung. Die Fälligkeit
+ // bleibt unverändert und wird erst nach echtem "Erledigt" neu berechnet.
+ const due=nextDue(x,today);
+ // "Später" moves the CURRENT planned occurrence, not the recurrence/fällig date.
+ // Read the exact date currently shown by the planner before changing state.
+ const currentPlan=plannerCache.key===plannerKey()?plannerCache.next.get(taskId(x)):buildIntelligentPlan().next.get(taskId(x));
+ const currentBase=currentPlan instanceof Date && currentPlan>=today?currentPlan:due;
+ // Move at least one day into the future, but never more than 30 days away from
+ // the actual due date. This user choice becomes authoritative until completion.
+ let planned=addDays(currentBase,1);
+ for(let i=0;i<=30;i++){
+   const candidate=addDays(currentBase,1+i);
+   if(candidate>=today && Math.abs(Math.round((candidate-due)/86400000))<=30 &&
+      (candidate.getDay()!==0 || state.sundayOptional[dayKey(candidate)])){planned=candidate;break;}
+ }
+ const until=dayKey(planned);const id=taskId(x);
+ delete state.done[doneKey(x)];
+ state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day,planningOnly:true};
+ save();render();toast(`Für später geplant · ${formatDateKey(until)} ❤️`)
+}
+function restorePostponed(id){delete state.postponed[id];save();render()}
+function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
+function syncCompletedDay(d=today){
+ const k=dayKey(d), tasks=plannedTodayForDate(d);
+ if(tasks.length && tasks.every(isDone)) state.completedDays[k]=true; else delete state.completedDays[k];
+}
+function plannedTodayForDate(d){
+ const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
+}
+function celebrateCompletedDay(){
+  const k=dayKey(),tasks=plannedToday(),count=tasks.length;
+  if(!count || !tasks.every(isDone) || state.dayCelebrations?.[k]) return;
+  state.dayCelebrations=state.dayCelebrations&&typeof state.dayCelebrations==="object"?state.dayCelebrations:{};
+  state.dayCelebrations[k]=true;
+  const rewards=[
+    ["🛋️","Jetzt ist wirklich Feierabend.","Mach es dir gemütlich — dein Zuhause ist für heute versorgt."],
+    ["☕","Diese Pause hast du dir verdient.","Jetzt darfst du ganz ohne schlechtes Gewissen genießen."],
+    ["🌿","Heute darfst du einfach zufrieden sein.","Du hast deinem Zuhause etwas Gutes getan."],
+    ["🍰","Kleine Belohnung, großer Unterschied.","Jetzt ist Zeit für etwas Schönes nur für dich."],
+    ["🕯️","Zuhause geschafft.","Licht an, Füße hoch — für heute ist genug getan."],
+    ["👑","Haushaltsheldin des Tages.","Dein Reich ist für heute in Ordnung. Der Rest darf bis morgen warten."],
+    ["🎬","Haushalt aus. Entspannung an.","Heute hast du dir einen richtig guten Feierabend verdient."],
+    ["💐","Ein schöner Abschluss für heute.","Du hast wieder ein kleines Stück Zuhause geschaffen."]
+  ];
+  const dt=new Date(k+"T12:00:00"),r=rewards[(dt.getDate()+dt.getMonth())%rewards.length];
+  const overlay=document.createElement("div");
+  overlay.className="rewardOverlay";
+  overlay.innerHTML=`<div class="rewardSparkles" aria-hidden="true">✦　✧　✦　✧　✦</div><div class="rewardCard"><div class="rewardIcon">${r[0]}</div><div class="rewardEyebrow">✨ Tagesabschluss</div><h2>Heute ist geschafft!</h2><div class="rewardCount">${count} ${count===1?"Aufgabe":"Aufgaben"} erledigt</div><p><b>${r[1]}</b><br>${r[2]}</p><button class="btn primary" id="rewardClose">🌙 Feierabend genießen</button></div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add("open"));
+  const close=()=>{overlay.classList.remove("open");setTimeout(()=>overlay.remove(),220)};
+  overlay.querySelector("#rewardClose").onclick=close;
+  overlay.onclick=e=>{if(e.target===overlay)close()};
+  save();
+}
+
+function toggleTask(x){
+  const wasComplete=plannedToday().length>0 && plannedToday().every(isDone);
+  // Daily routines are independent calendar-day occurrences.
+  if(isDailyTask(x)){
+    const k=dayKey();
+    state.dailyDone=state.dailyDone&&typeof state.dailyDone==="object"?state.dailyDone:{};
+    state.dailyDone[k]=state.dailyDone[k]&&typeof state.dailyDone[k]==="object"?state.dailyDone[k]:{};
+    if(state.dailyDone[k][taskId(x)]) delete state.dailyDone[k][taskId(x)];
+    else state.dailyDone[k][taskId(x)]=true;
+  }else{
+    const base=x.source==="extra"?canonicalTaskFor(x):null;
+    const target=base||x;
+    if(isDone(x)){
+      unmarkDone(target);delete state.lastDone[lastKey(target)];
+      if(target!==x){unmarkDone(x);delete state.lastDone[lastKey(x)];}
+    }else markDone(x);
+  }
+  syncCompletedDay(today);
+  const nowComplete=plannedToday().length>0 && plannedToday().every(isDone);
+  save();render();
+  if(!wasComplete && nowComplete) celebrateCompletedDay();
+}
+
+function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
+function editFor(key){return state.catalogEdits?.[key]||null}
+function catalogInterval(x){
+ if(Number(x.interval)>0)return Number(x.interval);
+ const t=(x.text||"").toLowerCase();
+ if(/toilette|\bwc\b|wc-bürste|toilettenrand/.test(t))return 3;
+ if(/waschbecken|armatur|spüle|kochfeld|herd|arbeitsplatte|esstisch|hochstuhl|sichtbare.*bodenflecken/.test(t))return 7;
+ if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden/.test(t))return 7;
+ if(/boden wischen/.test(t))return 10;
+ if(/handtücher/.test(t))return 7;
+ if(/bettwäsche/.test(t))return 14;
+ if(/müll|papierkorb|mülleimer/.test(t))return 7;
+ if(/türklink|lichtschalter|steckdosen/.test(t))return 30;
+ if(/fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;
+ if(/fugen|silikon|dunstabzugfilter|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 60;
+ if(/backofen|türblätter|türrahmen|zargen/.test(t))return 90;
+ if(/kaminholz|polster|teppich|matratze|vorhang|vorhangstange/.test(t))return 180;
+ if(/raffstore|sonnenschutz/.test(t))return 365;
+ if(/fenster/.test(t))return 180;
+ return 60;
+}
+
+function windowEntries(){
+ const map={"KG|Waschküche":"fenster-kg-waschkueche-musik","KG|Musikzimmer":"fenster-kg-waschkueche-musik","KG|Technikraum":"fenster-kg-technik-training","KG|Trainingsraum":"fenster-kg-technik-training","KG|Flur KG":"fenster-kg-flur-stiegenhaus","KG|Stiegenhaus":"fenster-kg-flur-stiegenhaus","EG|Garderobe":"fenster-eg-garderobe-buero","EG|Büro":"fenster-eg-garderobe-buero","EG|Wohnzimmer":"fenster-eg-wohnen-essen","EG|Essbereich":"fenster-eg-wohnen-essen","EG|Küche":"fenster-eg-kueche-speis-abstell","EG|Speis":"fenster-eg-kueche-speis-abstell","EG|Abstellraum":"fenster-eg-kueche-speis-abstell","EG|Gäste-WC":"fenster-eg-kueche-speis-abstell","OG|Kinderzimmer 1":"fenster-og-kinder","OG|Kinderzimmer 2":"fenster-og-kinder","OG|Kinderbad":"fenster-og-baeder-wc-sauna","OG|Eltern-WC":"fenster-og-baeder-wc-sauna","OG|Saunaraum":"fenster-og-baeder-wc-sauna","OG|Schlafzimmer":"fenster-og-schlaf-ankleide","OG|Ankleide":"fenster-og-schlaf-ankleide","OG|Bad":"fenster-og-bad"};
+ const out=[];
+ for(const [area,room,count] of WINDOW_INVENTORY)for(let i=1;i<=count;i++){
+   const large=/Stiegenhaus|Trainingsraum|Wohnzimmer|Schlafzimmer|Bad/.test(room);
+   const wk=`${area}|${room}|${i}`;
+   const baseLabel=`Fenster ${area} · ${room}${count>1?" "+i:""}${large?" · groß":""}`;
+   const sides=[
+     {side:"innen",key:`window-in|${area}|${room}|${i}`,editKey:`window-in|${area}|${room}|${i}`,text:`🪟 ${baseLabel} · innen`,description:"Nur die Innenseite dieses Fensters gründlich reinigen – inklusive Glas, Rahmen und Falz dieses Fensters sowie der zugehörigen Fensterbank. Keine anderen Fenster zusätzlich."},
+     {side:"außen",key:`window-out|${area}|${room}|${i}`,editKey:`window-out|${area}|${room}|${i}`,text:`🪟 ${baseLabel} · außen`,description:"Nur die Außenseite dieses Fensters gründlich reinigen – inklusive Außenglas, zugänglichem Rahmen und Falz dieses Fensters. Außen-/Höhenarbeiten nur durchführen, wenn sie sicher möglich sind; keine anderen Fenster zusätzlich."}
+   ];
+   for(const side of sides){
+     const oldKey=`window|${area}|${room}|${i}`;
+     const we=editFor(side.editKey)||editFor(oldKey)||{};
+     if(!catalogDeleted(side.key) && !catalogDeleted(oldKey)) out.push({
+       key:side.key,text:we.text??side.text,room:we.room??room,area:we.area??area,place:we.place??`Fenster ${i} · ${side.side}`,
+       description:we.description??side.description,window:true,windowSide:side.side,windowKey:wk,windowGroup:map[area+"|"+room],source:"window",editable:true,
+       interval:Number(we.interval??180)||180,start:we.start||""
+     });
+   }
+   const raffKey=`raffstore|${area}|${room}|${i}`;const re=editFor(raffKey)||{};
+   if(!catalogDeleted(raffKey))out.push({key:raffKey,text:re.text??`☀️ Raffstore ${area} · ${room}${count>1?" "+i:""}`,room:re.room??room,area:re.area??area,place:re.place??`Raffstore ${i}`,description:re.description??"Nur den zum jeweiligen Fenster gehörenden Raffstore/Sonnenschutz reinigen und nach Herstellerangabe pflegen. Lamellen vorsichtig behandeln; bei empfindlichen Oberflächen keine ungeeigneten Reiniger verwenden.",raffstore:true,raffstoreWindowKey:wk,source:"raffstore",editable:true,interval:Number(re.interval??365)||365,start:re.start||""});
+ }
+ return out
+}
+const WINDOW_TASKS=windowEntries();
+const WINDOW_GROUP_DATES={};for(const s of SEASONAL_SPECIALS){if(!WINDOW_GROUP_DATES[s.key])WINDOW_GROUP_DATES[s.key]=[];WINDOW_GROUP_DATES[s.key].push(...s.dates)}for(const k in WINDOW_GROUP_DATES)WINDOW_GROUP_DATES[k]=[...new Set(WINDOW_GROUP_DATES[k])].sort();
+function windowDate(x,ref=today){
+ const rounds=SEASONAL_SPECIALS.filter(s=>s.key===x.windowGroup);
+ if(!rounds.length)return null;
+ const idx=Math.max(0,Number((x.windowKey||"|1").split("|").pop())-1);
+ const candidates=[];
+ for(const round of rounds){const dates=(round.dates||[]).slice().sort();if(dates.length)candidates.push(fromKey(dates[idx%dates.length]));}
+ candidates.sort((a,b)=>a-b);
+ for(const d of candidates)if(d>=ref)return d;
+ let d=candidates[candidates.length-1];while(d<ref)d=addDays(d,180);return d;
+}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const roomText=new Set(out.map(x=>`${x.room}|${x.text}`));for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${r.text}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const w of WINDOW_TASKS)out.push(w);return out}
+function refreshCatalog(){
+ CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
+ invalidatePlans();
+ invalidatePlanner();
+}
