@@ -1048,11 +1048,140 @@ function plannedToday(){
  })
 }
 
-function definition(x){const t=x.text.toLowerCase();let what=x.description||x.text,belongs=[x.place?"Genauer Ort: "+x.place:"genau der genannte Bereich bzw. Gegenstand"],not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"],care=["Material- und Herstellerangaben haben Vorrang."];if(x.window){
-   what=x.description||(x.windowSide==="innen"?"Nur die Innenseite des genannten Fensters gründlich reinigen – inklusive Glas, Rahmen, Falz und Fensterbank.":"Nur die Außenseite des genannten Fensters gründlich reinigen – inklusive zugänglichem Glas, Rahmen und Falz; Außen-/Höhenarbeiten nur, wenn sicher möglich.");
-   belongs=x.windowSide==="innen"?[x.place||"genanntes Fenster","Fensterglas innen","Rahmen und Falz","Fensterbank"]:[x.place||"genanntes Fenster","Fensterglas außen","zugänglicher Rahmen und Falz"];
-   not=["Keine anderen Fenster des Hauses zusätzlich","Keine unsicheren Außen-/Höhenarbeiten"]
-}else if(/kamin|asche|ruß|feuerraum|rost/.test(t)){what=x.description||"Den genannten Kaminbereich nur vollständig erkaltet und sicher reinigen.";not=["Heiße Asche oder Glut anfassen","Feuerraum bei brennendem Feuer reinigen"];care=["Herstellerangaben beachten; fachgerechte Kontrolle/Wartung nach Vorgabe."]}else if(/lichtschalter|steckdose/.test(t)){what=x.description||"Nur die zugängliche Außenfläche vorsichtig abwischen.";not=["Schalter/Steckdose öffnen","Flüssigkeit in Öffnungen bringen"]}else if(/sauna/.test(t)){what=x.description||"Saunaraum im genannten Umfang reinigen und gut lüften.";belongs=["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"];not=["Saunaofen zerlegen"];care=["Holz und Saunaofen ausschließlich nach Herstellerangaben behandeln."]}else if(/toilette|wc-bürste/.test(t)){what=x.description||"Das genannte WC-Element gründlich hygienisch reinigen.";care=["Handschuhe tragen. Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]}return {what,belongs,not,care}}
+function definition(x){
+ const t=String(x.text||"").toLowerCase().replace(/^\S+\s+/,"");
+ const genericWhat=(x.source==="custom"&&x.description)?x.description:x.text;
+ let what=genericWhat;
+ let belongs=[x.place?"Genauer Ort: "+x.place:"genau der genannte Bereich bzw. Gegenstand"];
+ let not=["Aufgaben anderer Räume nicht automatisch mitmachen","keine unnötige Perfektion"];
+ let care=["Material- und Herstellerangaben haben Vorrang."];
+ const set=(w,b,n,c)=>{what=w; if(b)belongs=b; if(n)not=n; if(c)care=c};
+ if(x.window){
+   set(x.windowSide==="innen"?"Nur die Innenseite des genannten Fensters gründlich reinigen – Glas, Rahmen, Falz und die zugehörige Fensterbank.":"Nur die Außenseite des genannten Fensters gründlich reinigen – zugängliches Glas, Rahmen und Falz. Außen-/Höhenarbeiten nur, wenn sicher möglich.",
+     x.windowSide==="innen"?[x.place||"genanntes Fenster","Fensterglas innen","Rahmen und Falz","zugehörige Fensterbank"]:[x.place||"genanntes Fenster","Fensterglas außen","zugänglicher Rahmen und Falz"],
+     ["Keine anderen Fenster des Hauses zusätzlich","Keine unsicheren Außen-/Höhenarbeiten"],
+     ["Geeigneten Glas-/Flächenreiniger verwenden und Herstellerangaben beachten."]);
+ }else if(/taschen ordnen/.test(t)){
+   set("Alle Taschen aus der Garderobe kurz durchsehen, leeren und wieder ordentlich an ihrem vorgesehenen Platz verstauen.",
+     ["Handtaschen und Alltagstaschen","Rucksäcke bzw. häufig genutzte Taschen","Inhalt auf offensichtliche Fremd- oder Abfallgegenstände prüfen","vorgesehene Ablage bzw. Garderobenplatz"],
+     ["Keine Schränke oder Schubladen komplett ausräumen","Keine Taschen anderer Räume ohne Anlass umsortieren"],
+     ["Wichtige persönliche Dinge nicht versehentlich wegwerfen; empfindliche Taschenmaterialien nur passend reinigen."]);
+ }else if(/jacken nach saison ordnen/.test(t)){
+   set("Jacken nach aktueller Saison und Nutzung sortieren und so aufhängen, dass die täglich benötigten Stücke gut erreichbar sind.",
+     ["aktuell benötigte Jacken","saisonale Jacken","Garderobenhaken bzw. vorgesehener Aufbewahrungsplatz"],
+     ["Keine Kleidungsstücke entsorgen oder aussortieren, nur weil sie gerade nicht benötigt werden"],
+     ["Wetter- und Saisonwechsel berücksichtigen."]);
+ }else if(/schuhe paarweise ordnen/.test(t)){
+   set("Die Schuhe in der Garderobe paarweise zusammenstellen und ordentlich im vorgesehenen Bereich platzieren.",["Schuhpaare","Schuhschrank bzw. Schuhablage"],["Keine Schuhe aus anderen Räumen zusammentragen, sofern sie dort bewusst aufbewahrt werden"],["Nasse oder stark verschmutzte Schuhe nicht ungeprüft in geschlossene Fächer stellen."]);
+ }else if(/schuhe außen reinigen|schuhsohlen/.test(t)){
+   set("Die Außenseiten der genannten Schuhe und – soweit sinnvoll – die Sohlen von sichtbarem Schmutz befreien.",["Schuhoberseiten","Sohlen","Schnürsenkel bzw. sichtbare Kanten bei Bedarf"],["Keine materialfremden Reiniger verwenden","Keine intensive Nassreinigung empfindlicher Schuhe"],["Pflegehinweise des jeweiligen Materials beachten; Schuhe vor dem Verstauen vollständig trocknen lassen."]);
+ }else if(/schuhschrank außen/.test(t)){
+   set("Die von außen sichtbaren Flächen und Griffe des Schuhschranks gründlich abwischen.",["Schrankfronten","Griffe","Sockel bzw. sichtbare Kanten"],["Innenraum nicht automatisch mitreinigen"],["Reinigungsmittel passend zur Oberfläche verwenden."]);
+ }else if(/schuhschrank innen/.test(t)){
+   set("Den Innenraum des Schuhschranks abschnittsweise leeren, Krümel und Schmutz entfernen und die Innenflächen auswischen.",["Innenböden","Seitenflächen","sichtbare Ecken und Kanten"],["Keine Schuhe aussortieren, sofern das nicht ausdrücklich geplant ist"],["Flächen vor dem Einräumen vollständig trocknen lassen."]);
+ }else if(/ablageflächen leeren/.test(t)){
+   set("Die Ablagefläche freimachen, Dinge ihrem vorgesehenen Platz zuordnen und die freie Fläche anschließend sauber hinterlassen.",["genannte Ablagefläche","darauf liegende Alltagsgegenstände"],["Keine Gegenstände ohne klaren Platz einfach wegwerfen"],["Wichtige Unterlagen und Schlüssel nicht versehentlich aussortieren."]);
+ }else if(/schlüsselplatz reinigen/.test(t)){
+   set("Den vorgesehenen Platz für Schlüssel leeren, Krümel und Staub entfernen und die Schlüssel wieder übersichtlich ablegen.",["Schlüsselablage","Schlüssel bzw. Schlüsselbund","unmittelbare Ablagefläche"],["Schlüssel nicht an einen anderen dauerhaften Ort umräumen"],["Keine Schlüssel unbeaufsichtigt entsorgen oder aussortieren."]);
+ }else if(/garderobenhaken/.test(t)){
+   set("Die zugänglichen Garderobenhaken und ihre unmittelbare Fläche von Staub und sichtbaren Spuren befreien.",["Garderobenhaken","Hakenleisten bzw. unmittelbare Wandfläche"],["Keine Jacken oder Taschen neu organisieren, sofern das nicht Teil der Aufgabe ist"],["Feuchtigkeit bei empfindlichen Holz-/Metalloberflächen vermeiden."]);
+ }else if(/türklinken|türgriffe|türgriffe reinigen/.test(t)){
+   set("Türklinken und Griffe im genannten Bereich gründlich abwischen, besonders die häufig berührten Flächen.",["Klinke bzw. Griff","Rosette bzw. direkt angrenzende Fläche"],["Türblatt und Zarge nicht automatisch komplett reinigen"],["Reiniger passend zum Material verwenden; keine Flüssigkeit in Beschläge bringen."]);
+ }else if(/spiegel.*reinigen|spiegel gründlich/.test(t)){
+   set("Die Spiegeloberfläche streifenfrei reinigen und anschließend auf sichtbare Schlieren kontrollieren.",["gesamte Spiegelfläche","Randbereich und sichtbarer Rahmen"],["Keine anderen Glasflächen automatisch mitreinigen"],["Reiniger nicht direkt in empfindliche Rahmen/Fugen laufen lassen."]);
+ }else if(/kamin|asche|ruß|feuerraum|rost/.test(t)){
+   set("Den genannten Kaminbereich nur vollständig erkaltet und sicher reinigen.",[x.place?"Genauer Kaminbereich: "+x.place:"genannter Kaminbereich"],["Heiße Asche oder Glut anfassen","Feuerraum bei brennendem Feuer reinigen"],["Herstellerangaben beachten; fachgerechte Kontrolle/Wartung nach Vorgabe."]);
+ }else if(/lichtschalter|steckdose/.test(t)){
+   set("Nur die zugängliche Außenfläche vorsichtig und möglichst trocken abwischen.",["Schalter-/Steckdosenabdeckung","direkt zugänglicher Randbereich"],["Schalter oder Steckdose öffnen","Flüssigkeit in Öffnungen bringen"],["Bei elektrischen Komponenten nur äußerlich und mit geeigneten, gut ausgewrungenen Tüchern arbeiten."]);
+ }else if(/sauna/.test(t)){
+   set("Den Saunaraum im genannten Umfang reinigen und anschließend gut lüften.",["Bänke","Boden","zugängliche Glas-/Holzflächen je nach Aufgabe"],["Saunaofen nicht zerlegen","keine technischen Komponenten öffnen"],["Holz und Saunaofen ausschließlich nach Herstellerangaben behandeln."]);
+ }else if(/toilette innen gründlich/.test(t)){
+   set("Die Innenseite der Toilette gründlich reinigen und Ablagerungen im Becken sowie unter dem Rand entfernen.",["WC-Becken innen","Bereich unter dem Toilettenrand","sichtbare Ablagerungen"],["Außenseite, Boden und umliegende Flächen nicht automatisch mitreinigen"],["Handschuhe tragen; Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]);
+ }else if(/toilette innen/.test(t)){
+   set("Das WC-Becken innen hygienisch reinigen, einschließlich des zugänglichen Bereichs unter dem Rand.",["WC-Becken innen","Toilettenrand innen"],["WC-Außenseite nicht automatisch mitreinigen"],["Geeigneten WC-Reiniger verwenden und Reiniger niemals miteinander mischen."]);
+ }else if(/toilette außen/.test(t)){
+   set("Die Außenseite der Toilette, Spülbereich und gut erreichbare Kontaktflächen sauber abwischen.",["WC-Sitz außen","WC-Keramik außen","Spültaste bzw. Spülbereich"],["WC-Becken innen nicht automatisch mitreinigen"],["Keine Flüssigkeit in Spül-/Elektronikbereiche gelangen lassen."]);
+ }else if(/toilette reinigen|wc reinigen|wc-bürste/.test(t)){
+   set("Das genannte WC-Element gründlich hygienisch reinigen und sichtbare Verschmutzungen entfernen.",["genanntes WC-Element","unmittelbar zugehörige zugängliche Flächen"],["Andere Sanitärobjekte nicht automatisch mitreinigen"],["Handschuhe tragen; Chlor-/Bleichmittel niemals mit sauren WC-Reinigern oder Entkalkern mischen."]);
+ }else if(/fugen kontrollieren/.test(t)){
+   set("Die Fugen im genannten Nassbereich auf sichtbare Verfärbungen, Risse oder auffällige Ablagerungen kontrollieren.",["Fliesenfugen im genannten Bereich","Ecken und Übergänge"],["Fugen nicht ohne konkreten Bedarf abschleifen oder neu verfugen"],["Auffällige Schäden oder Schimmelverdacht fachgerecht beurteilen lassen."]);
+ }else if(/silikon kontrollieren/.test(t)){
+   set("Die Silikonfugen im genannten Nassbereich auf Risse, Ablösungen, Verfärbungen und Undichtigkeiten kontrollieren.",["Silikonfugen","Ecken und Anschlüsse"],["Silikon nicht ohne konkreten Anlass entfernen"],["Bei sichtbaren Schäden rechtzeitig fachgerechte Erneuerung prüfen."]);
+ }else if(/waschmaschine.*außen|waschmaschine außen/.test(t)){
+   set("Die Außenflächen der Waschmaschine und gut erreichbare Bedienelemente abwischen.",["Gehäuse","Bedienfeld","Griff"],["Keine elektrischen/technischen Teile öffnen","Innenreinigung nicht automatisch mitmachen"],["Nur nebelfeucht reinigen und Wasser von Öffnungen fernhalten."]);
+ }else if(/waschmittelschublade|waschmittel.*schublade/.test(t)){
+   set("Die Waschmittelschublade herausnehmen, Waschmittelreste und Ablagerungen entfernen, ausspülen und trocken wieder einsetzen.",["Waschmittelschublade","Fächer und Einlaufbereich"],["Keine technischen Komponenten öffnen"],["Vor dem Einsetzen gut trocknen lassen."]);
+ }else if(/türdichtung.*waschmaschine|waschmaschine.*türdichtung|dichtung.*waschmaschine/.test(t)){
+   set("Die Türdichtung der Waschmaschine rundum auswischen und auf Haare, Fremdkörper und sichtbare Ablagerungen kontrollieren.",["Gummidichtung rund um die Tür","Falz der Dichtung"],["Dichtung nicht ausbauen"],["Nach der Reinigung trocken nachwischen und Dichtung nicht mit scharfen Gegenständen bearbeiten."]);
+ }else if(/trockner/.test(t)){
+   set("Den Trockner im genannten Umfang reinigen und sichtbare Flusen bzw. Rückstände entfernen.",["Gehäuse","Bedienbereich","zugängliche Flusenbereiche je nach Aufgabe"],["Keine technischen Komponenten öffnen"],["Gerät vor der Reinigung ausschalten; Herstellerangaben beachten."]);
+ }else if(/flusenfilter|flusen/.test(t)){
+   set("Den Flusenfilter vollständig von Flusen befreien und den Filterbereich auf sichtbare Rückstände kontrollieren.",["Flusenfilter","zugänglicher Filterbereich"],["Keine technischen Komponenten öffnen"],["Filter nur entsprechend der Herstellerangabe waschen; vor dem Einsetzen vollständig trocknen lassen."]);
+ }else if(/betttücher|bettwäsche/.test(t)){
+   set("Die Bettwäsche des genannten Bettes vollständig abziehen, frische Bettwäsche aufziehen und die gebrauchte Wäsche zur Wäsche geben.",["Bettlaken","Kissenbezüge","Deckenbezug"],["Matratze oder Bettgestell nicht automatisch tiefenreinigen"],["Frische Wäsche passend zum Bett vorbereiten und gebrauchte Wäsche trocken zur Wäsche geben."]);
+ }else if(/matratze/.test(t)){
+   set("Die Matratze des genannten Bettes absaugen bzw. nach Pflegehinweis reinigen und anschließend gut auslüften lassen.",["Matratzenoberfläche","zugängliche Kanten"],["Matratze nicht durchnässen","Bezug nicht entfernen, wenn dies nicht laut Pflegehinweis vorgesehen ist"],["Pflegeetikett beachten und Matratze vollständig trocknen lassen."]);
+ }else if(/unter.*bett|bett.*darunter/.test(t)){
+   set("Den zugänglichen Bereich unter dem genannten Bett von Staub und sichtbaren Rückständen befreien.",["Bodenfläche unter dem Bett","zugängliche Ecken und Kanten"],["Schwere Möbel nicht allein verschieben"],["Nur so weit vorziehen/verschieben, wie es sicher möglich ist."]);
+ }else if(/bett.*tisch|nachtkästchen|nachttisch/.test(t)){
+   set("Die Oberfläche des genannten Nachttischs/Nachtkästchens freimachen, abwischen und die Dinge wieder ordentlich zurückstellen.",["Oberfläche","Schubladen-/Ablagebereich nur wenn ausdrücklich genannt"],["Keine persönlichen Dinge ohne klaren Grund aussortieren"],["Elektrische Geräte nur äußerlich und möglichst trocken reinigen."]);
+ }else if(/küchenarbeitsplatte|arbeitsplatte/.test(t)){
+   set("Die Küchenarbeitsfläche vollständig freimachen, reinigen und trocken nachwischen.",["gesamte genannte Arbeitsfläche","Kanten und Spritzbereiche"],["Schränke und Geräte nicht automatisch mitreinigen"],["Reiniger passend zur Arbeitsplatte verwenden."]);
+ }else if(/kochfeld|herd/.test(t)){
+   set("Das Kochfeld bzw. die zugänglichen Außenflächen des Herds von Fett- und Kochspuren befreien.",["Kochfeld","Bedienelemente","zugängliche Außenflächen"],["Gerät nicht öffnen oder zerlegen","keine Reinigung am heißen Kochfeld"],["Vor der Reinigung vollständig abkühlen lassen und Materialhinweise beachten."]);
+ }else if(/spüle|waschbecken|waschbecken/.test(t)){
+   set("Das genannte Becken gründlich reinigen, Ablagerungen entfernen und die Oberfläche trocken nachwischen.",["Becken","Abflussbereich","Rand und Armaturenanschluss"],["Abfluss nicht zerlegen, sofern nicht ausdrücklich genannt"],["Bei empfindlichen Oberflächen geeigneten Reiniger verwenden."]);
+ }else if(/armatur|wasserhahn|hahn/.test(t)){
+   set("Die genannte Armatur von Wasser- und Kalkspuren befreien und anschließend trocken nachpolieren.",["Armatur","Auslauf","Sockelbereich"],["Armatur nicht zerlegen"],["Keine scheuernden Mittel auf empfindlichen Oberflächen verwenden."]);
+ }else if(/böden|boden saugen|boden wischen|boden reinigen/.test(t)){
+   set("Den Boden im genannten Bereich gründlich von Staub und Schmutz befreien; je nach Aufgabe saugen oder feucht wischen.",["gesamte zugängliche Bodenfläche","Ecken und Randbereiche"],["Andere Räume nicht automatisch mitreinigen","Boden nicht übermäßig nass behandeln"],["Reinigungsmethode an den Bodenbelag anpassen."]);
+ }else if(/sockelleisten/.test(t)){
+   set("Die zugänglichen Sockelleisten im genannten Bereich von Staub und sichtbaren Spritz-/Schmutzspuren befreien.",["Sockelleisten","Ecken und Übergänge"],["Wände nicht automatisch mitreinigen"],["Nur nebelfeucht reinigen und empfindliche Oberflächen beachten."]);
+ }else if(/schubladen/.test(t)){
+   set("Die genannte Schublade ausräumen, Krümel und Staub entfernen, auswischen und anschließend ordentlich wieder einräumen.",["Schubladenboden","Innenwände","zugängliche Kanten"],["Keine Gegenstände ohne klaren Grund aussortieren"],["Vor dem Einräumen vollständig trocknen lassen."]);
+ }else if(/regalböden|regal/.test(t)){
+   set("Die genannten Regalböden bzw. das Regal abschnittsweise leeren, abstauben/abwischen und die Gegenstände ordentlich zurückstellen.",["genannte Regalböden","sichtbare Kanten und Ecken"],["Nicht das gesamte Zimmer umorganisieren"],["Bücher und empfindliche Gegenstände vorsichtig behandeln."]);
+ }else if(/oberflächen|ablageflächen|sideboard|möbelflächen/.test(t)){
+   set("Die genannten Möbel- und Ablageflächen freimachen, von Staub und sichtbaren Spuren befreien und die Dinge anschließend ordentlich zurückstellen.",["genannte Oberfläche","sichtbare Kanten und Ecken"],["Schubladen und Schränke nicht automatisch ausräumen"],["Materialgerechten Reiniger verwenden; empfindliche Oberflächen nur nebelfeucht behandeln."]);
+ }else if(/vorhänge/.test(t)){
+   set("Die genannten Vorhänge nach Pflegeetikett von Staub befreien bzw. reinigen und anschließend wieder ordentlich aufhängen.",["genannte Vorhänge","sichtbare Falten und Kanten"],["Keine Vorhänge anderer Räume automatisch mitreinigen"],["Pflegeetikett beachten; empfindliche Stoffe nicht ungeeignet nass behandeln."]);
+ }else if(/teppich/.test(t)){
+   set("Den genannten Teppich gründlich absaugen und dabei besonders Ränder, Kanten und sichtbare Schmutzstellen beachten.",["gesamte Teppichfläche","Ränder und Kanten","sichtbare Schmutzstellen"],["Teppich nicht ohne passenden Pflegehinweis nass reinigen"],["Saugleistung und Reinigungsmethode an Material und Flor anpassen."]);
+ }else if(/polster|sofa/.test(t)){
+   set("Das genannte Polster bzw. Sofa gründlich absaugen und sichtbare Krümel sowie Staub aus den zugänglichen Bereichen entfernen.",["Sitzflächen","Rücken-/Seitenteile","zugängliche Ritzen je nach Aufgabe"],["Polster nicht ohne Pflegehinweis nass reinigen"],["Pflegeetikett beachten; empfindliche Stoffe vorsichtig behandeln."]);
+ }else if(/fensterbank/.test(t)){
+   set("Die genannte Fensterbank freimachen, von Staub und sichtbaren Spuren befreien und anschließend trocken bzw. passend zum Material nachwischen.",["gesamte Fensterbank","Ecken und Kanten"],["Fenster selbst nicht automatisch reinigen"],["Pflanzen und Deko vorsichtig umstellen und Materialhinweise beachten."]);
+ }else if(/türblatt|türrahmen|zarge/.test(t)){
+   set("Das genannte Türblatt bzw. den Türrahmen/Zargenbereich von Staub und sichtbaren Kontaktspuren befreien.",["Türblatt","Türrahmen/Zarge","sichtbare Kanten"],["Türbeschläge nicht öffnen"],["Holz und lackierte Oberflächen nur materialgerecht und nebelfeucht reinigen."]);
+ }else if(/mülleimer/.test(t)){
+   set("Den genannten Mülleimer leeren, innen und außen auswischen und vor dem Einsetzen eines neuen Sacks vollständig trocknen lassen.",["Innenraum","Deckel","Außenflächen und Griff"],["Keine Abfälle ohne Blick auf Inhalt entsorgen"],["Handschuhe verwenden und bei Bedarf hygienisch nachreinigen."]);
+ }else if(/reinigungsmittelbestand|reinigungsmittel/.test(t)){
+   set("Den Vorrat an Reinigungsmitteln kurz prüfen und feststellen, welche wichtigen Mittel zur Neige gehen.",["Reinigungsmittelvorrat","angebrochene und volle Flaschen"],["Keine Produkte unnötig umfüllen oder vermischen"],["Produkte sicher und entsprechend Kennzeichnung lagern."]);
+ }else if(/vorräte nach kategorien/.test(t)){
+   set("Die genannten Vorräte grob nach Kategorien ordnen, sodass gleiche Produkte zusammenstehen und schnell auffindbar sind.",["Vorratsbereich","gleiche bzw. ähnliche Produktgruppen"],["Keine Lebensmittel ohne konkreten Grund aussortieren"],["Mindesthaltbarkeitsdaten bei Gelegenheit sichtbar halten."]);
+ }else if(/ablauf|mhd|haltbarkeit/.test(t)){
+   set("Die genannten Vorräte auf Mindesthaltbarkeits- bzw. Verbrauchsdaten prüfen und zuerst zu verbrauchende Produkte nach vorne stellen.",["genannter Vorratsbereich","Produkte mit kurzem Datum"],["Produkte nicht allein wegen überschrittenem MHD automatisch wegwerfen"],["Verbrauchsdatum und MHD unterscheiden; verdächtige oder verdorbene Lebensmittel nicht verwenden."]);
+ }else if(/kabel/.test(t)){
+   set("Die sichtbaren Kabel im genannten Bereich entwirren, grob bündeln und so ablegen, dass sie ordentlich und zugänglich bleiben.",["sichtbare Kabel","Steckdosen-/Gerätebereich","Kabelablage"],["Keine elektrischen Verbindungen verändern oder Geräte öffnen"],["Kabel nicht knicken oder unter Spannung verlegen."]);
+ }else if(/notizen|zettel|papier/.test(t)){
+   set("Die genannten Papierstapel bzw. Notizen kurz durchsehen, zusammengehörige Unterlagen bündeln und an ihren vorgesehenen Platz legen.",["genannte Papierablage","lose Notizen und Zettel"],["Keine wichtigen Unterlagen ohne Prüfung entsorgen"],["Vertrauliche Unterlagen nicht offen liegen lassen."]);
+ }else if(/bücher/.test(t)){
+   set("Die genannten Bücher ordentlich nach vorhandener Ordnung zurückstellen und lose herumliegende Exemplare einsortieren.",["Bücherstapel","Bücherregal bzw. vorgesehener Platz"],["Keine Bücher aussortieren, sofern das nicht ausdrücklich geplant ist"],["Schwere Bücher sicher und stabil einordnen."]);
+ }else if(/schreibtisch|desk/.test(t)){
+   set("Den Schreibtisch freimachen, Dinge ihrem vorgesehenen Platz zuordnen und die freie Arbeitsfläche sauber abwischen.",["Arbeitsfläche","direkte Ablagen","sichtbare Krümel und Staub"],["Keine Unterlagen ohne Prüfung entsorgen"],["Elektronik nur äußerlich und möglichst trocken reinigen."]);
+ }else if(/monitor|bildschirm/.test(t)){
+   set("Den Bildschirm vorsichtig von Staub und sichtbaren Fingerabdrücken befreien.",["Displayfläche","Rahmen und Standfuß"],["Display nicht mit aggressiven Reinigern besprühen","Gerät nicht öffnen"],["Herstellerhinweise beachten und Flüssigkeit niemals direkt auf das Display geben."]);
+ }else if(/tastatur|keyboard|maus/.test(t)){
+   set("Tastatur und Maus äußerlich von Staub, Krümeln und sichtbaren Spuren befreien.",["Tasten bzw. Oberfläche","Zwischenräume soweit zugänglich","Mausoberfläche"],["Elektronik nicht öffnen","Keine Flüssigkeit in Öffnungen bringen"],["Geräte vor der Reinigung trennen bzw. ausschalten und nur nebelfeucht arbeiten."]);
+ }else if(/instrument/.test(t)){
+   set("Die genannten Instrumente vorsichtig von Staub und sichtbaren Spuren befreien und ordentlich an ihrem vorgesehenen Platz aufbewahren.",["genanntes Instrument","zugängliche Außenflächen","Instrumentenständer bzw. Ablage"],["Keine Instrumente zerlegen oder technisch warten"],["Pflegehinweise des jeweiligen Instruments beachten."]);
+ }else if(/musikzimmer/.test(t)){
+   set("Die genannten Oberflächen und Ablagen im Musikzimmer von Staub befreien und lose Dinge ordentlich zurückstellen.",["genannte Möbel- und Ablageflächen","sichtbare Geräte-/Notenablagen"],["Instrumente nicht ungefragt umstellen oder reinigen"],["Empfindliche Instrumente und Elektronik nur nach geeigneter Pflegevorgabe behandeln."]);
+ }else if(/staub/.test(t)){
+   set("Die genannten zugänglichen Flächen gründlich von Staub befreien und sichtbare Ablagerungen entfernen.",[x.place?"Genauer Ort: "+x.place:"genannter Bereich","Kanten und Ecken"],["Keine Schränke oder Schubladen automatisch ausräumen"],["Empfindliche Oberflächen materialgerecht reinigen."]);
+ }
+ return {what,belongs,not,care};
+}
 function openDetail(x){const d=definition(x),hist=completionHistoryFor(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · "+(isDailyTask(x)?"Fälligkeit: täglich":"nächster Termin: "+nextDueLabel(x));document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Zuletzt erledigt</b><div>${hist.length?hist.map((v,i)=>`<div style="margin-top:6px"><b>${i===0?"Letztes Mal":"Davor"}:</b> ${esc(formatDateKey(v))}</div>`).join(""):"Noch keine Erledigung gespeichert."}</div><div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
 function swipeRow(el,x){
   let sx=0,sy=0,dx=0,drag=false,moved=false;
