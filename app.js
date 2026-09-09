@@ -569,7 +569,7 @@ function rawDueOn(x,d){
  // A "Später" date is a planning override only. It must NEVER become the
  // task's recurrence/fällig date. The planner below places the occurrence on
  // that explicit planned date; rawDueOn remains purely cadence-based.
- if(x.area==="Alltag")return false;
+ if(isDailyTask(x)||x.area==="Alltag")return false;
  if(x.window)return sameDay(windowDate(x,d),d);
  if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}
  if(x.source==="rotation"){const interval=catalogInterval(x),a=rotationAnchor(x),last=lastDone(x);let anchor=last?addDays(fromKey(last),interval):a;if(d<anchor)return false;return Math.round((d-anchor)/86400000)%interval===0}
@@ -609,7 +609,7 @@ function plannerHorizon(){
  // to guarantee a legal +/-30-day planning window.
  let end=fromKey("2027-12-31");
  for(const x of CATALOG){
-   if(x.area==="Alltag"||isInvalidLegacyTask(x))continue;
+   if(isDailyTask(x)||isInvalidLegacyTask(x))continue;
    const due=nextDue(x,today);
    if(due instanceof Date && !Number.isNaN(due.getTime())){
      const candidate=addDays(due,30);
@@ -768,7 +768,7 @@ function buildIntelligentPlan(){
  // window around its actual due date. This fallback may relax capacity, but
  // it may NEVER relax the 30-day boundary or create an invalid Sunday plan.
  for(const x of CATALOG){
-   if(x.area==="Alltag")continue;
+   if(isDailyTask(x))continue;
    const id=taskId(x);
    if(next.has(id))continue;
    const due=nextDue(x,today), candidates=[];
@@ -823,7 +823,7 @@ function buildIntelligentPlan(){
  // This pass is deliberately independent from all earlier planner heuristics so
  // stale data from older versions cannot leak into the calendar.
  for(const x of CATALOG){
-   if(x.area==="Alltag")continue;
+   if(isDailyTask(x))continue;
    const id=taskId(x),due=nextDue(x,today);
    let pd=next.get(id);
    const valid=pd instanceof Date && pd>=today && Math.abs(Math.round((pd-due)/86400000))<=30;
@@ -910,7 +910,7 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=plannedForDate(d);calendarCache.days.set(k,v);return v}
+function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
