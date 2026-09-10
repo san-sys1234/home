@@ -1595,19 +1595,14 @@ function focusRoomMatches(x,room){
 function roomFocusTasks(room,d=today){
   if(!room)return [];
   const day=dayKey(d);
+  // “Heute einen Raum machen” is deliberately a room view, not a second
+  // planner. It must show EVERY currently open catalog task belonging to the
+  // selected room, regardless of its due/planned date or when it was last
+  // completed. The previous “recent” filter incorrectly hid perfectly valid
+  // catalog tasks such as “Kopfteil abstauben”.
   return CATALOG
     .filter(x=>focusRoomMatches(x,room) && !isDone(x))
     .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
-    .filter(x=>{
-      // Postponed tasks remain open. In addition, an authoritative plan for
-      // this exact room/date must always be visible here, even if a legacy
-      // lastDone/recent marker would otherwise hide it.
-      const p=postponedEntry(x);
-      if(p && String(p.postponedUntil)===day)return true;
-      const pd=plannedDateForTask(x);
-      if(pd && dayKey(pd)===day)return true;
-      return !recent(x,d,7);
-    })
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
 function renderRoomFocus(main, tasks){
