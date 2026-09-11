@@ -445,7 +445,7 @@ function toggleTask(x){
     if(isDone(x)){
       unmarkDone(target);delete state.lastDone[lastKey(target)];
       if(target!==x){unmarkDone(x);delete state.lastDone[lastKey(x)];}
-    }else markDone(x);
+    }else { markDone(x); delete state.plannedOverrides?.[target.key]; }
   }
   syncCompletedDay(today);
   const nowComplete=plannedToday().length>0 && plannedToday().every(isDone);
@@ -604,7 +604,9 @@ function rawDueOn(x,d){
  return diff>=0 && diff%(slots*7)===0;
 }
 function taskWeight(x){const t=(x.text||"").toLowerCase();
- if(x.window||/fenster/.test(t))return 8;
+ if(x.window)return 8;
+ if(x.windowSill)return 1;
+ if(/fensterbank/.test(t))return 1;
  if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 5;
  if(/schornstein|stuck|matratze|teppich|polster|backofen|dusche entkalken|badewanne|duschglas/.test(t))return 5;
  if(/kamin|fugen|silikon|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna|türblätter|türrahmen|zargen|boden gründlich|schrank|regal/.test(t))return 3;
@@ -618,7 +620,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v189|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v202|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -745,8 +747,13 @@ function buildIntelligentPlan(){
      if(sameRoomWeight+weight>roomLimit)continue;
      const targetGroup=groupFor(occ.x);
      const sameTheme=arr.some(y=>taskCategory(y)===targetGroup);
+     const sameRoom=arr.some(y=>y.room===occ.x.room);
      const emptyDay=arr.length===0;
-     if(!sameTheme && !emptyDay && weight<=3)continue;
+     // Prefer coherent work packages: once a day has a room started, add compatible
+     // work from that room before opening another room. Same-category work from
+     // another room is allowed only when it is itself a strong, natural equipment block.
+     if(!sameRoom && !sameTheme && !emptyDay)continue;
+     if(!sameRoom && !emptyDay && weight<=3)continue;
      chosen=k;break;
    }
    if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
@@ -765,7 +772,8 @@ function buildIntelligentPlan(){
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
        const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
        const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
-       const score=(canFit?0:100000)+(sameTheme?0:20)+used*10+Math.abs(delta)*0.1;
+       const sameRoom=arr.some(y=>y.room===occ.x.room);
+       const score=(canFit?0:100000)+(sameRoom?0:(sameTheme?25:60))+used*10+Math.abs(delta)*0.1;
        candidates.push({k,score,canFit,used,delta});
      }
      candidates.sort((a,b)=>a.score-b.score);
@@ -798,10 +806,10 @@ function buildIntelligentPlan(){
      if(d.getDay()===0&&!state.sundayOptional[k])continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
-     const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
-     candidates.push({k,delta,used,sameTheme});
+     const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
+     candidates.push({k,delta,used,sameTheme,sameRoom});
    }
-   candidates.sort((a,b)=> (a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
+   candidates.sort((a,b)=> (a.used-b.used)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
@@ -829,9 +837,10 @@ function buildIntelligentPlan(){
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
      const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
      const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
-     candidates.push({k,delta:delta2,used,sameTheme,canFit});
+     const sameRoom=arr.some(y=>y.room===x.room);
+     candidates.push({k,delta:delta2,used,sameTheme,sameRoom,canFit});
    }
-   candidates.sort((a,b)=>(a.canFit?0:100000)-(b.canFit?0:100000)||a.used-b.used||((b.sameTheme?1:0)-(a.sameTheme?1:0))||Math.abs(a.delta)-Math.abs(b.delta));
+   candidates.sort((a,b)=>(a.canFit?0:100000)-(b.canFit?0:100000)||a.used-b.used||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||Math.abs(a.delta)-Math.abs(b.delta));
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
@@ -1013,12 +1022,12 @@ function dailyTasks(){
  return out;
 }
 function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
-function groupFor(x){if(x.window)return "🪟 Fenster & Glas";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
+function groupFor(x){if(x.window)return "🪟 Fenster & Fensterbänke";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
 // A task category is deliberately more granular than the room/floor group. It is
 // used by the planner to bundle compatible work together, while groupFor()
 // remains useful for room/floor context elsewhere in the app.
 function taskCategory(x){const t=(x.text||"").toLowerCase();
- if(x.window)return "🪟 Fenster & Glas";
+ if(x.window||x.windowSill||/fensterbank/.test(t))return "🪟 Fenster & Fensterbänke";
  if(x.raffstore)return "☀️ Sonnenschutz";
  if(/toilette|wc|wc-bürste|wc bürste|waschbecken|armatur|papierhalter/.test(t))return "🚿 Sanitär & WCs";
  if(/dusche|duschglas|duschrinne|badewanne|badewannenarmatur|fuge|silikon/.test(t))return "🛁 Dusche, Wanne & Fugen";
@@ -1604,7 +1613,7 @@ function swipeRow(el,x){
 function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday;const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo:"today"})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
-  if(!x || !room)return false;
+  if(!x || !room || isDailyTask(x))return false;
   // Normal catalog tasks belong directly to the selected room.
   if(x.room===room && !x.window)return true;
   // Fenster und Raffstores gehören beide zum echten Raum.
@@ -1627,7 +1636,7 @@ function roomFocusTasks(room,d=today){
 function renderRoomFocus(main, tasks){
   const card=document.createElement("div");
   card.className="card roomFocus";
-  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Ganzes Haus" && r!=="Rotationsaufgabe" && r!=="Keller allgemein" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
+  const rooms=[...new Set(CATALOG.filter(x=>x && !x.window && x.source!=="window").map(x=>x.room).filter(r=>r && r!=="Alltag" && r!=="Ganzes Haus" && r!=="Rotationsaufgabe" && r!=="Keller allgemein" && !String(r).startsWith("Fenster ")))].sort((a,b)=>a.localeCompare(b,"de"));
   const day=dayKey(today), selected=state.roomFocus?.[day]||"";
   card.innerHTML=`<div class="topline"><div><b>🏡 Heute einen Raum machen</b><div class="small">Freiwillig: Wähle einen Raum und sieh alle offenen Aufgaben dieses Raumes – auch wenn sie regulär erst später fällig wären.</div></div></div><select class="roomSelect" id="roomSelect"><option value="">Raum auswählen …</option>${rooms.map(r=>`<option value="${esc(r)}"${r===selected?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
   main.appendChild(card);
