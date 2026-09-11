@@ -458,7 +458,7 @@ function editFor(key){return state.catalogEdits?.[key]||null}
 function catalogInterval(x){
  if(Number(x.interval)>0)return Number(x.interval);
  const t=(x.text||"").toLowerCase();
- if(/toilette|\bwc\b|wc-bürste|toilettenrand/.test(t))return 3;
+ if(/toilette|\bwc\b|wc-bürste|toilettenrand/.test(t))return 7;
  if(/waschbecken|armatur|spüle|kochfeld|herd|arbeitsplatte|esstisch|hochstuhl|sichtbare.*bodenflecken/.test(t))return 7;
  if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden/.test(t))return 7;
  if(/boden wischen/.test(t))return 10;
@@ -603,8 +603,18 @@ function rawDueOn(x,d){
  const diff=Math.round((d-w)/86400000);
  return diff>=0 && diff%(slots*7)===0;
 }
+function isWCSubtask(x){
+ const rooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
+ if(!x||!rooms.includes(x.room))return false;
+ const t=(x.text||"").toLowerCase();
+ return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter|papierhalter/.test(t);
+}
+function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
+function isWCPackageTask(x){return !!wcPackage(x);}
+function wcPackageWeight(arr){const n=(arr||[]).filter(isWCPackageTask).length;return n?Math.min(4,Math.max(2,n*0.5)):0;}
 function taskWeight(x){const t=(x.text||"").toLowerCase();
  if(x.window)return 8;
+ if(isWCSubtask(x))return 1;
  if(x.windowSill)return 1;
  if(/fensterbank/.test(t))return 1;
  if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 5;
@@ -621,7 +631,7 @@ function workPackage(x){
  if(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/.test(t))return {key:`fenster|${room}`,label:`Fenster & Sonnenschutz · ${room}`,heavy:isHeavyTask(x)};
  const bathrooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(bathrooms.includes(room)){
-   if(/toilette|wc|wc-bürste|wc bürste|papierhalter/.test(t))return {key:`wc|${room}`,label:`WC · ${room}`,heavy:isHeavyTask(x)};
+   if(isWCSubtask(x))return {key:`wc-komplett|${room}`,label:`WC komplett · ${room}`,heavy:false};
    if(/armatur|waschbecken/.test(t))return {key:`armatur|${room}`,label:`Armaturen & Waschbecken · ${room}`,heavy:isHeavyTask(x)};
    if(/dusche|duschglas|duschrinne|badewanne|badewannenarmatur|fuge|silikon/.test(t))return {key:`nassbereich|${room}`,label:`Dusche & Wanne · ${room}`,heavy:isHeavyTask(x)};
    return {key:`bad|${room}`,label:`Bad · ${room}`,heavy:isHeavyTask(x)};
@@ -662,7 +672,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v205|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v207|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -733,7 +743,47 @@ function buildIntelligentPlan(){
  }
  flex.sort((a,b)=>a.base-b.base||taskWeight(b.x)-taskWeight(a.x)||a.x.room.localeCompare(b.x.room,"de"));
  const maxLook=30;
+ // WC tasks are one physical job: a WC is never planned as "only the brush".
+ // Build one occurrence per WC room and place the complete WC package together.
+ const wcGroups=new Map();
  for(const occ of flex){
+   const pkg=wcPackage(occ.x); if(!pkg)continue;
+   const k=pkg.key;
+   if(!wcGroups.has(k))wcGroups.set(k,[]);
+   wcGroups.get(k).push(occ);
+ }
+ const wcHandled=new Set();
+ for(const [pkgKey,group] of wcGroups){
+   const pending=group.filter(o=>!postponedEntry(o.x)?.postponedUntil);
+   if(!pending.length)continue;
+   const lower=Math.max(...pending.map(o=>Math.max(0,Math.round((o.base-today)/86400000)-30)));
+   const upper=Math.min(...pending.map(o=>Math.round((o.base-today)/86400000)+30));
+   const room=pkgKey.split("|").pop();
+   const candidates=[];
+   for(let rel=lower;rel<=Math.min(upper,30);rel++){
+     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(k===todayKey&&hasTodayLock&&!pending.every(o=>lockedToday.includes(taskId(o.x))))continue;
+     const arr=days.get(k);
+     const total=wcPackageWeight(group.map(o=>o.x)),used=arr._weight||0,cap=dayBudget(d);
+     const samePkg=arr.some(y=>workPackage(y).key===pkgKey);
+     const canFit=used+total<=cap || samePkg;
+     if(!canFit)continue;
+     const dueCenter=group.reduce((n,o)=>n+Math.abs(Math.round((d-o.base)/86400000)),0);
+     const empty=arr.length===0;
+     const score=dayBreathingScore(d,arr)+(samePkg?-120:0)+(empty?-12:0)+dueCenter*0.35+adjacentLoadPenalty(days,d);
+     candidates.push({k,score});
+   }
+   candidates.sort((a,b)=>a.score-b.score);
+   if(candidates[0]){
+     const a=days.get(candidates[0].k);
+     for(const occ of pending){a.push(occ.x);wcHandled.add(taskId(occ.x));}
+     a._weight=(a._weight||0)+wcPackageWeight(pending.map(o=>o.x));
+   }
+ }
+ // The ordinary planner handles every non-WC task. WC package members already
+ // placed above are skipped so they cannot be split across rooms/days.
+ for(const occ of flex){
+   if(wcHandled.has(taskId(occ.x)))continue;
    let chosen=null;
    const postponedUntil=postponedEntry(occ.x)?.postponedUntil;
    const postponedDelta=postponedUntil?Math.round((fromKey(postponedUntil)-occ.base)/86400000):null;
