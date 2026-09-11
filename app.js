@@ -486,6 +486,25 @@ function windowEntries(){
      {side:"innen",key:`window-in|${area}|${room}|${i}`,editKey:`window-in|${area}|${room}|${i}`,text:`🪟 ${baseLabel} · innen`,description:"Nur die Innenseite dieses Fensters gründlich reinigen – inklusive Glas, Rahmen und Falz dieses Fensters sowie der zugehörigen Fensterbank. Keine anderen Fenster zusätzlich."},
      {side:"außen",key:`window-out|${area}|${room}|${i}`,editKey:`window-out|${area}|${room}|${i}`,text:`🪟 ${baseLabel} · außen`,description:"Nur die Außenseite dieses Fensters gründlich reinigen – inklusive Außenglas, zugänglichem Rahmen und Falz dieses Fensters. Außen-/Höhenarbeiten nur durchführen, wenn sie sicher möglich sind; keine anderen Fenster zusätzlich."}
    ];
+   // Fensterbank is a property of every physical window. Keep it as a
+   // separate catalog task so each window can be planned, completed and
+   // repeated independently rather than only a handful of room-level seed tasks.
+   const sillKey=`window-sill|${area}|${room}|${i}`;
+   const se=editFor(sillKey)||{};
+   if(!catalogDeleted(sillKey)) out.push({
+     key:sillKey,
+     text:se.text??`🪟 Fensterbank ${area} · ${room}${count>1?" "+i:""}`,
+     room:se.room??room,
+     area:se.area??area,
+     place:se.place??`Fenster ${i} · Fensterbank`,
+     description:se.description??"Die zu diesem Fenster gehörende Fensterbank vollständig von Staub, Krümeln und sichtbaren Spuren befreien und die zugänglichen Kanten mitreinigen. Nur diese eine Fensterbank bearbeiten; andere Fensterbänke nicht zusätzlich.",
+     windowSill:true,
+     windowKey:wk,
+     source:"windowSill",
+     editable:true,
+     interval:Number(se.interval??30)||30,
+     start:se.start||""
+   });
    for(const side of sides){
      const oldKey=`window|${area}|${room}|${i}`;
      const we=editFor(side.editKey)||editFor(oldKey)||{};
@@ -512,7 +531,7 @@ function windowDate(x,ref=today){
  for(const d of candidates)if(d>=ref)return d;
  let d=candidates[candidates.length-1];while(d<ref)d=addDays(d,180);return d;
 }
-function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const roomText=new Set(out.map(x=>`${x.room}|${x.text}`));for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${r.text}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const [group,tasks] of DAILY){for(const text of tasks){const key=`daily|${text}`;if(catalogDeleted(key))continue;const e=editFor(key)||{};out.push({text:e.text??text,room:e.room??"Alltag",area:e.area??"Haushalt",place:e.place??"",description:e.description??"",start:"",manualStart:false,interval:0,key,source:"daily",editable:true,group});}}for(const w of WINDOW_TASKS)out.push(w);return out}
+function buildCatalog(){const out=[];const add=(text,room,area,meta={})=>{const key=meta.key||`seed|${room}|${text}`;if(catalogDeleted(key))return;const e=editFor(key)||{};const savedDate=state.manualDates?.[key]||state.catalogDates?.[key]||e.start||meta.start||"";out.push({text:e.text??text,room:e.room??room,area:e.area??area,place:e.place??meta.place??"",description:e.description??meta.description??"",start:savedDate,manualStart:!!(state.manualDates?.[key]||state.catalogDates?.[key]||e.manualStart||meta.manualStart),interval:Number(e.interval??meta.interval??0)||0,key,source:meta.source||"seed",editable:meta.editable!==false,window:!!meta.window,windowKey:meta.windowKey,windowGroup:meta.windowGroup,seasonal:!!meta.seasonal,seasonalKey:meta.seasonalKey})};for(const [room,area,tasks] of catalogSeed){for(const text of tasks){if(/^(Fenster innen reinigen|Fenster außen reinigen, wenn sicher|Fensterbänke reinigen|Fensterbank reinigen|Fensterbank abwischen|Dichtungen kontrollieren|Vorhangstangen reinigen|Vorhänge nach Pflegeetikett reinigen|Raffstores nach Herstellerangabe reinigen)$/.test(text))continue;add(text,room,area,{key:`seed|${room}|${text}`})}}const roomText=new Set(out.map(x=>`${x.room}|${x.text}`));for(const r of ROTATIONS){for(const room of r.rooms||[]){const rk=`${room}|${r.text}`;if(roomText.has(rk))continue;add(r.text,room,r.area,{key:`rotation|${room}|${r.text}`,editable:true,source:"rotation",interval:r.interval});roomText.add(rk)}}for(const c of state.custom){const key=c.key||`custom|${c.id}`;if(catalogDeleted(key))continue;add(c.text,c.room,c.area,{...c,key,source:"custom",editable:true,start:c.start||c.date||"",interval:Number(c.interval||c.repeat||0)||60,place:c.place,description:c.description})}for(const [group,tasks] of DAILY){for(const text of tasks){const key=`daily|${text}`;if(catalogDeleted(key))continue;const e=editFor(key)||{};out.push({text:e.text??text,room:e.room??"Alltag",area:e.area??"Haushalt",place:e.place??"",description:e.description??"",start:"",manualStart:false,interval:0,key,source:"daily",editable:true,group});}}for(const w of WINDOW_TASKS)out.push(w);return out}
 function refreshCatalog(){
  CATALOG=buildCatalog().filter(x=>!isInvalidLegacyTask(x));
  invalidatePlans();
