@@ -918,7 +918,9 @@ function buildIntelligentPlan(){
        const cap=dayBudget(d);
        const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
        const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
-       const score=(canFit?0:100000)+used*10+(sameTheme?0:20)+Math.abs(offset)*0.1;
+       const sameRoom=arr.some(y=>y.room===x.room);
+       const roomCompatible=arr.length===0||sameRoom;
+       const score=(roomCompatible?0:1000000)+(canFit?0:100000)+used*10+(sameRoom?0:(sameTheme?20:60))+Math.abs(offset)*0.1;
        if(!best||score<best.score)best={k,d,score};
      }
    }
@@ -932,7 +934,9 @@ function buildIntelligentPlan(){
          if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
          if(d.getDay()===0&&!state.sundayOptional[k])continue;
-         const arr=days.get(k),score=(arr._weight||0)*10+Math.abs(delta*sign);
+         const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
+         const roomCompatible=arr.length===0||sameRoom;
+         const score=(roomCompatible?0:1000000)+(arr._weight||0)*10+(sameRoom?0:50)+Math.abs(delta*sign);
          if(!best||score<best.score)best={k,d,score};
        }
      }
