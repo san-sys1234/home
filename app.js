@@ -745,7 +745,7 @@ function buildIntelligentPlan(){
      const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
      const roomLimit=(weight>=5||hasMighty)?1:6;
      if(sameRoomWeight+weight>roomLimit)continue;
-     const targetGroup=groupFor(occ.x);
+     const targetGroup=taskCategory(occ.x);
      const sameTheme=arr.some(y=>taskCategory(y)===targetGroup);
      const sameRoom=arr.some(y=>y.room===occ.x.room);
      const emptyDay=arr.length===0;
@@ -1001,12 +1001,25 @@ function plannedDateLabel(x){
  return d?d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";
 }
 function themeFor(d){
- if(d.getDay()===0)return DAY_THEME[0];
- const tasks=plannedForDate(d).filter(x=>x.source!=="rotation");
- if(!tasks.length)return "✨ Leichter Haushalt";
+ if(d.getDay()===0)return "Haushaltsfrei ❤️";
+ const tasks=plannedForDate(d).filter(x=>x.source!=="rotation"&&!isDailyTask(x));
+ if(!tasks.length)return "🌿 Puffer & Luft";
  const cat=dominantCategory(tasks);
- if(cat)return cat;
- return "✨ Leichter Haushalt";
+ const labels={
+   "🪟 Fenster & Fensterbänke":"🪟 Fenster & frische Aussichten",
+   "☀️ Sonnenschutz":"🏡 Rund ums Haus",
+   "🚿 Sanitär & WCs":"🚿 Bad & Sanitär",
+   "🛁 Dusche, Wanne & Fugen":"🛁 Badpflege",
+   "🧹 Böden & Sockelleisten":"🧹 Böden & Grundreinigung",
+   "🧺 Textilien & Wäsche":"🧺 Wäsche & Textilien",
+   "🍽️ Küche & Geräte":"🍽️ Küche & Geräte",
+   "📦 Ordnung & Organisation":"📦 Ordnung & Organisation",
+   "✨ Staub & Oberflächen":"✨ Oberflächen & Staub",
+   "🔥 Kamin & Feuerstelle":"🔥 Kamin & Feuerstelle",
+   "🧖 Sauna":"🧖 Wellness & Sauna",
+   "🔧 Technik & Keller":"🔧 Technik & Keller"
+ };
+ return labels[cat]||"✨ Haushalt & Pflege";
 }
 
 function dailyTasks(){
