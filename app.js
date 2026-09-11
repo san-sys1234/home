@@ -608,19 +608,61 @@ function taskWeight(x){const t=(x.text||"").toLowerCase();
  if(x.windowSill)return 1;
  if(/fensterbank/.test(t))return 1;
  if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 5;
+ if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return 5;
+ if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten/.test(t))return 5;
  if(/schornstein|stuck|matratze|teppich|polster|backofen|dusche entkalken|badewanne|duschglas/.test(t))return 5;
  if(/kamin|fugen|silikon|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna|türblätter|türrahmen|zargen|boden gründlich|schrank|regal/.test(t))return 3;
  if(/boden wischen|boden saugen|spiegel|armatur|waschbecken|toilette|wc|bettwäsche|handtücher/.test(t))return 2;
  return 1;
 }
+function isHeavyTask(x){return !!x && (x.window||taskWeight(x)>=5);}
+function workPackage(x){
+ const t=(x.text||"").toLowerCase(),room=x.room||"";
+ if(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/.test(t))return {key:`fenster|${room}`,label:`Fenster & Sonnenschutz · ${room}`,heavy:isHeavyTask(x)};
+ const bathrooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
+ if(bathrooms.includes(room)){
+   if(/toilette|wc|wc-bürste|wc bürste|papierhalter/.test(t))return {key:`wc|${room}`,label:`WC · ${room}`,heavy:isHeavyTask(x)};
+   if(/armatur|waschbecken/.test(t))return {key:`armatur|${room}`,label:`Armaturen & Waschbecken · ${room}`,heavy:isHeavyTask(x)};
+   if(/dusche|duschglas|duschrinne|badewanne|badewannenarmatur|fuge|silikon/.test(t))return {key:`nassbereich|${room}`,label:`Dusche & Wanne · ${room}`,heavy:isHeavyTask(x)};
+   return {key:`bad|${room}`,label:`Bad · ${room}`,heavy:isHeavyTask(x)};
+ }
+ if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return {key:`kuechenfronten|${room}`,label:`Küchenfronten · ${room}`,heavy:true};
+ if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten/.test(t))return {key:`kleidung|${room}`,label:`Kleidung · ${room}`,heavy:true};
+ return {key:`${taskCategory(x)}|${room}`,label:`${taskCategory(x)} · ${room}`,heavy:isHeavyTask(x)};
+}
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
-function dayBudget(d){if(d.getDay()===0)return 0;if(d.getDay()===6)return 5;if(d.getDay()===3)return 7;return 8}
+function dayBudget(d){
+ if(d.getDay()===0)return 0;
+ // Deliberately leave breathing room. This is a soft capacity; the hard
+ // +/-30-day rule may override it only when necessary.
+ if(d.getDay()===6)return 4;
+ if(d.getDay()===3)return 5;
+ if(d.getDay()===5)return 5;
+ return 5;
+}
+function dayBreathingScore(d,arr){
+ const used=arr?arr._weight||0:0;
+ if(!arr||!arr.length)return -32;
+ if(used<=2)return -20;
+ if(used<=4)return -8;
+ return used*4;
+}
+function adjacentLoadPenalty(days,d){
+ let p=0;
+ for(const off of [-1,1]){
+   const a=days.get(dayKey(addDays(d,off)));
+   const w=a?(a._weight||0):0;
+   if(w>=8)p+=24;
+   else if(w>=5)p+=10;
+ }
+ return p;
+}
 function isFixedTask(x){return x.window||x.source==="seasonal"}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v202|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v205|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -723,40 +765,43 @@ function buildIntelligentPlan(){
        continue;
      }
    }
+   // Choose the best workable day instead of the first date in the window.
+   // Empty/light days are preferred, while a compatible work package gets a
+   // strong bonus so sensible room/equipment bundles stay together.
+   const weight=taskWeight(occ.x),pkg=workPackage(occ.x);
+   const candidates=[];
    for(let delta=-30;delta<=maxLook;delta++){
-     const d=addDays(occ.base,delta),k=dayKey(d);if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     const d=addDays(occ.base,delta),k=dayKey(d);
+     if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
-     const weight=taskWeight(occ.x);
-     const used=arr._weight||0;
-     const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
+     const used=arr._weight||0,cap=dayBudget(d);
+     const hasHeavy=arr.some(isHeavyTask);
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-     const cap=dayBudget(d);
-     // One mighty task essentially owns the day. Only a tiny add-on is allowed.
-     if(hasMighty){if(weight>1)continue;}
-     if(weight>=8 && arr.length)continue;
-     if(weight>=5 && hasLarge)continue;
-     if(hasLarge && weight>=3)continue;
-     if(used+weight>cap)continue;
-     // Efficient room grouping: tasks from the same room may be bundled
-     // when the remaining daily capacity allows it. A room package is capped
-     // at roughly one normal work block; mighty/large work still dominates.
-     const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
-     const roomLimit=(weight>=5||hasMighty)?1:6;
-     if(sameRoomWeight+weight>roomLimit)continue;
-     const targetGroup=taskCategory(occ.x);
-     const sameTheme=arr.some(y=>taskCategory(y)===targetGroup);
+     const samePackage=arr.some(y=>workPackage(y).key===pkg.key);
      const sameRoom=arr.some(y=>y.room===occ.x.room);
-     const emptyDay=arr.length===0;
-     // Prefer coherent work packages: once a day has a room started, add compatible
-     // work from that room before opening another room. Same-category work from
-     // another room is allowed only when it is itself a strong, natural equipment block.
-     if(!sameRoom && !sameTheme && !emptyDay)continue;
-     if(!sameRoom && !emptyDay && weight<=3)continue;
-     chosen=k;break;
+     const packageWeight=arr.filter(y=>workPackage(y).key===pkg.key).reduce((n,y)=>n+taskWeight(y),0);
+     const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
+     if(hasHeavy&&!samePackage)continue;
+     if(isHeavyTask(occ.x)&&arr.length&&!samePackage)continue;
+     if(weight>=5&&hasLarge&&!samePackage)continue;
+     if(used+weight>cap&&!samePackage)continue;
+     if(packageWeight+weight>(pkg.heavy?10:6))continue;
+     if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
+     const empty=arr.length===0;
+     if(!samePackage&&!empty&&!sameRoom)continue;
+     const breathing=dayBreathingScore(d,arr);
+     const packageBonus=samePackage?-85:0;
+     const roomBonus=sameRoom?-22:0;
+     const emptyBonus=empty?-10:0;
+     const dueDistance=Math.abs(delta)*0.8+(delta>0?delta*0.35:0);
+     const adjacent=adjacentLoadPenalty(days,d);
+     const score=breathing+packageBonus+roomBonus+emptyBonus+adjacent+dueDistance;
+     candidates.push({k,score,delta});
    }
-   if(chosen){const a=days.get(chosen);a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);}
+   candidates.sort((a,b)=>a.score-b.score||Math.abs(a.delta)-Math.abs(b.delta));
+   if(candidates[0])chosen=candidates[0].k;
    else {
      // Every active task must always receive a concrete planned date. The +/-30-day
      // tolerance is an absolute hard limit: no candidate outside this window
