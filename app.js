@@ -608,8 +608,14 @@ function rawDueOn(x,d){
 function isWCSubtask(x){
  const rooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(!x||!rooms.includes(x.room))return false;
+ // Windows, window sills and raffstores in bathrooms are never part of the
+ // weekly WC routine. They keep their own long/seasonal cadence.
+ if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
  const t=(x.text||"").toLowerCase();
- return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter|papierhalter/.test(t);
+ // Weekly fixed WC care contains only the toilet itself and its brush.
+ // Peripheral bathroom work (paper holder, door, lights, skirting, floors,
+ // grout, mirror, etc.) stays flexible and may be spread to other days.
+ return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter/.test(t);
 }
 function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
 function isWCPackageTask(x){return !!wcPackage(x);}
@@ -618,6 +624,9 @@ function isFixedWeeklyRoutine(x){
  const room=x?.room||"", t=(x?.text||"").toLowerCase();
  const hygieneRooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(!hygieneRooms.includes(room))return false;
+ // Bathroom windows, sills and raffstores are deliberately excluded from the
+ // weekly hygiene routine. They retain their own long/seasonal intervals.
+ if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
  // The complete WC is one weekly routine. Never let a single WC subtask
  // drift onto its own day.
  if(isWCSubtask(x))return true;
@@ -704,7 +713,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v211|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v213|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
