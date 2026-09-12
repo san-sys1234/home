@@ -458,6 +458,8 @@ function editFor(key){return state.catalogEdits?.[key]||null}
 function catalogInterval(x){
  if(Number(x.interval)>0)return Number(x.interval);
  const t=(x.text||"").toLowerCase();
+ const hygieneRooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
+ if(hygieneRooms.includes(x?.room||"") && (isWCSubtask(x) || (/waschbecken/.test(t) && !/armatur/.test(t))))return 7;
  if(/toilette|\bwc\b|wc-bürste|toilettenrand/.test(t))return 7;
  if(/waschbecken|armatur|spüle|kochfeld|herd|arbeitsplatte|esstisch|hochstuhl|sichtbare.*bodenflecken/.test(t))return 7;
  if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden/.test(t))return 7;
@@ -611,7 +613,29 @@ function isWCSubtask(x){
 }
 function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
 function isWCPackageTask(x){return !!wcPackage(x);}
-function wcPackageWeight(arr){const n=(arr||[]).filter(isWCPackageTask).length;return n?Math.min(4,Math.max(2,n*0.5)):0;}
+function wcPackageWeight(arr){const n=(arr||[]).filter(isWCPackageTask).length;return n?Math.min(3,Math.max(2,n*0.4)):0;}
+function isFixedWeeklyRoutine(x){
+ const room=x?.room||"", t=(x?.text||"").toLowerCase();
+ const hygieneRooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
+ if(!hygieneRooms.includes(room))return false;
+ // The complete WC is one weekly routine. Never let a single WC subtask
+ // drift onto its own day.
+ if(isWCSubtask(x))return true;
+ // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
+ // basin-cleaning task belongs here; descaling an armature keeps its own
+ // longer cadence.
+ if(/waschbecken/.test(t) && !/armatur/.test(t))return true;
+ return false;
+}
+function fixedWeeklyDate(x,ref=today){
+ if(!isFixedWeeklyRoutine(x))return null;
+ // One common weekly hygiene day keeps the routine together across all WCs
+ // and bathroom basins. Tuesday is deliberately a neutral anchor; capacity
+ // decides what flexible work may join it.
+ const d=new Date(ref); d.setHours(12,0,0,0);
+ const delta=(2-d.getDay()+7)%7;
+ return addDays(d,delta);
+}
 function taskWeight(x){const t=(x.text||"").toLowerCase();
  if(x.window)return 8;
  if(isWCSubtask(x))return 1;
@@ -667,12 +691,12 @@ function adjacentLoadPenalty(days,d){
  }
  return p;
 }
-function isFixedTask(x){return x.window||x.source==="seasonal"}
+function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedWeeklyRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v207|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v209|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -724,7 +748,20 @@ function buildIntelligentPlan(){
    const k=dayKey(d);
    if(d<today)continue;
    if(d.getDay()===0&&!state.sundayOptional[k])continue;
-   for(const x of fixedTasks){
+   // Fixed weekly hygiene routine: every WC subtask and every bathroom
+   // basin-cleaning task shares ONE planning day. They are not allowed to drift
+   // apart just because their individual due dates differ.
+   if(d.getDay()===2){
+     const routine=fixedTasks.filter(isFixedWeeklyRoutine);
+     const allAllowed=!hasTodayLock || k!==todayKey || routine.every(x=>lockedToday.includes(taskId(x)));
+     if(allAllowed){
+       for(const x of routine){
+         if(isDone(x))continue;
+         addFixed(k,x);
+       }
+     }
+   }
+   for(const x of fixedTasks.filter(x=>!isFixedWeeklyRoutine(x))){
      if(!rawDueOn(x,d))continue;
      if(k===todayKey && todayLock && !todayLock.includes(taskId(x)))continue;
      addFixed(k,x);
