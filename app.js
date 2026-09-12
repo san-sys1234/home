@@ -1,4 +1,4 @@
-/* Unser Zuhause – V157 · korrigierte Fälligkeit & Planung */
+/* Unser Zuhause – V216 · Routinen, Raum-Workflows & Kapazität */
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -636,15 +636,27 @@ function isFixedWeeklyRoutine(x){
  if(/waschbecken/.test(t) && !/armatur/.test(t))return true;
  return false;
 }
-function fixedWeeklyDate(x,ref=today){
- if(!isFixedWeeklyRoutine(x))return null;
- // One common weekly hygiene day keeps the routine together across all WCs
- // and bathroom basins. Tuesday is deliberately a neutral anchor; capacity
- // decides what flexible work may join it.
- const d=new Date(ref); d.setHours(12,0,0,0);
- const delta=(2-d.getDay()+7)%7;
+function isFixedRhythmRoutine(x){
+ const t=(x?.text||"").toLowerCase();
+ if(isFixedWeeklyRoutine(x))return true;
+ // Bed linen is a recurring household routine. Keep its existing 14-day
+ // cadence, but anchor the planned occurrence to one weekday instead of
+ // allowing it to drift through the calendar.
+ if(/bettwäsche wechseln/.test(t) && ["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"].includes(x?.room||""))return true;
+ // Fresh hand towels are also a small, genuinely recurring hygiene routine.
+ if(/handtücher wechseln/.test(t) && ["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x?.room||""))return true;
+ return false;
+}
+function fixedRoutineDate(x,ref=today){
+ if(!isFixedRhythmRoutine(x))return null;
+ const due=nextDue(x,ref);
+ const d=new Date(due); d.setHours(12,0,0,0);
+ // Hygiene block: Tuesday. Bed linen: Thursday. Hand towels: Tuesday.
+ const dow=/bettwäsche wechseln/.test((x.text||"").toLowerCase())?4:2;
+ const delta=(dow-d.getDay()+7)%7;
  return addDays(d,delta);
 }
+function fixedWeeklyDate(x,ref=today){return fixedRoutineDate(x,ref)}
 function taskWeight(x){const t=(x.text||"").toLowerCase();
  if(x.window)return 8;
  if(isWCSubtask(x))return 1;
@@ -659,9 +671,23 @@ function taskWeight(x){const t=(x.text||"").toLowerCase();
  return 1;
 }
 function isHeavyTask(x){return !!x && (x.window||taskWeight(x)>=5);}
+function roomWorkflow(x){
+ const t=(x?.text||"").toLowerCase();
+ if(/boden|sockelleiste|tür|türklink|lichtschalter|steckdose/.test(t))return "raum-unterhalb";
+ if(/waschbecken|toilette|wc|armatur|dusche|badewanne|spiegel|fuge|silikon/.test(t))return "nassreinigung";
+ if(/abwischen|reinigen|abstauben|entstauben|fensterbank/.test(t))return "oberflaechen";
+ if(/sortieren|ordnen|aussort|schrank|regal|schublade|vorräte|kleidung/.test(t))return "ordnung";
+ return "sonstig";
+}
 function workPackage(x){
  const t=(x.text||"").toLowerCase(),room=x.room||"";
  if(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/.test(t))return {key:`fenster|${room}`,label:`Fenster & Sonnenschutz · ${room}`,heavy:isHeavyTask(x)};
+ // Bed-care tasks belong to one physical workflow. Mattress care is less
+ // frequent than changing bed linen, but when it is due it should join the
+ // next sensible bed/linen day instead of becoming a standalone heavy task.
+ const bedRooms=["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2","Ankleidezimmer"];
+ const isBedTask=/bettwäsche|bettlaken|kissenbezug|deckenbezug|matratze|bettpflege|bettbezug/.test(t);
+ if(bedRooms.includes(room)&&isBedTask)return {key:`bett|${room}`,label:`Bett & Matratze · ${room}`,heavy:/matratze/.test(t)};
  const bathrooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(bathrooms.includes(room)){
    if(isWCSubtask(x))return {key:`wc-komplett|${room}`,label:`WC komplett · ${room}`,heavy:false};
@@ -671,7 +697,7 @@ function workPackage(x){
  }
  if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return {key:`kuechenfronten|${room}`,label:`Küchenfronten · ${room}`,heavy:true};
  if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten/.test(t))return {key:`kleidung|${room}`,label:`Kleidung · ${room}`,heavy:true};
- return {key:`${taskCategory(x)}|${room}`,label:`${taskCategory(x)} · ${room}`,heavy:isHeavyTask(x)};
+ return {key:`roomwork|${room}|${roomWorkflow(x)}`,label:`${room} · ${roomWorkflow(x)}`,heavy:isHeavyTask(x)};
 }
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
@@ -682,6 +708,20 @@ function dayBudget(d){
  if(d.getDay()===3)return 5;
  if(d.getDay()===5)return 5;
  return 5;
+}
+function dayTaskLimit(d){
+ // Capacity is a real ceiling on the number of visible work items. The weekly
+ // hygiene block is the one deliberate exception: all WC/basin sub-items stay
+ // together, but nothing else may inflate that day.
+ if(d.getDay()===0)return 0;
+ return d.getDay()===2 ? 20 : 14;
+}
+function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
+ const limit=dayTaskLimit(d);
+ if(!arr)return false;
+ if(arr._fixedRoutine && allowFixedRoutine)return true;
+ if(arr._fixedRoutine && !allowFixedRoutine)return false;
+ return arr.length < limit;
 }
 function dayBreathingScore(d,arr){
  const used=arr?arr._weight||0:0;
@@ -706,14 +746,14 @@ function roomSpreadPenalty(arr,x){
  // Prefer concentrating work in rooms already active on that day. Opening a
  // new room is allowed when capacity permits, but it carries a clear score cost.
  if(!arr||!arr.length)return 0;
- return sameRoom ? Math.max(0,rooms.size-1)*6 : 28 + rooms.size*10;
+ return sameRoom ? Math.max(0,rooms.size-1)*3 : 80 + rooms.size*18;
 }
-function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedWeeklyRoutine(x)}
+function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedRhythmRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v213|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v216|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -765,25 +805,20 @@ function buildIntelligentPlan(){
    const k=dayKey(d);
    if(d<today)continue;
    if(d.getDay()===0&&!state.sundayOptional[k])continue;
-   // Fixed weekly hygiene routine: every WC subtask and every bathroom
-   // basin-cleaning task shares ONE planning day. They are not allowed to drift
-   // apart just because their individual due dates differ.
-   if(d.getDay()===2){
-     const routine=fixedTasks.filter(isFixedWeeklyRoutine);
-     const allAllowed=!hasTodayLock || k!==todayKey || routine.every(x=>lockedToday.includes(taskId(x)));
-     if(allAllowed){
-       for(const x of routine){
-         if(isDone(x))continue;
-         addFixed(k,x);
-       }
-       // The weekly hygiene block is intentionally fixed. Its individual
-       // subtasks stay visible, but its capacity is reserved as one coherent
-       // block so the flexible planner cannot pile unrelated work onto it.
-       const a=days.get(k);
-       if(a) a._fixedRoutine=true;
-     }
+   // Fixed-rhythm routines are placed on their anchor weekday. Their own
+   // cadence still determines WHEN they are due; the weekday only determines
+   // the practical planning slot.
+   const routine=fixedTasks.filter(isFixedRhythmRoutine).filter(x=>{
+     const rd=fixedRoutineDate(x,today);
+     return rd && dayKey(rd)===k && rd>=today && !isDone(x);
+   });
+   const allAllowed=!hasTodayLock || k!==todayKey || routine.every(x=>lockedToday.includes(taskId(x)));
+   if(allAllowed && routine.length){
+     for(const x of routine)addFixed(k,x);
+     const a=days.get(k);
+     if(a) a._fixedRoutine=true;
    }
-   for(const x of fixedTasks.filter(x=>!isFixedWeeklyRoutine(x))){
+   for(const x of fixedTasks.filter(x=>!isFixedRhythmRoutine(x))){
      if(!rawDueOn(x,d))continue;
      if(k===todayKey && todayLock && !todayLock.includes(taskId(x)))continue;
      addFixed(k,x);
@@ -903,8 +938,9 @@ function buildIntelligentPlan(){
      if(weight>=5&&hasLarge&&!samePackage)continue;
      // Tuesday's fixed hygiene block is a protected capacity reservation.
      // Do not add flexible work once the reserved routine is present.
-     if(arr._fixedRoutine&&!samePackage)continue;
+     if(arr._fixedRoutine)continue;
      if(used+weight>cap&&!samePackage)continue;
+     if(!canAddByTaskCount(d,arr,occ.x))continue;
      if(packageWeight+weight>(pkg.heavy?10:6))continue;
      if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
      const empty=arr.length===0;
@@ -937,7 +973,7 @@ function buildIntelligentPlan(){
        const hasExteriorHeavy=arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||""));
        const isExteriorHeavy=!!(occ.x.window||occ.x.raffstore||occ.x.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(occ.x.text||""));
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-       const canFit=arr._fixedRoutine ? false : (isExteriorHeavy ? arr.length===0 : (hasExteriorHeavy ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap))));
+       const canFit=arr._fixedRoutine ? false : (arr.length>=dayTaskLimit(d) ? false : (isExteriorHeavy ? arr.length===0 : (hasExteriorHeavy ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap)))));
        const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
        const sameRoom=arr.some(y=>y.room===occ.x.room);
        const score=(canFit?0:100000)+(sameRoom?-90:(sameTheme?-18:0))+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
@@ -1002,7 +1038,7 @@ function buildIntelligentPlan(){
      const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
      const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-     const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
+     const canFit=arr.length>=dayTaskLimit(d) ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap));
      const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
      const sameRoom=arr.some(y=>y.room===x.room);
      const spread=roomSpreadPenalty(arr,x);
@@ -1039,7 +1075,7 @@ function buildIntelligentPlan(){
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
        const cap=dayBudget(d);
-       const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
+       const canFit=arr.length>=dayTaskLimit(d) ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap));
        const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
        const sameRoom=arr.some(y=>y.room===x.room);
        const roomCompatible=arr.length===0||sameRoom;
@@ -1059,7 +1095,8 @@ function buildIntelligentPlan(){
          if(d.getDay()===0&&!state.sundayOptional[k])continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
-         const score=(roomCompatible?0:1000000)+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
+         const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
+         const score=(roomCompatible?0:1000000)+countPenalty+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
          if(!best||score<best.score)best={k,d,score};
        }
      }
