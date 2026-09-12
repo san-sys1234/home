@@ -691,12 +691,20 @@ function adjacentLoadPenalty(days,d){
  }
  return p;
 }
+function roomSpreadPenalty(arr,x){
+ const rooms=new Set((arr||[]).map(y=>y.room).filter(Boolean));
+ const sameRoom=rooms.has(x?.room);
+ // Prefer concentrating work in rooms already active on that day. Opening a
+ // new room is allowed when capacity permits, but it carries a clear score cost.
+ if(!arr||!arr.length)return 0;
+ return sameRoom ? Math.max(0,rooms.size-1)*6 : 28 + rooms.size*10;
+}
 function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedWeeklyRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v209|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v211|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -759,6 +767,11 @@ function buildIntelligentPlan(){
          if(isDone(x))continue;
          addFixed(k,x);
        }
+       // The weekly hygiene block is intentionally fixed. Its individual
+       // subtasks stay visible, but its capacity is reserved as one coherent
+       // block so the flexible planner cannot pile unrelated work onto it.
+       const a=days.get(k);
+       if(a) a._fixedRoutine=true;
      }
    }
    for(const x of fixedTasks.filter(x=>!isFixedWeeklyRoutine(x))){
@@ -865,26 +878,37 @@ function buildIntelligentPlan(){
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
      const used=arr._weight||0,cap=dayBudget(d);
      const hasHeavy=arr.some(isHeavyTask);
+     const hasExteriorHeavy=arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||""));
+     const isExteriorHeavy=!!(occ.x.window||occ.x.raffstore||occ.x.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(occ.x.text||""));
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
      const samePackage=arr.some(y=>workPackage(y).key===pkg.key);
      const sameRoom=arr.some(y=>y.room===occ.x.room);
      const packageWeight=arr.filter(y=>workPackage(y).key===pkg.key).reduce((n,y)=>n+taskWeight(y),0);
      const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
+     // Windows and raffstores are deliberately isolated. They may share only
+     // their own room/window work package; never add unrelated work to such a day.
+     if(hasExteriorHeavy&&!samePackage)continue;
+     if(isExteriorHeavy&&arr.length&&!samePackage)continue;
      if(hasHeavy&&!samePackage)continue;
      if(isHeavyTask(occ.x)&&arr.length&&!samePackage)continue;
      if(weight>=5&&hasLarge&&!samePackage)continue;
+     // Tuesday's fixed hygiene block is a protected capacity reservation.
+     // Do not add flexible work once the reserved routine is present.
+     if(arr._fixedRoutine&&!samePackage)continue;
      if(used+weight>cap&&!samePackage)continue;
      if(packageWeight+weight>(pkg.heavy?10:6))continue;
      if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
      const empty=arr.length===0;
      if(!samePackage&&!empty&&!sameRoom)continue;
      const breathing=dayBreathingScore(d,arr);
-     const packageBonus=samePackage?-85:0;
-     const roomBonus=sameRoom?-22:0;
-     const emptyBonus=empty?-10:0;
+     const packageBonus=samePackage?-110:0;
+     const roomBonus=sameRoom?-90:0;
+     const themeBonus=!sameRoom&&arr.some(y=>groupFor(y)===groupFor(occ.x))?-18:0;
+     const emptyBonus=empty?-8:0;
+     const spread=roomSpreadPenalty(arr,occ.x);
      const dueDistance=Math.abs(delta)*0.8+(delta>0?delta*0.35:0);
      const adjacent=adjacentLoadPenalty(days,d);
-     const score=breathing+packageBonus+roomBonus+emptyBonus+adjacent+dueDistance;
+     const score=breathing+packageBonus+roomBonus+themeBonus+emptyBonus+spread+adjacent+dueDistance;
      candidates.push({k,score,delta});
    }
    candidates.sort((a,b)=>a.score-b.score||Math.abs(a.delta)-Math.abs(b.delta));
@@ -901,11 +925,13 @@ function buildIntelligentPlan(){
        if(arr.some(y=>taskId(y)===taskId(occ.x))) continue;
        const used=arr._weight||0, cap=dayBudget(d);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
+       const hasExteriorHeavy=arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||""));
+       const isExteriorHeavy=!!(occ.x.window||occ.x.raffstore||occ.x.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(occ.x.text||""));
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-       const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
+       const canFit=arr._fixedRoutine ? false : (isExteriorHeavy ? arr.length===0 : (hasExteriorHeavy ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap))));
        const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
        const sameRoom=arr.some(y=>y.room===occ.x.room);
-       const score=(canFit?0:100000)+(sameRoom?0:(sameTheme?25:60))+used*10+Math.abs(delta)*0.1;
+       const score=(canFit?0:100000)+(sameRoom?-90:(sameTheme?-18:0))+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
        candidates.push({k,score,canFit,used,delta});
      }
      candidates.sort((a,b)=>a.score-b.score);
@@ -939,9 +965,9 @@ function buildIntelligentPlan(){
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
-     candidates.push({k,delta,used,sameTheme,sameRoom});
+     candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
    }
-   candidates.sort((a,b)=> (a.used-b.used)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
+   candidates.sort((a,b)=>((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||(a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
@@ -970,9 +996,10 @@ function buildIntelligentPlan(){
      const canFit=weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap);
      const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
      const sameRoom=arr.some(y=>y.room===x.room);
-     candidates.push({k,delta:delta2,used,sameTheme,sameRoom,canFit});
+     const spread=roomSpreadPenalty(arr,x);
+     candidates.push({k,delta:delta2,used,sameTheme,sameRoom,spread,canFit});
    }
-   candidates.sort((a,b)=>(a.canFit?0:100000)-(b.canFit?0:100000)||a.used-b.used||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||Math.abs(a.delta)-Math.abs(b.delta));
+   candidates.sort((a,b)=>(a.canFit?0:100000)-(b.canFit?0:100000)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||a.used-b.used||((b.sameTheme?1:0)-(a.sameTheme?1:0))||Math.abs(a.delta)-Math.abs(b.delta));
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
@@ -1007,7 +1034,7 @@ function buildIntelligentPlan(){
        const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
        const sameRoom=arr.some(y=>y.room===x.room);
        const roomCompatible=arr.length===0||sameRoom;
-       const score=(roomCompatible?0:1000000)+(canFit?0:100000)+used*10+(sameRoom?0:(sameTheme?20:60))+Math.abs(offset)*0.1;
+       const score=(roomCompatible?0:1000000)+(canFit?0:100000)+((sameRoom?-90:(sameTheme?-18:0)))+roomSpreadPenalty(arr,x)+used*10+Math.abs(offset)*0.1;
        if(!best||score<best.score)best={k,d,score};
      }
    }
@@ -1023,7 +1050,7 @@ function buildIntelligentPlan(){
          if(d.getDay()===0&&!state.sundayOptional[k])continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
-         const score=(roomCompatible?0:1000000)+(arr._weight||0)*10+(sameRoom?0:50)+Math.abs(delta*sign);
+         const score=(roomCompatible?0:1000000)+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
          if(!best||score<best.score)best={k,d,score};
        }
      }
