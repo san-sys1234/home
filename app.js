@@ -2087,6 +2087,20 @@ function pullCatalogTaskToday(x){
   }
   const existing=state.todayExtras.some(e=>e.date===day && (e.sourceKey===x.key || e.text===x.text && e.room===x.room));
   if(existing){toast("Diese Aufgabe ist heute schon eingeplant ❤️");return;}
+  // Handlauf abwischen: if this task had previously been postponed, the
+  // manual pull-forward must win. Otherwise the generic postponed-entry
+  // filter can hide the newly created extra even though it was explicitly
+  // pulled to today. Keep this narrowly scoped to the affected task.
+  if(x.room==="Stiegenhaus" && x.text==="Handlauf abwischen"){
+    const key=taskId(x);
+    for(const id of Object.keys(state.postponed||{})){
+      const p=state.postponed[id];
+      if(!p)continue;
+      if(id===key || p.key===key || p.sourceKey===key || (p.text===x.text && p.room===x.room)){
+        delete state.postponed[id];
+      }
+    }
+  }
   state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
   state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
   save();
