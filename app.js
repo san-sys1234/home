@@ -667,6 +667,49 @@ function refreshCatalog(){
 }
 refreshCatalog();
 
+// V227 repair: normalize every existing „Heute einen Raum machen“ / todayExtra
+// back to its canonical catalog task and recover completions that older builds
+// recorded only on the temporary extra copy. This is intentionally idempotent:
+// existing newer canonical completion data is never overwritten with an older
+// date, while the historical completion date is always preserved in the task
+// history.
+(function repairTodayExtraCompletions(){
+  let changed=false;
+  const extras=Array.isArray(state.todayExtras)?state.todayExtras:[];
+  for(const e of extras){
+    if(!e||e.source!=='extra')continue;
+    const base=canonicalTaskFor(e);
+    if(base){
+      if(e.sourceKey!==base.key){e.sourceKey=base.key;changed=true;}
+      if(e.canonical!==base.key){e.canonical=base.key;changed=true;}
+    }
+    if(!base)continue;
+    const eid=taskId(e), bid=taskId(base);
+    const extraDone=!!state.done?.[doneKey(e)] || !!state.done?.[e.id] || !!state.done?.[e.canonical] || !!state.lastDone?.[lastKey(e)] || !!state.lastDone?.[e.id] || !!state.lastDone?.[e.canonical];
+    if(!extraDone)continue;
+    const completionDate=normalizeDateKey(e.date) || normalizeDateKey(state.lastDone?.[lastKey(e)]) || normalizeDateKey(state.lastDone?.[e.id]);
+    if(!completionDate)continue;
+    // Preserve the real completion date in the canonical history.
+    recordCompletion(base,completionDate);
+    const existingLast=normalizeDateKey(lastDone(base));
+    if(!existingLast || completionDate>existingLast){
+      state.lastDone[lastKey(base)]=completionDate;
+      state.done[doneKey(base)]=true;
+      changed=true;
+    }else if(!state.done[doneKey(base)]){
+      // Keep the canonical task visibly completed when the extra is known to
+      // have been completed, even if an older state lost the global done flag.
+      state.done[doneKey(base)]=true;
+      changed=true;
+    }
+  }
+  if(changed){
+    state.__v227Repair=true;
+    try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+    invalidatePlans();
+  }
+})();
+
 function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&!x.raffstore&&x.source!=="rotation"&&x.area!=="Alltag")}
 function basementRoom(d){const base=fromKey("2026-09-04"),diff=Math.round((d-base)/86400000);return BASEMENT[((Math.floor(diff/7)%BASEMENT.length)+BASEMENT.length)%BASEMENT.length]}
 function weeklyDate(x){const dow=WEEKDAYS[x.room];if(dow===undefined)return null;const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));return addDays(nextDow(fromKey("2026-08-31"),dow),Math.floor(idx/3)*7)}
@@ -879,7 +922,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v226|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.packageAnchors||{})+"|"+JSON.stringify(state.deferredReplans||{})+"|"+JSON.stringify((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)).map(e=>[e.sourceKey||e.canonical||e.key,e.room,e.text]));
+ return "v227|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.packageAnchors||{})+"|"+JSON.stringify(state.deferredReplans||{})+"|"+JSON.stringify((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)).map(e=>[e.sourceKey||e.canonical||e.key,e.room,e.text]));
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
