@@ -273,16 +273,19 @@ function isDone(x,ref=today){
  // Array.filter passes index/array as extra arguments; only a real Date may
  // override the reference day. This keeps Today rendering stable.
  if(!(ref instanceof Date))ref=today;
- // Daily routines have their own occurrence ledger. A routine is completed
- // ONLY when today's exact daily occurrence was explicitly checked off.
- // Legacy global done/lastDone flags are deliberately ignored here.
  if(isDailyTask(x)){
    const k=dayKey(ref),id=taskId(x);
    return !!(state.dailyDone?.[k]?.[id]);
  }
- const l=lastDone(x);
+ // A room-focus extra is only a temporary representation of a real catalog
+ // task. Always consult its canonical task as a fallback so a completion made
+ // from the room view cannot disappear merely because the UI representation
+ // changed from catalog -> extra (or vice versa).
+ const base=x?.source==="extra"?canonicalTaskFor(x):null;
+ const l=lastDone(x)|| (base?lastDone(base):"");
  if(l)return l===dayKey(ref);
- return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical];
+ return !!state.done[doneKey(x)]||!!state.done[x.id]||!!state.done[x.canonical]||
+   !!(base&&(state.done[doneKey(base)]||state.done[base.key]||state.done[base.id]));
 }
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function canonicalTaskFor(x){
@@ -310,11 +313,22 @@ function recordCompletion(x,dateKey){
 function completionHistoryFor(x){
  const id=taskId(x), out=[];
  const add=v=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(v))&&!out.includes(String(v)))out.push(String(v))};
- const saved=state.completionHistory?.[id];
- if(Array.isArray(saved))saved.forEach(add);
- // Backfill the current known completion for older data.
+ const ids=[id];
+ // Room-focus extras must display the history of their canonical catalog task
+ // as well. Otherwise opening Info on the temporary extra can misleadingly
+ // say “Noch keine Erledigung gespeichert”, even though the real task has a
+ // completion history.
+ if(x?.source==="extra"){
+   const base=canonicalTaskFor(x);
+   if(base)ids.push(taskId(base));
+ }
+ for(const hid of ids){
+   const saved=state.completionHistory?.[hid];
+   if(Array.isArray(saved))saved.forEach(add);
+   add(state.lastDone?.["last|"+hid]);
+   add(state.lastDone?.[hid]);
+ }
  add(lastDone(x));
- // Daily routines have date-scoped completion records.
  if(isDailyTask(x)) for(const [d,items] of Object.entries(state.dailyDone||{})) if(items&&items[id])add(d);
  out.sort((a,b)=>b.localeCompare(a));
  return out.slice(0,2);
@@ -382,8 +396,6 @@ function markDone(x){
  const preTarget=x.source==="extra"?canonicalTaskFor(x):x;
  const prePlanDate=prePlan?.next?.get(taskId(preTarget||x));
  const preNext=prePlan?.next||null;
- // Daily routines are independent calendar-day occurrences. A routine is
- // completed only for the exact day on which it was checked off.
  if(isDailyTask(x)){
    state.dailyDone=state.dailyDone&&typeof state.dailyDone==='object'?state.dailyDone:{};
    state.dailyDone[k]=state.dailyDone[k]||{};
@@ -391,27 +403,36 @@ function markDone(x){
    recordCompletion(x,k);
    return;
  }
- const base=x.source==="extra"?canonicalTaskFor(x):null;
+ const base=x.source==="extra"?canonicalTaskFor(x):x;
  const target=base||x;
  state.done[doneKey(target)]=true;
  state.lastDone[lastKey(target)]=k;
  recordCompletion(target,k);
+ // If the task was pulled through “Heute einen Raum machen”, mirror the
+ // completion onto every matching temporary extra. This makes the room-focus
+ // representation and the canonical catalog representation interchangeable.
+ const matchingExtras=(state.todayExtras||[]).filter(e=>e&&e.date===k&&e.source==="extra"&&
+   ((target.key&&e.sourceKey===target.key)||(e.canonical&&e.canonical===target.key)||
+    (e.text===target.text&&e.room===target.room&&(!e.area||!target.area||e.area===target.area))));
+ for(const e of matchingExtras){
+   e.sourceKey=target.key||e.id;
+   e.canonical=target.key||e.id;
+   state.done[doneKey(e)]=true;
+   state.done[e.id]=true;
+   state.lastDone[lastKey(e)]=k;
+   state.lastDone[e.id]=k;
+   recordCompletion(e,k);
+ }
  // Completion starts a new recurrence cycle immediately. Remove every
  // persisted planning override belonging to this task so the catalog cannot
- // keep showing the old planned date after an early/manual completion.
+ // keep showing the old planned date after a normal completion.
  state.plannedOverrides=state.plannedOverrides||{};
  delete state.plannedOverrides[taskId(target)];
  delete state.plannedOverrides[target.key];
  if(target.id)delete state.plannedOverrides[target.id];
  if(target.canonical)delete state.plannedOverrides[target.canonical];
- if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);delete state.plannedOverrides[taskId(x)];delete state.plannedOverrides[x.key];if(x.id)delete state.plannedOverrides[x.id];if(x.canonical)delete state.plannedOverrides[x.canonical];}
  delete state.postponed[taskId(target)];
- if(target!==x)delete state.postponed[taskId(x)];
  setPackageAnchorAfterCompletion(target,{prePlanDate,preNext});
- // A room-focus pull is an explicit „today“ decision, not an instruction to
- // immediately reshuffle the future plan. Keep the old planned occurrence
- // visible until the day changes; only then let the intelligent planner assign
- // the new recurrence date.
  if(x.source==="extra" && x.manualSource==="roomFocus" && target && !isFixedTask(target)){
    const prior=prePlanDate instanceof Date&&!Number.isNaN(prePlanDate.getTime())?dayKey(prePlanDate):"";
    if(prior){
@@ -430,8 +451,19 @@ function unmarkDone(x){
    if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
    return;
  }
- delete state.done[doneKey(x)];
- if(Array.isArray(state.completionHistory?.[id])) state.completionHistory[id]=state.completionHistory[id].filter(d=>d!==k);
+ const base=x.source==="extra"?canonicalTaskFor(x):x;
+ const target=base||x;
+ delete state.done[doneKey(target)];
+ delete state.done[target.key];
+ if(target.id)delete state.done[target.id];
+ delete state.lastDone[lastKey(target)];
+ if(Array.isArray(state.completionHistory?.[taskId(target)])) state.completionHistory[taskId(target)]=state.completionHistory[taskId(target)].filter(d=>d!==k);
+ for(const e of (state.todayExtras||[]).filter(e=>e&&e.date===k&&e.source==="extra"&&
+   ((target.key&&e.sourceKey===target.key)||(e.canonical&&e.canonical===target.key)))){
+   delete state.done[doneKey(e)]; delete state.done[e.id];
+   delete state.lastDone[lastKey(e)]; delete state.lastDone[e.id];
+   if(Array.isArray(state.completionHistory?.[taskId(e)]))state.completionHistory[taskId(e)]=state.completionHistory[taskId(e)].filter(d=>d!==k);
+ }
 }
 
 function postponedEntry(x){
@@ -667,7 +699,7 @@ function refreshCatalog(){
 }
 refreshCatalog();
 
-// V227 repair: normalize every existing „Heute einen Raum machen“ / todayExtra
+// V228 repair: normalize every existing „Heute einen Raum machen“ / todayExtra
 // back to its canonical catalog task and recover completions that older builds
 // recorded only on the temporary extra copy. This is intentionally idempotent:
 // existing newer canonical completion data is never overwritten with an older
@@ -704,7 +736,7 @@ refreshCatalog();
     }
   }
   if(changed){
-    state.__v227Repair=true;
+    state.__v228Repair=true;
     try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
     invalidatePlans();
   }
@@ -922,7 +954,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v227|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.packageAnchors||{})+"|"+JSON.stringify(state.deferredReplans||{})+"|"+JSON.stringify((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)).map(e=>[e.sourceKey||e.canonical||e.key,e.room,e.text]));
+ return "v229|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.packageAnchors||{})+"|"+JSON.stringify(state.deferredReplans||{})+"|"+JSON.stringify((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)).map(e=>[e.sourceKey||e.canonical||e.key,e.room,e.text]));
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1356,8 +1388,13 @@ function plannedDateForTask(x){
    const pd=fromKey(deferred.planned);
    if(pd>=today)return pd;
  }
- const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
+ // SINGLE SOURCE OF TRUTH: the catalog must show the exact same planned date
+ // as the planner/calendar. Older builds stored plannedOverrides separately;
+ // those can become stale (e.g. after a fixed-rhythm task is replanned), which
+ // caused the catalog to show a late date while the calendar showed the correct
+ // package date. We therefore no longer let a legacy override outrank the actual
+ // planner. The override may remain in stored data for compatibility, but it is
+ // never a second planning layer.
  // The catalog must describe the exact same visible plan as Today. In particular,
  // after "Später" has been used, a task that is excluded by today's lock is NOT
  // allowed to keep showing "Geplant: heute" in the catalog.
