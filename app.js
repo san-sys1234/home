@@ -179,11 +179,11 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
+function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],packageAnchors:{},deferredReplans:{},calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
- const maps=["done","lastDone","postponed","catalogEdits","catalogDates","manualDates","catalogDeleted","plannedOverrides"];
+ const maps=["done","lastDone","postponed","catalogEdits","catalogDates","manualDates","catalogDeleted","plannedOverrides","packageAnchors"];
  for(const name of maps){
    if(!s[name]||typeof s[name]!=="object")continue;
    const out={};
@@ -233,7 +233,7 @@ function loadState(){
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
   migrateTaskCatalogQuality(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayPlanHistory=s.dayPlanHistory&&typeof s.dayPlanHistory==="object"?s.dayPlanHistory:{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayPlanHistory=s.dayPlanHistory&&typeof s.dayPlanHistory==="object"?s.dayPlanHistory:{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};s.deferredReplans=s.deferredReplans&&typeof s.deferredReplans==="object"?s.deferredReplans:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  // Alte generische „Ganzes Haus“-/„Keller allgemein“-Aufgaben dürfen nicht wieder im Katalog auftauchen.
@@ -287,8 +287,17 @@ function isDone(x,ref=today){
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function canonicalTaskFor(x){
  const sourceKey=x?.sourceKey||x?.canonical;
- if(!sourceKey)return null;
- return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
+ if(sourceKey){
+   const found=CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey);
+   if(found)return found;
+ }
+ // Legacy todayExtras (e.g. created by older versions via "Ich habe Energie")
+ // did not always carry sourceKey/canonical. Resolve those copies back to the
+ // catalog so completion, recurrence and calendar history stay authoritative.
+ if(!x)return null;
+ return CATALOG.find(y=>String(y.text||'')===String(x.text||'') &&
+   String(y.room||'')===String(x.room||'') &&
+   (!x.area || !y.area || String(y.area)===String(x.area)))||null;
 }
 function recordCompletion(x,dateKey){
  const id=taskId(x); if(!id)return;
@@ -310,8 +319,69 @@ function completionHistoryFor(x){
  out.sort((a,b)=>b.localeCompare(a));
  return out.slice(0,2);
 }
+function packageAnchorKey(x){return workPackage(x)?.key||""}
+function setPackageAnchorAfterCompletion(x,ctx={}){
+ if(!x||isDailyTask(x)||isFixedTask(x))return;
+ const pkg=packageAnchorKey(x);
+ if(!pkg)return;
+ state.packageAnchors=state.packageAnchors||{};
+ // Never let an early/manual completion destroy an already established package
+ // anchor. The remaining related work should keep its existing work-package day.
+ if(state.packageAnchors[pkg]?.date)return;
+ const preDate=ctx.prePlanDate instanceof Date&&!Number.isNaN(ctx.prePlanDate.getTime())?ctx.prePlanDate:null;
+ if(!preDate)return;
+ // Only create an anchor when the original plan actually contained related work
+ // on that day. A single isolated task should not manufacture a package anchor.
+ const siblingOnSameDay=CATALOG.some(y=>{
+   if(taskId(y)===taskId(x)||isDailyTask(y)||isFixedTask(y)||isDone(y))return false;
+   if(packageAnchorKey(y)!==pkg)return false;
+   const yd=ctx.preNext?.get(taskId(y));
+   return yd instanceof Date&&!Number.isNaN(yd.getTime())&&dayKey(yd)===dayKey(preDate);
+ });
+ if(!siblingOnSameDay)return;
+ state.packageAnchors[pkg]={date:dayKey(preDate),source:taskId(x),setAt:dayKey()};
+ invalidatePlanner();
+}
+function manualTodayPackageAnchorFor(x){
+ const pkg=packageAnchorKey(x);
+ if(!pkg||today.getDay()===0)return null;
+ const extras=(state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)&&e.source!=="daily");
+ const same=extras.filter(e=>{
+   const ek=e.sourceKey||e.canonical;
+   const base=ek?CATALOG.find(y=>taskId(y)===ek):null;
+   return packageAnchorKey(base||e)===pkg;
+ });
+ // One voluntary pull should not rewrite the whole plan. Several pulled tasks
+ // from the same package are a strong signal that the remaining package should
+ // stay together while capacity permits.
+ return same.length>=2?new Date(today):null;
+}
+function manualTodayRoomAnchorFor(x){
+ if(!x||!x.room||today.getDay()===0)return null;
+ const extras=(state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)&&e.source!=="daily");
+ const sameRoom=extras.filter(e=>String(e.room||"")===String(x.room||""));
+ // "Heute einen Raum machen" is the strongest voluntary signal: once several
+ // tasks from the same room have actually been pulled to today, keep the room
+ // as the preferred focus for remaining open work. This does NOT merge unlike
+ // work into one package; package matching still wins, and capacity remains
+ // the hard limit.
+ const roomFocusCount=sameRoom.filter(e=>e.manualSource==="roomFocus").length;
+ return roomFocusCount>=2?new Date(today):null;
+}
+function packageAnchorFor(x){
+ const pkg=packageAnchorKey(x), a=state.packageAnchors?.[pkg];
+ if(a?.date){const d=fromKey(a.date);if(d instanceof Date&&!Number.isNaN(d.getTime()))return d;}
+ return manualTodayPackageAnchorFor(x);
+}
 function markDone(x){
  const k=dayKey();
+ // Snapshot the visible plan BEFORE changing recurrence state. This is crucial
+ // for early/manual completion: the package should keep the day it was already
+ // grouped on, rather than being replanned around the task's new due date.
+ const prePlan=!isDailyTask(x)?buildIntelligentPlan():null;
+ const preTarget=x.source==="extra"?canonicalTaskFor(x):x;
+ const prePlanDate=prePlan?.next?.get(taskId(preTarget||x));
+ const preNext=prePlan?.next||null;
  // Daily routines are independent calendar-day occurrences. A routine is
  // completed only for the exact day on which it was checked off.
  if(isDailyTask(x)){
@@ -326,9 +396,31 @@ function markDone(x){
  state.done[doneKey(target)]=true;
  state.lastDone[lastKey(target)]=k;
  recordCompletion(target,k);
- if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);}
+ // Completion starts a new recurrence cycle immediately. Remove every
+ // persisted planning override belonging to this task so the catalog cannot
+ // keep showing the old planned date after an early/manual completion.
+ state.plannedOverrides=state.plannedOverrides||{};
+ delete state.plannedOverrides[taskId(target)];
+ delete state.plannedOverrides[target.key];
+ if(target.id)delete state.plannedOverrides[target.id];
+ if(target.canonical)delete state.plannedOverrides[target.canonical];
+ if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);delete state.plannedOverrides[taskId(x)];delete state.plannedOverrides[x.key];if(x.id)delete state.plannedOverrides[x.id];if(x.canonical)delete state.plannedOverrides[x.canonical];}
  delete state.postponed[taskId(target)];
  if(target!==x)delete state.postponed[taskId(x)];
+ setPackageAnchorAfterCompletion(target,{prePlanDate,preNext});
+ // A room-focus pull is an explicit „today“ decision, not an instruction to
+ // immediately reshuffle the future plan. Keep the old planned occurrence
+ // visible until the day changes; only then let the intelligent planner assign
+ // the new recurrence date.
+ if(x.source==="extra" && x.manualSource==="roomFocus" && target && !isFixedTask(target)){
+   const prior=prePlanDate instanceof Date&&!Number.isNaN(prePlanDate.getTime())?dayKey(prePlanDate):"";
+   if(prior){
+     state.deferredReplans=state.deferredReplans||{};
+     state.deferredReplans[taskId(target)]={until:k,planned:prior};
+     state.plannedOverrides=state.plannedOverrides||{};
+     state.plannedOverrides[taskId(target)]=prior;
+   }
+ }
 }
 
 function unmarkDone(x){
@@ -787,7 +879,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v219|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v226|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.packageAnchors||{})+"|"+JSON.stringify(state.deferredReplans||{})+"|"+JSON.stringify((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(today)).map(e=>[e.sourceKey||e.canonical||e.key,e.room,e.text]));
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -863,11 +955,29 @@ function buildIntelligentPlan(){
    const season=SEASONAL_SPECIALS.find(s=>(s.dates||[]).includes(k));
    if(season && !(k===todayKey && todayLock))addFixed(k,{key:`seasonal|${season.key}|${k}`,text:season.text,room:season.room,area:season.area,group:"Fenster",major:true,source:"seasonal",window:true});
  }
+ // Voluntary pull-forwards are real work for today's capacity. Add their
+ // canonical catalog tasks to today's planner occupancy so remaining tasks from
+ // the same room/package can join only when there is still capacity.
+ const manualTodayIds=new Set();
+ if(today.getDay()!==0){
+   const arr=days.get(todayKey);
+   if(arr){
+     for(const e of (state.todayExtras||[]).filter(e=>e&&e.date===todayKey)){
+       const id=e.sourceKey||e.canonical;
+       const x=id?CATALOG.find(y=>taskId(y)===id):CATALOG.find(y=>y.text===e.text&&y.room===e.room&&(!e.area||!y.area||y.area===e.area));
+       if(!x||isDailyTask(x)||isFixedTask(x)||isDone(x))continue;
+       if(manualTodayIds.has(taskId(x)))continue;
+       arr.push(x);
+       arr._weight=(arr._weight||0)+taskWeight(x);
+       manualTodayIds.add(taskId(x));
+     }
+   }
+ }
  // Flexible occurrences: create only the next required occurrence per task and
  // then place it on the first genuinely light day. This prevents a whole room
  // from landing on one anchor day.
  const flex=[];
- for(const x of CATALOG.filter(x=>x.area!=="Alltag"&&!isFixedTask(x))){
+ for(const x of CATALOG.filter(x=>x.area!=="Alltag"&&!isFixedTask(x)&&!manualTodayIds.has(taskId(x)))){
    let base=nextDue(x,today);
    if(base<start)base=start;
    flex.push({x,base});
@@ -990,7 +1100,13 @@ function buildIntelligentPlan(){
      const spread=roomSpreadPenalty(arr,occ.x);
      const dueDistance=Math.abs(delta)*0.8+(delta>0?delta*0.35:0);
      const adjacent=adjacentLoadPenalty(days,d);
-     const score=breathing+packageBonus+roomBonus+themeBonus+emptyBonus+spread+adjacent+dueDistance;
+     const anchor=packageAnchorFor(occ.x);
+     const anchorDist=anchor?Math.abs(Math.round((d-anchor)/86400000)):999;
+     const anchorBonus=anchor&&anchorDist<=30?(anchorDist===0?-180:-Math.min(60,anchorDist*2)):0;
+     const roomAnchor=manualTodayRoomAnchorFor(occ.x);
+     const roomAnchorDist=roomAnchor?Math.abs(Math.round((d-roomAnchor)/86400000)):999;
+     const roomAnchorBonus=roomAnchor&&roomAnchorDist<=30?(roomAnchorDist===0?-105:-Math.min(45,roomAnchorDist*1.5)):0;
+     const score=breathing+packageBonus+roomBonus+themeBonus+emptyBonus+spread+adjacent+dueDistance+anchorBonus+roomAnchorBonus;
      candidates.push({k,score,delta});
    }
    candidates.sort((a,b)=>a.score-b.score||Math.abs(a.delta)-Math.abs(b.delta));
@@ -1189,6 +1305,14 @@ function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").start
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
+ // Tasks pulled through „Heute einen Raum machen“ keep their pre-pull planned
+ // occurrence for the rest of today. Their new future date is deliberately
+ // calculated only when the calendar day rolls over.
+ const deferred=state.deferredReplans?.[id];
+ if(deferred?.until===dayKey(today) && normalizeDateKey(deferred.planned)){
+   const pd=fromKey(deferred.planned);
+   if(pd>=today)return pd;
+ }
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
  if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
  // The catalog must describe the exact same visible plan as Today. In particular,
@@ -1317,7 +1441,9 @@ function plannedToday(){
  // the Today view stable even if an older cached/legacy plan contains extras.
  const lockKey=dayKey(d);
  const locked=Array.isArray(state.todayPlanLock?.[lockKey]) ? new Set(state.todayPlanLock[lockKey]) : null;
+ const extraCanonicalIds=new Set((state.todayExtras||[]).filter(e=>e&&e.date===dayKey(d)).map(e=>e.sourceKey||e.canonical).filter(Boolean));
  for(const x of plan){
+   if(extraCanonicalIds.has(taskId(x)) && x.source!=="extra") continue;
    if(locked && x.source!=="daily" && x.source!=="extra" && !locked.has(taskId(x))) continue;
    out.push({...x,group:groupFor(x)});
  }
@@ -1328,7 +1454,7 @@ function plannedToday(){
  // tasks that were not part of the frozen plan.
  const visibleIds=new Set(out.map(taskId));
  for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
+   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x))||extraCanonicalIds.has(taskId(x)))continue;
    if(locked && !locked.has(taskId(x)))continue;
    const pd=plannedDateForTask(x);
    if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
@@ -1869,7 +1995,7 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday;const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo:"today"})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday;const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x,opts.pullSource||"catalog");render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo:"today"})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room || isDailyTask(x))return false;
@@ -1911,7 +2037,7 @@ function renderRoomFocus(main, tasks){
     if(!open.length){const empty=document.createElement("div");empty.className="card empty";empty.textContent="In diesem Raum ist gerade nichts Sinnvolles offen. 🥰";sec.appendChild(empty)}
     else {
       // All open tasks are shown together under the selected room. They can also be pulled into the real Today plan.
-      open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true,hideRoom:true,showPullToday:true})));
+      open.forEach(x=>sec.appendChild(taskRow(x,{showDue:true,hideRoom:true,showPullToday:true,pullSource:"roomFocus"})));
     }
     main.appendChild(sec);
   };
@@ -2033,9 +2159,9 @@ function showEnergy(){
     const r=document.createElement("div");r.className="result";
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)}</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
-      state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
-      state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
-      save();render();showEnergy();
+      pullCatalogTaskToday(x);
+      render();
+      showEnergy();
     };
     box.appendChild(r);
   });
@@ -2080,7 +2206,7 @@ function openEditor(x=null,opts={}){
  };
  if(edit)overlay.querySelector("#del").onclick=()=>{if(!confirm(`„${old.text}“ wirklich löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[old.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==old.key);save();refreshCatalog();close();(returnTo==="today"?renderToday():renderCatalog());toast("Aufgabe gelöscht")};
 }
-function pullCatalogTaskToday(x){
+function pullCatalogTaskToday(x,manualSource="catalog"){
   const day=dayKey(today);
   if(today.getDay()===0 && !state.sundayOptional[day]){
     state.sundayOptional[day]=true;
@@ -2101,7 +2227,7 @@ function pullCatalogTaskToday(x){
       }
     }
   }
-  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
+  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true,manualSource});
   state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
   save();
   toast(`„${x.text}“ für heute vorgezogen ❤️`);
@@ -2116,6 +2242,18 @@ function syncCurrentDay(){
  const nk=dayKey(now);
  if(dayKey(today)!==nk){
    today=now;
+   // Room-focus pulls are „today only“. Once the day changes, release their
+   // temporary planned dates so the intelligent planner can calculate the new
+   // recurrence/package placement from the actual completion dates.
+   const deferred=state.deferredReplans||{};
+   for(const [id,v] of Object.entries(deferred)){
+     if(v?.until && v.until!==nk){
+       delete deferred[id];
+       if(state.plannedOverrides?.[id]===v.planned)delete state.plannedOverrides[id];
+       const c=CATALOG.find(y=>taskId(y)===id);
+       if(c?.key && state.plannedOverrides?.[c.key]===v.planned)delete state.plannedOverrides[c.key];
+     }
+   }
    // Old same-day UI state must never carry into a new calendar day. The
    // postponed records themselves are intentionally retained because their
    // postponedUntil date is the authoritative plan.
