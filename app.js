@@ -233,7 +233,7 @@ function loadState(){
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
   migrateTaskCatalogQuality(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayPlanHistory=s.dayPlanHistory&&typeof s.dayPlanHistory==="object"?s.dayPlanHistory:{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  // Alte generische „Ganzes Haus“-/„Keller allgemein“-Aufgaben dürfen nicht wieder im Katalog auftauchen.
@@ -396,9 +396,41 @@ function postponeTask(x){
 }
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
+function completionWasOnDate(x,k){
+ const id=taskId(x);
+ const hist=state.completionHistory?.[id];
+ return Array.isArray(hist)&&hist.includes(k);
+}
+function rememberDayPlan(d,tasks){
+ const k=dayKey(d);
+ if(!state.dayPlanHistory||typeof state.dayPlanHistory!=="object")state.dayPlanHistory={};
+ if(!state.dayPlanHistory[k] && Array.isArray(tasks)){
+   const ids=tasks.filter(x=>!isDailyTask(x)).map(taskId).filter(Boolean);
+   if(ids.length)state.dayPlanHistory[k]=ids;
+ }
+}
+function completedTasksForDate(d,tasks=[]){
+ const k=dayKey(d),out=[],seen=new Set();
+ const add=x=>{if(!x||isDailyTask(x))return;const id=taskId(x);if(!id||seen.has(id)||!completionWasOnDate(x,k))return;seen.add(id);out.push(x)};
+ const ids=Array.isArray(state.dayPlanHistory?.[k])?state.dayPlanHistory[k]:[];
+ for(const id of ids){const x=CATALOG.find(y=>taskId(y)===id);if(x)add(x)}
+ for(const x of tasks)add(x);
+ for(const x of CATALOG)add(x);
+ return out;
+}
+function calendarDayCompleted(d,tasks=[]){
+ const k=dayKey(d);
+ if(state.completedDays?.[k])return true;
+ const ids=Array.isArray(state.dayPlanHistory?.[k])?state.dayPlanHistory[k]:[];
+ if(ids.length)return ids.every(id=>{const x=CATALOG.find(y=>taskId(y)===id);return !!x&&completionWasOnDate(x,k)});
+ return tasks.length>0&&tasks.every(x=>completionWasOnDate(x,k));
+}
 function syncCompletedDay(d=today){
- const k=dayKey(d), tasks=plannedTodayForDate(d);
- if(tasks.length && tasks.every(isDone)) state.completedDays[k]=true; else delete state.completedDays[k];
+ const k=dayKey(d), tasks=plannedTodayForDate(d).filter(x=>!isDailyTask(x));
+ rememberDayPlan(d,tasks);
+ const ids=Array.isArray(state.dayPlanHistory?.[k])?state.dayPlanHistory[k]:[];
+ if(ids.length && ids.every(id=>{const x=CATALOG.find(y=>taskId(y)===id);return !!x&&completionWasOnDate(x,k)})) state.completedDays[k]=true;
+ else delete state.completedDays[k];
 }
 function plannedTodayForDate(d){
  const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
@@ -421,7 +453,7 @@ function celebrateCompletedDay(){
   const dt=new Date(k+"T12:00:00"),r=rewards[(dt.getDate()+dt.getMonth())%rewards.length];
   const overlay=document.createElement("div");
   overlay.className="rewardOverlay";
-  overlay.innerHTML=`<div class="rewardSparkles" aria-hidden="true">✦　✧　✦　✧　✦</div><div class="rewardCard"><div class="rewardIcon">${r[0]}</div><div class="rewardEyebrow">✨ Tagesabschluss</div><h2>Heute ist geschafft!</h2><div class="rewardCount">${count} ${count===1?"Aufgabe":"Aufgaben"} erledigt</div><p><b>${r[1]}</b><br>${r[2]}</p><button class="btn primary" id="rewardClose">🌙 Feierabend genießen</button></div>`;
+  overlay.innerHTML=`<div class="rewardConfetti" aria-hidden="true">${Array.from({length:18},(_,i)=>`<i style="--i:${i}"></i>`).join("")}</div><div class="rewardSparkles" aria-hidden="true">✦　✧　✦　✧　✦</div><div class="rewardCard"><div class="rewardCheck">✓</div><div class="rewardIcon">${r[0]}</div><div class="rewardEyebrow">✨ Tagesabschluss</div><h2>Tag geschafft!</h2><div class="rewardCount">${count} ${count===1?"Aufgabe":"Aufgaben"} erledigt</div><p><b>${r[1]}</b><br>${r[2]}</p><button class="btn primary" id="rewardClose">🌙 Feierabend genießen</button></div>`;
   document.body.appendChild(overlay);
   requestAnimationFrame(()=>overlay.classList.add("open"));
   const close=()=>{overlay.classList.remove("open");setTimeout(()=>overlay.remove(),220)};
@@ -431,7 +463,9 @@ function celebrateCompletedDay(){
 }
 
 function toggleTask(x){
-  const wasComplete=plannedToday().length>0 && plannedToday().every(isDone);
+  const beforePlan=plannedToday();
+  rememberDayPlan(today,beforePlan);
+  const wasComplete=beforePlan.length>0 && beforePlan.every(isDone);
   // Daily routines are independent calendar-day occurrences.
   if(isDailyTask(x)){
     const k=dayKey();
@@ -2057,8 +2091,8 @@ function pullCatalogTaskToday(x){
 }
 function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=new Map();for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
 function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
-function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=!!state.completedDays[dayKey(d)];el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
-function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),by={};tasks.forEach(x=>(by[x.room]??=[]).push(x));const completed=!!state.completedDays[dayKey(d)];box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}${completed?` ✨`:``}</h3><div class="small">${esc(themeFor(d))}</div>${completed?`<div class="completedDayBadge">✨ <b>Tag geschafft!</b><br><span class="small">Alle geplanten Aufgaben dieses Tages wurden erledigt.</span></div>`:""}${tasks.length?Object.entries(by).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)} · ${arr.length} geplante Aufgaben</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}<br><span class="small">Geplant am: ${esc(d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}))}</span></div>`).join("")}</div>`).join(""):`<div class="empty">Keine fest eingeplanten Aufgaben.</div>`}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),completed=calendarDayCompleted(d,tasks),done=completedTasksForDate(d,tasks),doneBy={};done.forEach(x=>(doneBy[x.room]??=[]).push(x));const plannedBy={};tasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}${completed?` ✨`:``}</h3><div class="small">${esc(themeFor(d))}</div>${completed?`<div class="completedDayBadge">✨ <b>Tag geschafft!</b><br><span class="small">Alle geplanten Aufgaben dieses Tages wurden erledigt.</span></div>`:""}${done.length?`<div class="detailTasks"><b>✓ Erledigte Arbeiten · ${done.length}</b>${Object.entries(doneBy).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)}</b>${arr.map(x=>`<div class="detailTask">✓ ${esc(x.text)}</div>`).join("")}</div>`).join("")}</div>`:`<div class="empty">An diesem Tag sind keine erledigten Arbeiten gespeichert.</div>`}${tasks.length&&!completed?`<div class="detailTasks"><b>Geplante Arbeiten · ${tasks.length}</b>${Object.entries(plannedBy).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)}</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}</div>`).join("")}</div>`).join("")}</div>`:""}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
 
 function syncCurrentDay(){
  const now=new Date();now.setHours(12,0,0,0);
