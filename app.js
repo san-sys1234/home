@@ -787,7 +787,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v216|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v219|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -838,7 +838,10 @@ function buildIntelligentPlan(){
  for(const d of dates){
    const k=dayKey(d);
    if(d<today)continue;
-   if(d.getDay()===0&&!state.sundayOptional[k])continue;
+   // Sunday stays a true household-free day for the automatic planner.
+   // Explicitly pulled-forward tasks live in todayExtras and are added separately,
+   // so opening Sunday for one manual task must never cause the planner to refill it.
+   if(d.getDay()===0)continue;
    // Fixed-rhythm routines are placed on their anchor weekday. Their own
    // cadence still determines WHEN they are due; the weekday only determines
    // the practical planning slot.
@@ -1040,7 +1043,7 @@ function buildIntelligentPlan(){
      const d=addDays(due,delta),k=dayKey(d);
      if(d<today||!days.has(k))continue;
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-     if(d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(d.getDay()===0)continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
@@ -1104,7 +1107,7 @@ function buildIntelligentPlan(){
      for(const sign of delta===0?[1]:[1,-1]){
        const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
        if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-       if(d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(d.getDay()===0)continue;
        const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
@@ -1126,7 +1129,7 @@ function buildIntelligentPlan(){
          const d=addDays(due,delta*sign),k=dayKey(d);
          if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-         if(d.getDay()===0&&!state.sundayOptional[k])continue;
+         if(d.getDay()===0)continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
          const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
@@ -1220,7 +1223,7 @@ function plannedDateForTask(x){
      for(const sign of delta===0?[1]:[1,-1]){
        const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
        if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
-       if(d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(d.getDay()===0)continue;
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
