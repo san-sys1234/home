@@ -287,8 +287,41 @@ function isDone(x,ref=today){
 function lastDone(x){return state.lastDone[lastKey(x)]||state.lastDone[x.key]||state.lastDone[x.id]||state.lastDone[x.canonical]||""}
 function canonicalTaskFor(x){
  const sourceKey=x?.sourceKey||x?.canonical;
- if(!sourceKey)return null;
- return CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey)||null;
+ if(sourceKey){
+   const found=CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey);
+   if(found)return found;
+ }
+ // Legacy room-focus/energy extras from older builds did not always carry
+ // their canonical key. Resolve them conservatively by the visible task
+ // identity so old completed work can be repaired without touching custom
+ // tasks or unrelated history.
+ const text=String(x?.text||'').trim();
+ const room=String(x?.room||'').trim();
+ const area=String(x?.area||'').trim();
+ if(!text||!room)return null;
+ return CATALOG.find(y=>String(y.text||'').trim()===text && String(y.room||'').trim()===room && (!area || !y.area || String(y.area).trim()===area))||null;
+}
+function repairTodayExtraLinks(){
+ if(state.__todayExtraRepairV232)return;
+ let changed=false;
+ for(const e of (state.todayExtras||[])){
+   const canonical=canonicalTaskFor(e);
+   if(!canonical)continue;
+   if(!e.sourceKey||e.sourceKey!==canonical.key){e.sourceKey=canonical.key;changed=true}
+   if(!e.canonical||e.canonical!==canonical.key){e.canonical=canonical.key;changed=true}
+   const eid=taskId(e);
+   const evidence=state.lastDone?.[lastKey(e)]===e.date || !!state.done?.[doneKey(e)] || (Array.isArray(state.completionHistory?.[eid]) && state.completionHistory[eid].includes(e.date));
+   if(evidence && e.date){
+     const current=lastDone(canonical);
+     if(!current || e.date>current){
+       state.lastDone[lastKey(canonical)]=e.date;
+       recordCompletion(canonical,e.date);
+       changed=true;
+     }
+   }
+ }
+ state.__todayExtraRepairV232=true;
+ if(changed)try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
 }
 function recordCompletion(x,dateKey){
  const id=taskId(x); if(!id)return;
@@ -574,6 +607,19 @@ function refreshCatalog(){
  invalidatePlanner();
 }
 refreshCatalog();
+// Data-safe repair: keep the existing localStorage state and repair only
+// missing canonical links on already stored Today extras. A backup is made
+// once before the repair so no user-created progress is lost.
+(function dataSafeRepairV232(){
+  try{
+    if(!localStorage.getItem("unser-zuhause-backup-v232")){
+      const current=localStorage.getItem(STORAGE);
+      if(current)localStorage.setItem("unser-zuhause-backup-v232",current);
+    }
+  }catch{}
+  repairTodayExtraLinks();
+  invalidatePlans();
+})();
 
 function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&!x.raffstore&&x.source!=="rotation"&&x.area!=="Alltag")}
 function basementRoom(d){const base=fromKey("2026-09-04"),diff=Math.round((d-base)/86400000);return BASEMENT[((Math.floor(diff/7)%BASEMENT.length)+BASEMENT.length)%BASEMENT.length]}
@@ -787,7 +833,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v216|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v232|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -838,7 +884,10 @@ function buildIntelligentPlan(){
  for(const d of dates){
    const k=dayKey(d);
    if(d<today)continue;
-   if(d.getDay()===0&&!state.sundayOptional[k])continue;
+   // Sunday stays a true household-free day for the automatic planner.
+   // Explicitly pulled-forward tasks live in todayExtras and are added separately,
+   // so opening Sunday for one manual task must never cause the planner to refill it.
+   if(d.getDay()===0)continue;
    // Fixed-rhythm routines are placed on their anchor weekday. Their own
    // cadence still determines WHEN they are due; the weekday only determines
    // the practical planning slot.
@@ -1040,7 +1089,7 @@ function buildIntelligentPlan(){
      const d=addDays(due,delta),k=dayKey(d);
      if(d<today||!days.has(k))continue;
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-     if(d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(d.getDay()===0)continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
@@ -1104,7 +1153,7 @@ function buildIntelligentPlan(){
      for(const sign of delta===0?[1]:[1,-1]){
        const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
        if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-       if(d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(d.getDay()===0)continue;
        const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
@@ -1126,7 +1175,7 @@ function buildIntelligentPlan(){
          const d=addDays(due,delta*sign),k=dayKey(d);
          if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-         if(d.getDay()===0&&!state.sundayOptional[k])continue;
+         if(d.getDay()===0)continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
          const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
@@ -1187,7 +1236,9 @@ function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDat
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
+ // Fixed-rhythm routines have one authoritative weekday. Old manual/legacy
+ // planned overrides must never make the catalog disagree with the planner.
+ if(!isFixedRhythmRoutine(x) && preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
  // The catalog must describe the exact same visible plan as Today. In particular,
  // after "Später" has been used, a task that is excluded by today's lock is NOT
  // allowed to keep showing "Geplant: heute" in the catalog.
@@ -1220,7 +1271,7 @@ function plannedDateForTask(x){
      for(const sign of delta===0?[1]:[1,-1]){
        const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
        if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
-       if(d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(d.getDay()===0)continue;
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
@@ -1886,7 +1937,7 @@ function roomFocusTasks(room,d=today){
   // catalog tasks such as “Kopfteil abstauben”.
   return CATALOG
     .filter(x=>focusRoomMatches(x,room) && !isDone(x))
-    .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
+    .filter(x=>!state.todayExtras.some(e=>e.date===day && !isDone({...e,key:e.id,source:"extra"}) && (e.sourceKey===taskId(x)||e.canonical===taskId(x)||(!e.sourceKey&&!e.canonical&&e.text===x.text&&e.room===x.room))))
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
 function renderRoomFocus(main, tasks){
@@ -2030,9 +2081,9 @@ function showEnergy(){
     const r=document.createElement("div");r.className="result";
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)}</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
-      state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
+      pullCatalogTaskToday(x);
       state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
-      save();render();showEnergy();
+      render();showEnergy();
     };
     box.appendChild(r);
   });
@@ -2084,6 +2135,20 @@ function pullCatalogTaskToday(x){
   }
   const existing=state.todayExtras.some(e=>e.date===day && (e.sourceKey===x.key || e.text===x.text && e.room===x.room));
   if(existing){toast("Diese Aufgabe ist heute schon eingeplant ❤️");return;}
+  // Handlauf abwischen: if this task had previously been postponed, the
+  // manual pull-forward must win. Otherwise the generic postponed-entry
+  // filter can hide the newly created extra even though it was explicitly
+  // pulled to today. Keep this narrowly scoped to the affected task.
+  if(x.room==="Stiegenhaus" && x.text==="Handlauf abwischen"){
+    const key=taskId(x);
+    for(const id of Object.keys(state.postponed||{})){
+      const p=state.postponed[id];
+      if(!p)continue;
+      if(id===key || p.key===key || p.sourceKey===key || (p.text===x.text && p.room===x.room)){
+        delete state.postponed[id];
+      }
+    }
+  }
   state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
   state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
   save();
