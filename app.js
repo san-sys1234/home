@@ -1,4 +1,5 @@
 /* Unser Zuhause – V216 · Routinen, Raum-Workflows & Kapazität */
+const APP_BUILD="V233";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -291,37 +292,18 @@ function canonicalTaskFor(x){
    const found=CATALOG.find(y=>taskId(y)===sourceKey||y.key===sourceKey||y.id===sourceKey);
    if(found)return found;
  }
- // Legacy room-focus/energy extras from older builds did not always carry
- // their canonical key. Resolve them conservatively by the visible task
- // identity so old completed work can be repaired without touching custom
- // tasks or unrelated history.
- const text=String(x?.text||'').trim();
- const room=String(x?.room||'').trim();
- const area=String(x?.area||'').trim();
+ // Legacy/temporary Today entries from older versions did not always carry
+ // their canonical catalog key. Resolve them by stable task content so that
+ // completing a pulled-forward task can never create a second, orphan task.
+ const text=String(x?.text||'').trim(), room=String(x?.room||'').trim(), area=String(x?.area||'').trim(), place=String(x?.place||'').trim();
  if(!text||!room)return null;
- return CATALOG.find(y=>String(y.text||'').trim()===text && String(y.room||'').trim()===room && (!area || !y.area || String(y.area).trim()===area))||null;
-}
-function repairTodayExtraLinks(){
- if(state.__todayExtraRepairV232)return;
- let changed=false;
- for(const e of (state.todayExtras||[])){
-   const canonical=canonicalTaskFor(e);
-   if(!canonical)continue;
-   if(!e.sourceKey||e.sourceKey!==canonical.key){e.sourceKey=canonical.key;changed=true}
-   if(!e.canonical||e.canonical!==canonical.key){e.canonical=canonical.key;changed=true}
-   const eid=taskId(e);
-   const evidence=state.lastDone?.[lastKey(e)]===e.date || !!state.done?.[doneKey(e)] || (Array.isArray(state.completionHistory?.[eid]) && state.completionHistory[eid].includes(e.date));
-   if(evidence && e.date){
-     const current=lastDone(canonical);
-     if(!current || e.date>current){
-       state.lastDone[lastKey(canonical)]=e.date;
-       recordCompletion(canonical,e.date);
-       changed=true;
-     }
-   }
+ const exact=CATALOG.filter(y=>String(y.text||'').trim()===text && String(y.room||'').trim()===room && (!area || !y.area || String(y.area).trim()===area));
+ if(exact.length===1)return exact[0];
+ if(place){
+   const byPlace=exact.filter(y=>!y.place || String(y.place).trim()===place);
+   if(byPlace.length===1)return byPlace[0];
  }
- state.__todayExtraRepairV232=true;
- if(changed)try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+ return null;
 }
 function recordCompletion(x,dateKey){
  const id=taskId(x); if(!id)return;
@@ -354,6 +336,8 @@ function markDone(x){
    recordCompletion(x,k);
    return;
  }
+ // Every catalog-origin task, including temporary Today/room-focus copies,
+ // must resolve to the canonical catalog identity before completion is stored.
  const base=x.source==="extra"?canonicalTaskFor(x):null;
  const target=base||x;
  state.done[doneKey(target)]=true;
@@ -362,6 +346,19 @@ function markDone(x){
  if(target!==x){state.done[doneKey(x)]=true;state.lastDone[lastKey(x)]=k;recordCompletion(x,k);}
  delete state.postponed[taskId(target)];
  if(target!==x)delete state.postponed[taskId(x)];
+ // If this was a pulled-forward catalog task, its temporary Today copy must
+ // never become a second scheduling identity. Keep the copy for the day log,
+ // but mirror the authoritative completion onto it.
+ if(x.source==="extra" && target){
+   const tid=taskId(target);
+   for(const e of (state.todayExtras||[])){
+     const matches=e===x || e.sourceKey===tid || e.canonical===tid || (e.text===target.text && e.room===target.room && (!e.area||!target.area||e.area===target.area));
+     if(matches){
+       e.sourceKey=tid;e.canonical=tid;
+       state.done[doneKey(e)]=true;state.lastDone[lastKey(e)]=k;recordCompletion(e,k);
+     }
+   }
+ }
 }
 
 function unmarkDone(x){
@@ -607,18 +604,38 @@ function refreshCatalog(){
  invalidatePlanner();
 }
 refreshCatalog();
-// Data-safe repair: keep the existing localStorage state and repair only
-// missing canonical links on already stored Today extras. A backup is made
-// once before the repair so no user-created progress is lost.
-(function dataSafeRepairV232(){
-  try{
-    if(!localStorage.getItem("unser-zuhause-backup-v232")){
-      const current=localStorage.getItem(STORAGE);
-      if(current)localStorage.setItem("unser-zuhause-backup-v232",current);
+
+// V233 data-repair: older room-focus/energy copies could exist without a
+// canonical catalog key. Repair their identity and any already-recorded
+// completion without touching user-entered dates, intervals or history.
+(function repairPulledForwardCatalogTasks(){
+  let changed=false;
+  for(const e of (state.todayExtras||[])){
+    const c=canonicalTaskFor(e);
+    if(!c)continue;
+    const tid=taskId(c), eid=taskId(e);
+    if(e.sourceKey!==tid || e.canonical!==tid){e.sourceKey=tid;e.canonical=tid;changed=true;}
+    // A legacy extra may have been checked off under its temporary identity.
+    // Its date is the authoritative completion date for that temporary copy.
+    const legacyLast=state.lastDone?.[lastKey(e)]||"";
+    const legacyDone=!!state.done?.[doneKey(e)];
+    const completionDate=legacyLast||((legacyDone&&e.date)?String(e.date):"");
+    if(completionDate && /^\d{4}-\d{2}-\d{2}$/.test(completionDate)){
+      const current=state.lastDone?.[lastKey(c)]||"";
+      if(!current || current<completionDate){
+        state.lastDone[lastKey(c)]=completionDate;
+        state.done[doneKey(c)]=true;
+        recordCompletion(c,completionDate);
+        changed=true;
+      }else{
+        recordCompletion(c,completionDate);
+      }
     }
-  }catch{}
-  repairTodayExtraLinks();
-  invalidatePlans();
+  }
+  if(changed){
+    state.__pulledForwardRepairV233=true;
+    try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+  }
 })();
 
 function roomItems(room){return CATALOG.filter(x=>x.room===room&&!x.window&&!x.raffstore&&x.source!=="rotation"&&x.area!=="Alltag")}
@@ -833,7 +850,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v232|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v219|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1236,9 +1253,7 @@ function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDat
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- // Fixed-rhythm routines have one authoritative weekday. Old manual/legacy
- // planned overrides must never make the catalog disagree with the planner.
- if(!isFixedRhythmRoutine(x) && preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
+ if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
  // The catalog must describe the exact same visible plan as Today. In particular,
  // after "Später" has been used, a task that is excluded by today's lock is NOT
  // allowed to keep showing "Geplant: heute" in the catalog.
@@ -1387,9 +1402,10 @@ function plannedToday(){
    if(seen.has(id))return false;
    seen.add(id);
    const p=postponedEntry(x);
-   // A postponed task is hidden only during the day on which the user pressed
-   // “Später”. On its authoritative new planned date it must re-enter Today.
-   if(p&&p.postponedUntil&&p.postponedUntil>dayKey(d))return false;
+   // A pulled-forward catalog task is an explicit TODAY action. An older
+   // postponement must never hide it. For normal planned tasks, a postponement
+   // remains authoritative until its stored date.
+   if(x.source!=="extra" && p&&p.postponedUntil&&p.postponedUntil>dayKey(d))return false;
    return true;
  })
 }
@@ -1937,7 +1953,7 @@ function roomFocusTasks(room,d=today){
   // catalog tasks such as “Kopfteil abstauben”.
   return CATALOG
     .filter(x=>focusRoomMatches(x,room) && !isDone(x))
-    .filter(x=>!state.todayExtras.some(e=>e.date===day && !isDone({...e,key:e.id,source:"extra"}) && (e.sourceKey===taskId(x)||e.canonical===taskId(x)||(!e.sourceKey&&!e.canonical&&e.text===x.text&&e.room===x.room))))
+    .filter(x=>!state.todayExtras.some(e=>e.date===day && (e.sourceKey===taskId(x)||e.canonical===taskId(x))))
     .sort((a,b)=>nextDue(a,d)-nextDue(b,d)||taskWeight(b)-taskWeight(a)||String(a.text).localeCompare(String(b.text),"de"));
 }
 function renderRoomFocus(main, tasks){
@@ -2081,9 +2097,9 @@ function showEnergy(){
     const r=document.createElement("div");r.className="result";
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)}</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
-      pullCatalogTaskToday(x);
+      state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
       state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
-      render();showEnergy();
+      save();render();showEnergy();
     };
     box.appendChild(r);
   });
@@ -2133,27 +2149,38 @@ function pullCatalogTaskToday(x){
   if(today.getDay()===0 && !state.sundayOptional[day]){
     state.sundayOptional[day]=true;
   }
-  const existing=state.todayExtras.some(e=>e.date===day && (e.sourceKey===x.key || e.text===x.text && e.room===x.room));
-  if(existing){toast("Diese Aufgabe ist heute schon eingeplant ❤️");return;}
-  // Handlauf abwischen: if this task had previously been postponed, the
-  // manual pull-forward must win. Otherwise the generic postponed-entry
-  // filter can hide the newly created extra even though it was explicitly
-  // pulled to today. Keep this narrowly scoped to the affected task.
-  if(x.room==="Stiegenhaus" && x.text==="Handlauf abwischen"){
-    const key=taskId(x);
-    for(const id of Object.keys(state.postponed||{})){
-      const p=state.postponed[id];
-      if(!p)continue;
-      if(id===key || p.key===key || p.sourceKey===key || (p.text===x.text && p.room===x.room)){
-        delete state.postponed[id];
-      }
-    }
+  const canonical=canonicalTaskFor(x)||x;
+  const tid=taskId(canonical);
+  // A pulled-forward catalog task is a temporary occurrence for TODAY. It
+  // must always retain the canonical catalog identity. If an older copy is
+  // already present, repair it rather than creating another copy.
+  let existing=state.todayExtras.find(e=>e.date===day && (e.sourceKey===tid || e.canonical===tid || (e.text===canonical.text && e.room===canonical.room && (!e.area||!canonical.area||e.area===canonical.area))));
+
+  // Explicitly pulling a task today must win over an older postponement for
+  // every catalog task, not just the historical Handlauf special case.
+  for(const id of Object.keys(state.postponed||{})){
+    const p=state.postponed[id];
+    if(!p)continue;
+    const pKey=String(p.sourceKey||p.canonical||p.key||'');
+    const same=pKey===tid || String(p.text||'')===String(canonical.text||'') && String(p.room||'')===String(canonical.room||'') && (!canonical.area || !p.area || String(p.area)===String(canonical.area));
+    if(same)delete state.postponed[id];
   }
-  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,place:x.place||"",description:x.description||"",source:"extra",sourceKey:x.key,canonical:x.key,interval:x.interval,start:x.start,manual:true});
-  state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
+
+  if(existing){
+    existing.sourceKey=tid;existing.canonical=tid;
+    existing.text=canonical.text;existing.room=canonical.room;existing.area=canonical.area;
+    existing.place=canonical.place||existing.place||'';existing.description=canonical.description||existing.description||'';
+    existing.interval=canonical.interval;existing.start=canonical.start;existing.manual=true;
+    save();
+    toast(`„${canonical.text}“ ist heute bereits eingeplant ❤️`);
+    return;
+  }
+  state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:canonical.text,room:canonical.room,area:canonical.area,place:canonical.place||"",description:canonical.description||"",source:"extra",sourceKey:tid,canonical:tid,interval:canonical.interval,start:canonical.start,manual:true});
+  state.energySeen=[...(state.energySeen||[]),tid].slice(-200);
   save();
-  toast(`„${x.text}“ für heute vorgezogen ❤️`);
+  toast(`„${canonical.text}“ für heute vorgezogen ❤️`);
 }
+
 function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=new Map();for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
 function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
