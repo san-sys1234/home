@@ -1,5 +1,5 @@
 /* Unser Zuhause – V216 · Routinen, Raum-Workflows & Kapazität */
-const APP_BUILD="V233";
+const APP_BUILD="V235";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -244,6 +244,13 @@ function loadState(){
  return s
 }
 let state=loadState();
+// V235 safety backup: keep one untouched snapshot of the currently loaded data
+// before any new repair/normalization logic runs. The existing storage key is
+// unchanged, so the Home-screen bookmark continues to use the same data.
+(function backupBeforeV235(){
+  const backupKey="unser-zuhause-v235-backup";
+  try{if(!localStorage.getItem(backupKey))localStorage.setItem(backupKey,JSON.stringify(state))}catch{}
+})();
 // V168 repair: earlier builds could leave daily routines marked as completed
 // for the current day even when the user had not checked them. Clear only the
 // current-day daily ledger once; historical days remain untouched.
@@ -799,19 +806,20 @@ function workPackage(x){
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
  if(d.getDay()===0)return 0;
- // Deliberately leave breathing room. This is a soft capacity; the hard
- // +/-30-day rule may override it only when necessary.
- if(d.getDay()===6)return 4;
- if(d.getDay()===3)return 5;
- if(d.getDay()===5)return 5;
- return 5;
+ // Household work should feel light, not like a second full-time job.
+ // Keep the room/work-package logic, but deliberately portion each room into
+ // smaller, manageable chunks. Fixed Tuesday hygiene remains protected below.
+ if(d.getDay()===6)return 2;
+ if(d.getDay()===3)return 3;
+ if(d.getDay()===5)return 3;
+ return 4;
 }
 function dayTaskLimit(d){
- // Capacity is a real ceiling on the number of visible work items. The weekly
- // hygiene block is the one deliberate exception: all WC/basin sub-items stay
- // together, but nothing else may inflate that day.
+ // Keep the visible list small as well as the weighted capacity. The weekly
+ // hygiene block is the one deliberate exception: its fixed routine may contain
+ // more individual checklist items, but no unrelated flexible work may be added.
  if(d.getDay()===0)return 0;
- return d.getDay()===2 ? 20 : 14;
+ return d.getDay()===2 ? 12 : 8;
 }
 function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
  const limit=dayTaskLimit(d);
@@ -822,10 +830,10 @@ function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
 }
 function dayBreathingScore(d,arr){
  const used=arr?arr._weight||0:0;
- if(!arr||!arr.length)return -32;
- if(used<=2)return -20;
- if(used<=4)return -8;
- return used*4;
+ if(!arr||!arr.length)return -28;
+ if(used<=1)return -18;
+ if(used<=2)return -8;
+ return used*5;
 }
 function adjacentLoadPenalty(days,d){
  let p=0;
@@ -837,20 +845,42 @@ function adjacentLoadPenalty(days,d){
  }
  return p;
 }
+function floorOf(x){
+ const a=String(x?.area||"").toLowerCase();
+ if(a.includes("keller")||a.includes("kg"))return "KG";
+ if(a.includes("og"))return "OG";
+ if(a.includes("eg"))return "EG";
+ if(String(x?.room||"")==="Stiegenhaus")return "EG/OG";
+ return "";
+}
+function efficiencyWorkflow(x){
+ const t=String(x?.text||"").toLowerCase();
+ if(/boden wischen|boden bei bedarf reinigen|stufen wischen/.test(t))return "boden-wischen";
+ if(/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/.test(t))return "saugen";
+ if(/fenster|fensterbank|raffstore|sonnenschutz/.test(t))return "fenster";
+ if(/abwischen|reinigen|abstauben|entstauben|lichtschalter|türklink|türrahmen|handlauf|geländer|spiegel/.test(t))return roomWorkflow(x);
+ return roomWorkflow(x);
+}
 function roomSpreadPenalty(arr,x){
  const rooms=new Set((arr||[]).map(y=>y.room).filter(Boolean));
  const sameRoom=rooms.has(x?.room);
- // Prefer concentrating work in rooms already active on that day. Opening a
- // new room is allowed when capacity permits, but it carries a clear score cost.
  if(!arr||!arr.length)return 0;
- return sameRoom ? Math.max(0,rooms.size-1)*3 : 80 + rooms.size*18;
+ if(sameRoom)return Math.max(0,rooms.size-1)*3;
+ const fx=floorOf(x),wf=efficiencyWorkflow(x);
+ const sameFloor=!!fx && (arr||[]).some(y=>floorOf(y)===fx);
+ const sameWorkflow=!!wf && (arr||[]).some(y=>efficiencyWorkflow(y)===wf);
+ // Room themes stay primary. A small efficiency bridge is allowed only when
+ // the extra room is on the same floor and uses the same practical workflow.
+ if(sameFloor&&sameWorkflow)return 10 + rooms.size*5;
+ if(sameFloor)return 42 + rooms.size*12;
+ return 85 + rooms.size*18;
 }
 function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedRhythmRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v219|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v235|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1313,6 +1343,17 @@ function themeFor(d){
  if(d.getDay()===0)return "Haushaltsfrei ❤️";
  const tasks=plannedForDate(d).filter(x=>x.source!=="rotation"&&!isDailyTask(x));
  if(!tasks.length)return "🌿 Puffer & Luft";
+ // The room remains the visible theme. Efficiency may add one nearby room,
+ // but it never replaces the main room focus with a generic category.
+ const roomScores={};
+ for(const x of tasks){if(!x.room)continue;roomScores[x.room]=(roomScores[x.room]||0)+taskWeight(x)}
+ const primaryRoom=Object.entries(roomScores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0];
+ if(primaryRoom){
+   const floor=floorOf(tasks.find(x=>x.room===primaryRoom));
+   const extraRooms=[...new Set(tasks.map(x=>x.room).filter(r=>r&&r!==primaryRoom))];
+   const suffix=extraRooms.length===1?` · + ${extraRooms[0]}`:"";
+   return `${floor?floor+" · ":""}${primaryRoom}${suffix}`;
+ }
  const cat=dominantCategory(tasks);
  const labels={
    "🪟 Fenster & Fensterbänke":"🪟 Fenster & frische Aussichten",
@@ -2097,7 +2138,7 @@ function showEnergy(){
     const r=document.createElement("div");r.className="result";
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)}</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
-      state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra"});
+      state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra",sourceKey:taskId(x),canonical:taskId(x),interval:x.interval,start:x.start,manual:true});
       state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
       save();render();showEnergy();
     };
