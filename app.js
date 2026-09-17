@@ -1,5 +1,5 @@
-/* Unser Zuhause – V216 · Routinen, Raum-Workflows & Kapazität */
-const APP_BUILD="V235";
+/* Unser Zuhause – V236 · luftige Raum-Themen mit sanfter Effizienz */
+const APP_BUILD="V237";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -12,28 +12,28 @@ const DAILY=[
  ["🔎 Tagescheck",["Restmüll kontrollieren","Biomüll kontrollieren","Wäsche nur bei Bedarf starten","Kühlschrank nur bei Bedarf prüfen","Toiletten nur bei Bedarf prüfen","Küchenboden bei Essensresten reinigen","Sichtbare Bodenflecken beseitigen"]]
 ];
 const ROTATIONS=[
- {text:"Türklinken reinigen",interval:7,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"Türblätter gründlich reinigen",interval:75,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"Sockelleisten reinigen",interval:42,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"Decken-/Wandecken auf Spinnweben prüfen",interval:30,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"Lichtschalter außen reinigen",interval:30,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"Steckdosen außen reinigen",interval:75,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Türklinken reinigen",interval:60,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Türblätter gründlich reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Sockelleisten reinigen",interval:120,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Decken-/Wandecken auf Spinnweben prüfen",interval:90,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Lichtschalter außen reinigen",interval:120,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
+ {text:"Steckdosen außen reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
  {text:"🏛️ Stuck vorsichtig trocken entstauben",interval:120,rooms:["Wohnzimmer","Flur","Stiegenhaus"],area:"Raum"},
  {text:"Vorhangstangen / Schienen reinigen",interval:180,rooms:["Wohnzimmer","Essbereich","Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2","Ankleidezimmer"],area:"Raum"},
  {text:"Erreichbare Lampen reinigen",interval:120,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
- {text:"🧊 Kühlschrank prüfen und bei Bedarf reinigen",interval:30,rooms:["Küche"],area:"EG"},
+ {text:"🧊 Kühlschrank prüfen und bei Bedarf reinigen",interval:60,rooms:["Küche"],area:"EG"},
  {text:"🔥 Backofen gründlich reinigen",interval:75,rooms:["Küche"],area:"EG"},
- {text:"🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller",interval:30,rooms:["Küche"],area:"EG"},
- {text:"🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",interval:30,rooms:["Waschküche"],area:"Keller"},
- {text:"🧖 Sauna reinigen / pflegen",interval:30,rooms:["Saunaraum"],area:"OG"},
+ {text:"🍽️ Geschirrspüler: Filter, Dichtung & Pflegeprogramm nach Hersteller",interval:90,rooms:["Küche"],area:"EG"},
+ {text:"🧺 Waschmaschine: Waschmittelschublade & Dichtung reinigen",interval:60,rooms:["Waschküche"],area:"Keller"},
+ {text:"🧖 Sauna reinigen / pflegen",interval:60,rooms:["Saunaraum"],area:"OG"},
  {text:"🛏️ Matratzen wenden/pflegen nach Herstellerangabe",interval:180,rooms:["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"],area:"OG"},
  {text:"🧼 Fugen & Silikon kontrollieren / materialgerecht reinigen",interval:90,rooms:["Gäste-WC","Kinderbad","Bad","Eltern-WC"],area:"Raum"},
- {text:"🔥 Kamin: erkaltete Asche entfernen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kamin: erkaltete Asche entfernen",interval:60,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Kamin: Feuerraum auskehren",interval:60,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Kaminrost reinigen",interval:60,rooms:["Wohnzimmer"],area:"EG"},
- {text:"🔥 Kaminbesteck abwischen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Kaminbesteck abwischen",interval:60,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Kaminholz schlichten",interval:14,rooms:["Wohnzimmer"],area:"EG"},
- {text:"🔥 Holzablage reinigen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
+ {text:"🔥 Holzablage reinigen",interval:60,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Bereich direkt vor Kamin gründlich absaugen",interval:14,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Ruß-/Aschespuren entfernen",interval:30,rooms:["Wohnzimmer"],area:"EG"},
  {text:"🔥 Kaminverkleidung materialgerecht reinigen",interval:90,rooms:["Wohnzimmer"],area:"EG"},
@@ -532,20 +532,20 @@ function catalogInterval(x){
  const hygieneRooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(hygieneRooms.includes(x?.room||"") && (isWCSubtask(x) || (/waschbecken/.test(t) && !/armatur/.test(t))))return 7;
  if(/toilette|\bwc\b|wc-bürste|toilettenrand/.test(t))return 7;
- if(/waschbecken|armatur|spüle|kochfeld|herd|arbeitsplatte|esstisch|hochstuhl|sichtbare.*bodenflecken/.test(t))return 7;
- if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden/.test(t))return 7;
- if(/boden wischen/.test(t))return 10;
+ if(/waschbecken|armatur|spüle|kochfeld|herd|arbeitsplatte|esstisch|hochstuhl|sichtbare.*bodenflecken/.test(t))return 14;
+ if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden/.test(t))return 14;
+ if(/boden wischen/.test(t))return 14;
  if(/handtücher/.test(t))return 7;
  if(/bettwäsche/.test(t))return 14;
  if(/müll|papierkorb|mülleimer/.test(t))return 7;
- if(/türklink|lichtschalter|steckdosen/.test(t))return 30;
- if(/fensterbank|spinnweb|abstauben|abwischen/.test(t))return 30;
- if(/fugen|silikon|dunstabzugfilter|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 60;
- if(/backofen|türblätter|türrahmen|zargen/.test(t))return 90;
- if(/kaminholz|polster|teppich|matratze|vorhang|vorhangstange/.test(t))return 180;
+ if(/türklink|lichtschalter|steckdosen/.test(t))return 90;
+ if(/fensterbank|spinnweb|abstauben|abwischen/.test(t))return 60;
+ if(/fugen|silikon|dunstabzugfilter|kühlschrank|geschirrspüler|waschmaschine|trockner|sauna/.test(t))return 120;
+ if(/backofen|türblätter|türrahmen|zargen/.test(t))return 180;
+ if(/kaminholz|polster|teppich|matratze|vorhang|vorhangstange/.test(t))return 365;
  if(/raffstore|sonnenschutz/.test(t))return 365;
- if(/fenster/.test(t))return 180;
- return 60;
+ if(/fenster/.test(t))return 365;
+ return 120;
 }
 
 function windowEntries(){
@@ -659,6 +659,19 @@ function raffstoreFirstDate(x,ref=today){
  if(!group)return null;
  return windowDate({window:true,windowKey:`${area}|${room}|${idx+1}`,windowGroup:group},ref);
 }
+function isFrequentMaintenance(x){
+ const t=(x?.text||"").toLowerCase();
+ if(/müll|papierkorb|mülleimer/.test(t))return true;
+ if(/boden saugen|ecken absaugen|unter .* saugen|küchenboden|boden wischen/.test(t))return true;
+ if(/arbeitsplatten|kochfeld|herd gründlich|spüle entkalken|esstischoberseite|sichtbare.*bodenflecken/.test(t))return true;
+ return false;
+}
+function frequentInterval(x){
+ const t=(x?.text||"").toLowerCase();
+ if(/müll|papierkorb|mülleimer/.test(t))return 7;
+ return 14;
+}
+
 function rawNextDue(x,ref=today){
  const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
  if(/^\d{4}-\d{2}-\d{2}$/.test(manual||""))return explicitNext({...x,start:manual},ref);
@@ -672,12 +685,31 @@ function rawNextDue(x,ref=today){
    if(last&&sameDay(d,fromKey(last)))d=addDays(d,365);
    return d;
  }
- if(x.start)return explicitNext(x,ref);
  if(x.source==="rotation"){const interval=catalogInterval(x),last=lastDone(x);let d=last?addDays(fromKey(last),interval):rotationAnchor(x);while(d<ref)d=addDays(d,interval);return d}
- if(BASEMENT.includes(x.room)){const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));const firstFriday=fromKey("2026-09-04");let d=addDays(firstFriday,Math.floor(idx/3)*7);while(d<ref)d=addDays(d,7*BASEMENT.length);return d}
+ // Weekly hygiene: WC/toilet, WC brush/holder and the actual washbasin are
+ // always due again seven days after completion. Hand towels follow the same
+ // weekly rhythm. Their fixed weekday is applied only to the planned date.
+ if(isFixedWeeklyRoutine(x) || /handtücher wechseln/.test((x.text||"").toLowerCase())){
+   const last=lastDone(x);
+   let d=last?addDays(fromKey(last),7):nextDow(fromKey("2026-08-31"),2);
+   while(d<ref)d=addDays(d,7);
+   return d;
+ }
+ if(BASEMENT.includes(x.room)){
+   const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key)),firstFriday=fromKey("2026-09-04");
+   if(isFrequentMaintenance(x)){const interval=frequentInterval(x),last=lastDone(x);let d=last?addDays(fromKey(last),interval):addDays(firstFriday,idx%7);while(d<ref)d=addDays(d,interval);return d;}
+   let d=addDays(firstFriday,idx*7);while(d<ref)d=addDays(d,Math.max(1,items.length)*7);return d;
+ }
+ // A small set of genuinely frequent maintenance jobs keeps a short cadence.
+ // Everything else remains on the light room rotation.
+ if(isFrequentMaintenance(x)){
+   const interval=frequentInterval(x),last=lastDone(x),w=weeklyDate(x)||ref;
+   let d=last?addDays(fromKey(last),interval):w;
+   while(d<ref)d=addDays(d,interval);
+   return d;
+ }
  const w=weeklyDate(x);if(!w)return ref;
- const items=roomItems(x.room),cycleWeeks=Math.max(1,Math.ceil(items.length/3));
- const last=lastDone(x);
+ const items=roomItems(x.room),cycleWeeks=Math.max(1,items.length),last=lastDone(x);
  let d=last?addDays(fromKey(last),cycleWeeks*7):w;
  while(d<ref)d=addDays(d,cycleWeeks*7);
  return d;
@@ -701,12 +733,16 @@ function rawDueOn(x,d){
  if(BASEMENT.includes(x.room)){return sameDay(rawNextDue(x,d),d);}
  const w=weeklyDate(x);
  if(!w)return false;
- // Standard room tasks are a rotation, not weekly repetition of every task.
- // The room's tasks are distributed over a cycle so that only a small portion
- // of each room is due at once.
- const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key));
- const slots=Math.max(1,Math.ceil(items.length/3));
- const diff=Math.round((d-w)/86400000);
+ if(isFixedWeeklyRoutine(x) || /handtücher wechseln/.test((x.text||"").toLowerCase())){
+   const due=rawNextDue(x,d);
+   return sameDay(due,d);
+ }
+ if(isFrequentMaintenance(x)){
+   const interval=frequentInterval(x),last=lastDone(x),anchor=last?addDays(fromKey(last),interval):w;
+   if(d<anchor)return false;
+   return Math.round((d-anchor)/86400000)%interval===0;
+ }
+ const items=roomItems(x.room),slots=Math.max(1,items.length),diff=Math.round((d-w)/86400000);
  return diff>=0 && diff%(slots*7)===0;
 }
 function isWCSubtask(x){
@@ -809,17 +845,17 @@ function dayBudget(d){
  // Household work should feel light, not like a second full-time job.
  // Keep the room/work-package logic, but deliberately portion each room into
  // smaller, manageable chunks. Fixed Tuesday hygiene remains protected below.
- if(d.getDay()===6)return 2;
- if(d.getDay()===3)return 3;
- if(d.getDay()===5)return 3;
- return 4;
+ if(d.getDay()===6)return 1;
+ if(d.getDay()===3)return 2;
+ if(d.getDay()===5)return 2;
+ return 3;
 }
 function dayTaskLimit(d){
  // Keep the visible list small as well as the weighted capacity. The weekly
  // hygiene block is the one deliberate exception: its fixed routine may contain
  // more individual checklist items, but no unrelated flexible work may be added.
  if(d.getDay()===0)return 0;
- return d.getDay()===2 ? 12 : 8;
+ return d.getDay()===2 ? 10 : 6;
 }
 function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
  const limit=dayTaskLimit(d);
