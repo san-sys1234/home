@@ -1,15 +1,14 @@
-/* Unser Zuhause – V244 · gebündelte Alltagstätigkeiten + ausgewogene Haushaltsthemen */
-const APP_BUILD="V244";
+/* Unser Zuhause – V245 · zentrale Planung für Katalog, Kalender & Heute */
+const APP_BUILD="V245";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
- ["☀️ Morgenroutine",["Schlafzimmer kurz fertig machen · Bett, lüften, Kleidung/Schmutzwäsche und Vorhänge/Raffstores richten","Küche für den Tag bereit machen · Geschirrspüler ausräumen, Frühstückssachen wegräumen und sichtbare Küchen-/Essflächen kurz ordnen","Eingangsbereich kurz ordnen · Schuhe, Jacken & Taschen an ihren Platz"]],
- ["🍽️ Nach Mahlzeiten",["Nach der Mahlzeit kurz zurücksetzen · Geschirr in den Geschirrspüler, Tisch/Hochstuhl und bei Bedarf Arbeitsfläche abwischen, sichtbare Essensreste entfernen"]],
- ["🌙 Abendreset · max. 10 Minuten",["Küche & Essplatz für morgen zurücksetzen · Geschirrspüler einräumen/einschalten, Spüle/Herd/Flächen kurz wischen und Müll kontrollieren","Wohnbereich & Garderobe kurz zurücksetzen · sichtbare Dinge an ihren Platz, Kleidung wegräumen, Vorhänge/Raffstores schließen"]],
- ["🔎 Tagescheck",["Wäsche & Haushalt kurz prüfen · Wäsche nur bei Bedarf starten, Rest-/Biomüll kontrollieren und offensichtliche kleine Verschmutzungen sofort beseitigen"]]
+ ["☀️ Morgenroutine",["Kurz in den Tag starten · Bett richten, lüften und sichtbare Dinge aus Schlafzimmer/Eingang an ihren Platz legen"]],
+ ["🍽️ Küche & Mahlzeiten",["Nach Bedarf einmal gemeinsam zurücksetzen · Geschirr, Tisch/Hochstuhl, Küchenflächen und sichtbare Essensreste erledigen"]],
+ ["🌙 Abendreset",["Haus kurz für morgen zurücksetzen · Küche/Essplatz und Wohnbereich ordnen, Müll/Wäsche nur bei Bedarf erledigen"]]
 ];
 const ROTATIONS=[
  {text:"Türklinken reinigen",interval:60,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
@@ -947,7 +946,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v244|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v245|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.plannedOverrides||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -996,12 +995,23 @@ function buildIntelligentPlan(){
  // a light day into a mixed-room dumping ground.
  // ---------------------------------------------------------------------------
 
- // 1) Persisted user choices and fixed routines have absolute priority.
- // "Später" is a planning choice only; it never changes the due date.
+ // 1) Persisted user choices have absolute priority and are inserted into
+ // the SAME canonical plan that feeds the calendar, Today and the catalog.
+ // This is crucial: a plannedOverride must never be displayed by the catalog
+ // without also existing on that exact date in the calendar.
  for(const x of CATALOG){
    if(isDailyTask(x)||isDone(x))continue;
-   const id=taskId(x),p=postponedEntry(x),pd=p?.postponedUntil?fromKey(p.postponedUntil):null;
-   if(pd&&pd>=today&&Math.abs(Math.round((pd-nextDue(x,today))/86400000))<=30&&usable(pd)&&canUseToday(x)){
+   const id=taskId(x),due=nextDue(x,today);
+   const override=normalizeDateKey(state.plannedOverrides?.[id]);
+   if(override){
+     const pd=fromKey(override);
+     if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30&&usable(pd)&&canUseToday(x)){
+       add(pd,x);
+       continue;
+     }
+   }
+   const p=postponedEntry(x),pd=p?.postponedUntil?fromKey(p.postponedUntil):null;
+   if(pd&&pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30&&usable(pd)&&canUseToday(x)){
      add(pd,x);
    }
  }
@@ -1192,58 +1202,11 @@ function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.yea
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
- const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
- const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
- // The catalog must describe the exact same visible plan as Today. In particular,
- // after "Später" has been used, a task that is excluded by today's lock is NOT
- // allowed to keep showing "Geplant: heute" in the catalog.
- const lockKey=dayKey(today);
- const locked=Array.isArray(state.todayPlanLock?.[lockKey])?new Set(state.todayPlanLock[lockKey]):null;
- const allowedToday=!locked || locked.has(id) || x.source==="daily" || x.source==="extra";
+ const plan=buildIntelligentPlan(),id=taskId(x);
+ // Single source of truth: the catalog never invents or mutates a date.
+ // Whatever the planner puts into plan.next is exactly what Calendar/Heute use.
  const d=plan.next.get(id);
- if(d instanceof Date && d>=today){
-   const dk=dayKey(d);
-   if(dk!==lockKey || allowedToday){
-     if(Math.abs(Math.round((d-due)/86400000))<=30)return d;
-   }
- }
- // Search the actual planner days, not a separately calculated fallback.
- for(const [k,arr] of plan.days){
-   if(!arr.some(y=>taskId(y)===id))continue;
-   if(k===lockKey && !allowedToday)continue;
-   const dd=fromKey(k);
-   if(dd>=today && Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
- }
- // Absolute display invariant: an active task may NEVER be shown without a
- // concrete plan. If an older/overloaded planner state somehow failed to expose
- // a date, allocate one directly into the same planner cache. This is a final
- // safety net, not a second planning system: Today, calendar and catalog all
- // read the same mutated plan object afterwards.
- if(!isDailyTask(x)){
-   let fallbackDue=due instanceof Date && !Number.isNaN(due.getTime())?due:new Date(today);
-   let best=null;
-   for(let delta=0;delta<=30;delta++){
-     for(const sign of delta===0?[1]:[1,-1]){
-       const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
-       if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
-       if(d.getDay()===0)continue;
-       if(k===lockKey&&locked&&!locked.has(id))continue;
-       const arr=plan.days.get(k);
-       if(arr.some(y=>taskId(y)===id))continue;
-       const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
-       const score=used*10+(sameTheme?0:20)+Math.abs(delta);
-       if(!best||score<best.score)best={k,d,score};
-     }
-   }
-   if(best){
-     const arr=plan.days.get(best.k);
-     arr.push(x);
-     arr._weight=(arr._weight||0)+taskWeight(x);
-     plan.next.set(id,best.d);
-     return best.d;
-   }
- }
+ if(d instanceof Date && d>=today)return d;
  return null;
 }
 function plannedDateLabel(x){
