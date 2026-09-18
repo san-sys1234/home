@@ -1,5 +1,5 @@
-/* Unser Zuhause – V240 · schlanke Haushaltsthemen statt Aufgaben-Splitter */
-const APP_BUILD="V240";
+/* Unser Zuhause – V241 · Heute repariert + schlanke Haushaltsthemen */
+const APP_BUILD="V241";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1423,6 +1423,19 @@ function themeFor(d){
  return primary||"🌿 Puffer & Luft";
 }
 
+function dailyTasks(){
+ const out=[];
+ for(const [group,tasks] of DAILY){
+   for(const text of tasks){
+     const key=`daily|${text}`;
+     if(catalogDeleted(key))continue;
+     const e=editFor(key)||{};
+     out.push({key,id:key,text:e.text??text,room:e.room??"Alltag",area:e.area??"Haushalt",place:e.place??"",description:e.description??"",group,source:"daily",editable:true});
+   }
+ }
+ return out;
+}
+function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
 function groupFor(x){if(x.window)return "🪟 Fenster & Fensterbänke";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
 // A task category is deliberately more granular than the room/floor group. It is
 // used by the planner to bundle compatible work together, while groupFor()
