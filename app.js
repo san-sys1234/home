@@ -1,5 +1,5 @@
 /* Unser Zuhause – V241 · Heute repariert + schlanke Haushaltsthemen */
-const APP_BUILD="V241";
+const APP_BUILD="V242";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -801,8 +801,16 @@ function fixedRoutineDate(x,ref=today){
  if(!isFixedRhythmRoutine(x))return null;
  const due=nextDue(x,ref);
  const d=new Date(due); d.setHours(12,0,0,0);
- // Hygiene block: Tuesday. Bed linen: Thursday. Hand towels: Tuesday.
- const dow=/bettwäsche wechseln/.test((x.text||"").toLowerCase())?4:2;
+ // Fixed routines are distributed by physical theme/room across the week.
+ // All weekly hygiene tasks belonging to one bathroom stay together, while
+ // bedrooms get their own bed/linen theme. This prevents several rooms from
+ // landing on one day while keeping every routine reliably scheduled.
+ const room=String(x?.room||"");
+ const roomDow={
+   "Gäste-WC":1, "Kinderbad":2, "Bad":3, "Eltern-WC":4,
+   "Schlafzimmer":5, "Kinderzimmer 1":6, "Kinderzimmer 2":2
+ }[room];
+ const dow=roomDow===undefined?(/bettwäsche wechseln/.test((x.text||"").toLowerCase())?5:2):roomDow;
  const delta=(dow-d.getDay()+7)%7;
  return addDays(d,delta);
 }
