@@ -1,15 +1,15 @@
-/* Unser Zuhause – V241 · Heute repariert + schlanke Haushaltsthemen */
-const APP_BUILD="V243";
+/* Unser Zuhause – V244 · gebündelte Alltagstätigkeiten + ausgewogene Haushaltsthemen */
+const APP_BUILD="V244";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
 const LEGACY_STORAGE_OLD2="unser-zuhause-v139";
 const LEGACY_STORAGE_2="unser-zuhause-v109";
 const DAILY=[
- ["☀️ Morgenroutine",["Bett machen","Schlafzimmer kurz lüften","Kleidung wegräumen","Schmutzwäsche in den Wäschekorb","Vorhänge/Raffstores öffnen","Geschirrspüler ausräumen","Frühstücksgeschirr einräumen","Küchenarbeitsfläche abwischen","Esstisch abwischen","Hochstuhl/Essplatz sauber machen","Schuhe, Jacken & Taschen kurz ordnen"]],
- ["🍽️ Nach Mahlzeiten",["Geschirr in den Geschirrspüler","Tisch abwischen","Hochstuhl/Essplatz sauber machen","Heruntergefallenes Essen vom Boden entfernen","Arbeitsfläche bei Bedarf abwischen"]],
- ["🌙 Abend · max. 10 Minuten",["Geschirrspüler einräumen & einschalten","Küchenflächen kurz abwischen","Spüle & Herd kurz sauber machen","Esstisch + Hochstuhl/Essplatz","Müll kontrollieren","Wohnzimmer grob zurücksetzen","Garderobe kurz ordnen","Kleidung wegräumen","Vorhänge/Raffstores schließen"]],
- ["🔎 Tagescheck",["Restmüll kontrollieren","Biomüll kontrollieren","Wäsche nur bei Bedarf starten","Kühlschrank nur bei Bedarf prüfen","Toiletten nur bei Bedarf prüfen","Küchenboden bei Essensresten reinigen","Sichtbare Bodenflecken beseitigen"]]
+ ["☀️ Morgenroutine",["Schlafzimmer kurz fertig machen · Bett, lüften, Kleidung/Schmutzwäsche und Vorhänge/Raffstores richten","Küche für den Tag bereit machen · Geschirrspüler ausräumen, Frühstückssachen wegräumen und sichtbare Küchen-/Essflächen kurz ordnen","Eingangsbereich kurz ordnen · Schuhe, Jacken & Taschen an ihren Platz"]],
+ ["🍽️ Nach Mahlzeiten",["Nach der Mahlzeit kurz zurücksetzen · Geschirr in den Geschirrspüler, Tisch/Hochstuhl und bei Bedarf Arbeitsfläche abwischen, sichtbare Essensreste entfernen"]],
+ ["🌙 Abendreset · max. 10 Minuten",["Küche & Essplatz für morgen zurücksetzen · Geschirrspüler einräumen/einschalten, Spüle/Herd/Flächen kurz wischen und Müll kontrollieren","Wohnbereich & Garderobe kurz zurücksetzen · sichtbare Dinge an ihren Platz, Kleidung wegräumen, Vorhänge/Raffstores schließen"]],
+ ["🔎 Tagescheck",["Wäsche & Haushalt kurz prüfen · Wäsche nur bei Bedarf starten, Rest-/Biomüll kontrollieren und offensichtliche kleine Verschmutzungen sofort beseitigen"]]
 ];
 const ROTATIONS=[
  {text:"Türklinken reinigen",interval:60,rooms:["Wohnzimmer","Essbereich","Küche","Garderobe","Eingangsbereich","Flur","Büro","Abstellraum","Speis","Gäste-WC","Kinderbad","Bad","Eltern-WC","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Flur OG","Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG","Saunaraum","Stiegenhaus"],area:"Raum"},
@@ -860,20 +860,18 @@ function workPackage(x){
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
  if(d.getDay()===0)return 0;
- // Household work should feel light, not like a second full-time job.
- // Keep the room/work-package logic, but deliberately portion each room into
- // smaller, manageable chunks. Fixed Tuesday hygiene remains protected below.
- if(d.getDay()===6)return 1;
- if(d.getDay()===3)return 2;
- if(d.getDay()===5)return 2;
- return 3;
+ // A little more breathing room than V243: a theme may contain several
+ // genuinely compatible tasks, but the day still has a clear practical limit.
+ if(d.getDay()===6)return 3;
+ if(d.getDay()===3)return 4;
+ if(d.getDay()===5)return 4;
+ return 5;
 }
 function dayTaskLimit(d){
- // Keep the visible list small as well as the weighted capacity. The weekly
- // hygiene block is the one deliberate exception: its fixed routine may contain
- // more individual checklist items, but no unrelated flexible work may be added.
+ // Keep the visible list compact while allowing sensible bundling inside the
+ // day's one theme. Daily routines are separate and are not counted here.
  if(d.getDay()===0)return 0;
- return d.getDay()===2 ? 10 : 6;
+ return 8;
 }
 function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
  const limit=dayTaskLimit(d);
@@ -949,7 +947,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v243|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v244|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1303,7 +1301,7 @@ function ensureTodayPlanSnapshot(d=today){
 function plannedToday(){
  const d=today;
  if(isHouseholdFree(d))return [];
- if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
+ if(state.chaos)return dailyTasks().filter(x=>/Morgenroutine|Nach Mahlzeiten|Abendreset|Tagescheck/.test(x.group||""));
  const out=dailyTasks();
  const plan=plannedForDate(d);
  // Once "Später" is used today, the non-daily plan for today is a fixed set.
