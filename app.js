@@ -149,6 +149,16 @@ function pad(n){return String(n).padStart(2,"0")}
 function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function fromKey(k){return new Date(k+"T12:00:00")}
 function dayKey(d=new Date()){return iso(d)}
+function isHouseholdFree(d){return !!state.householdFree?.[dayKey(d)]}
+function setHouseholdFreeRange(startKey,endKey,free=true){
+  state.householdFree=state.householdFree||{};
+  let d=fromKey(startKey),end=fromKey(endKey);
+  if(d>end){const t=d;d=end;end=t;}
+  for(;d<=end;d=addDays(d,1)){const k=dayKey(d);if(free)state.householdFree[k]=true;else delete state.householdFree[k];}
+  invalidatePlans();save();
+}
+function householdFreeLabel(d=today){return isHouseholdFree(d)?"🌴 Haushaltsfrei":""}
+
 function sameDay(a,b){return iso(a)===iso(b)}
 function formatDateKey(k){const d=fromKey(k);return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function addDays(d,n){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+n);return x}
@@ -180,7 +190,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
+function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},householdFree:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -966,7 +976,7 @@ function buildIntelligentPlan(){
  const fixedTasks=CATALOG.filter(isFixedTask);
  for(const d of dates){
    const k=dayKey(d);
-   if(d<today)continue;
+   if(d<today||isHouseholdFree(d))continue;
    // Sunday stays a true household-free day for the automatic planner.
    // Explicitly pulled-forward tasks live in todayExtras and are added separately,
    // so opening Sunday for one manual task must never cause the planner to refill it.
@@ -1021,7 +1031,7 @@ function buildIntelligentPlan(){
    const room=pkgKey.split("|").pop();
    const candidates=[];
    for(let rel=lower;rel<=Math.min(upper,30);rel++){
-     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||isHouseholdFree(d)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===todayKey&&hasTodayLock&&!pending.every(o=>lockedToday.includes(taskId(o.x))))continue;
      const arr=days.get(k);
      const total=wcPackageWeight(group.map(o=>o.x)),used=arr._weight||0,cap=dayBudget(d);
@@ -1082,7 +1092,7 @@ function buildIntelligentPlan(){
    const candidates=[];
    for(let delta=-30;delta<=maxLook;delta++){
      const d=addDays(occ.base,delta),k=dayKey(d);
-     if(d<today||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     if(d<today||isHouseholdFree(d)||!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(taskId(occ.x)))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===taskId(occ.x)))continue;
@@ -1235,7 +1245,7 @@ function buildIntelligentPlan(){
    for(let delta=0;delta<=30;delta++){
      for(const sign of delta===0?[1]:[1,-1]){
        const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
-       if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
+       if(d<today||isHouseholdFree(d)||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
        if(d.getDay()===0)continue;
        const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
@@ -1256,7 +1266,7 @@ function buildIntelligentPlan(){
      for(let delta=0;delta<=30;delta++){
        for(const sign of delta===0?[1]:[1,-1]){
          const d=addDays(due,delta*sign),k=dayKey(d);
-         if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
+         if(d<today||isHouseholdFree(d)||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
          if(d.getDay()===0)continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
@@ -1275,6 +1285,7 @@ function buildIntelligentPlan(){
  return plannerCache;
 }
 function plannedForDate(d){
+ if(isHouseholdFree(d))return [];
  const arr=buildIntelligentPlan().days.get(dayKey(d))||[];
  // A user-postponed date is authoritative. Even if an older planner/cache
  // failed to place the task, the task must still appear on that exact date in
@@ -1448,6 +1459,7 @@ function ensureTodayPlanSnapshot(d=today){
 }
 function plannedToday(){
  const d=today;
+ if(isHouseholdFree(d))return [];
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
  const plan=plannedForDate(d);
@@ -2070,7 +2082,10 @@ function renderToday(){
   const main=document.getElementById("main");
   const sunday=today.getDay()===0;
   const tasks=plannedToday(),done=tasks.filter(x=>isDone(x)).length;
-  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal")}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;
+  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">${isHouseholdFree(today)?"🌴 Haushaltsfrei":(state.chaos?"🧸 Heute leicht":(sunday?"Haushaltsfrei":"Normal"))}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${isHouseholdFree(today)?"Heute ist komplett haushaltsfrei ❤️":`${done} von ${tasks.length} Aufgaben erledigt`}</div><div class="actions"><button class="btn" id="freeDay">🌴 Urlaub / Ausflug</button>${!isHouseholdFree(today)?`<button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button>`:`<button class="btn" id="endFreeDay">Haushalt wieder aktiv</button>`}</div></div>`;
+  if(isHouseholdFree(today)){
+    const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌴 Heute ist dein Haushalt komplett frei.</div><div class="small">Keine geplanten Haushaltsaufgaben, keine täglichen Routinen und kein schlechtes Gewissen. Die Aufgaben werden nicht als erledigt markiert – sie warten danach wieder auf ihren normalen Rhythmus.</div>`;main.appendChild(note);
+  }
   if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
@@ -2142,9 +2157,27 @@ function renderToday(){
   }
   // The “Später” section above is intentionally scoped to today's action date.
   // Its stored planned date is never changed by the midnight reset.
-  main.querySelector("#energy").onclick=showEnergy;
-  main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()};
+  const freeBtn=main.querySelector("#freeDay"); if(freeBtn)freeBtn.onclick=openHouseholdFreeModal;
+  const endFree=main.querySelector("#endFreeDay"); if(endFree)endFree.onclick=()=>{delete state.householdFree[dayKey(today)];save();render()};
+  const energyBtn=main.querySelector("#energy"); if(energyBtn)energyBtn.onclick=showEnergy;
+  const chaosBtn=main.querySelector("#chaos"); if(chaosBtn)chaosBtn.onclick=()=>{state.chaos=!state.chaos;save();render()};
 }
+function openHouseholdFreeModal(){
+  const old=document.getElementById("freeOverlay");if(old)old.remove();
+  const ov=document.createElement("div");ov.id="freeOverlay";ov.className="detailOverlay open";
+  const t=dayKey(today);
+  ov.innerHTML=`<div class="sheet"><div class="sheetTop"><div><div class="small">🌴 Auszeit</div><h2>Haushaltsfrei</h2></div><button class="close" id="freeClose">×</button></div>
+  <div class="detailBox"><b>Heute oder mehrere Tage komplett frei ❤️</b><div class="small">An diesen Tagen zeigt „Heute“ keine Haushaltsaufgaben und auch keine täglichen Routinen. Nichts wird als erledigt markiert – danach läuft dein normaler Plan weiter.</div></div>
+  <label class="editorLabel">Von<input id="freeStart" type="date" value="${t}"></label>
+  <label class="editorLabel">Bis<input id="freeEnd" type="date" value="${t}"></label>
+  <div class="actions"><button class="btn" id="freeToday">🌿 Nur heute</button><button class="btn primary" id="freeApply">🌴 Diese Tage freihalten</button></div>
+  <div class="small" style="margin-top:12px">Perfekt für Tagesausflüge genauso wie für einen mehrtägigen Urlaub. Die Auszeit verändert keine Fälligkeitsdaten.</div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();ov.querySelector("#freeClose").onclick=close;ov.onclick=e=>{if(e.target===ov)close()};
+  ov.querySelector("#freeToday").onclick=()=>{setHouseholdFreeRange(t,t,true);close();render();toast("Heute ist haushaltsfrei 🌴")};
+  ov.querySelector("#freeApply").onclick=()=>{const a=ov.querySelector("#freeStart").value,b=ov.querySelector("#freeEnd").value;if(!a||!b){toast("Bitte Zeitraum auswählen");return}setHouseholdFreeRange(a,b,true);close();render();toast("Auszeit gespeichert 🌴")};
+}
+
 function showEnergy(){
   const main=document.getElementById("main");
   let box=document.getElementById("energyBox");
