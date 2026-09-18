@@ -1,5 +1,5 @@
-/* Unser Zuhause – V236 · luftige Raum-Themen mit sanfter Effizienz */
-const APP_BUILD="V237";
+/* Unser Zuhause – V239 · ein klares Raum-Thema pro Haushaltstag */
+const APP_BUILD="V239";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -926,7 +926,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v235|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v239|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1121,6 +1121,9 @@ function buildIntelligentPlan(){
      if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
      const empty=arr.length===0;
      if(!samePackage&&!empty&&!sameRoom)continue;
+     // Room theme is the hard daily boundary: no third-room spillover.
+     // A package may contain several tasks, but they must belong to the same room.
+     if(!empty&&!sameRoom)continue;
      const breathing=dayBreathingScore(d,arr);
      const packageBonus=samePackage?-110:0;
      const roomBonus=sameRoom?-90:0;
@@ -1152,7 +1155,9 @@ function buildIntelligentPlan(){
        const canFit=arr._fixedRoutine ? false : (arr.length>=dayTaskLimit(d) ? false : (isExteriorHeavy ? arr.length===0 : (hasExteriorHeavy ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap)))));
        const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
        const sameRoom=arr.some(y=>y.room===occ.x.room);
-       const score=(canFit?0:100000)+(sameRoom?-90:(sameTheme?-18:0))+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
+       const roomCompatible=arr.length===0||sameRoom;
+       if(!roomCompatible)continue;
+       const score=(canFit?0:100000)+(sameRoom?-90:0)+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
        candidates.push({k,score,canFit,used,delta});
      }
      candidates.sort((a,b)=>a.score-b.score);
@@ -1186,6 +1191,8 @@ function buildIntelligentPlan(){
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
+     const roomCompatible=arr.length===0||sameRoom;
+     if(!roomCompatible)continue;
      candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
    }
    candidates.sort((a,b)=>((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||(a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
@@ -1217,6 +1224,8 @@ function buildIntelligentPlan(){
      const canFit=arr.length>=dayTaskLimit(d) ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap));
      const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
      const sameRoom=arr.some(y=>y.room===x.room);
+     const roomCompatible=arr.length===0||sameRoom;
+     if(!roomCompatible)continue;
      const spread=roomSpreadPenalty(arr,x);
      candidates.push({k,delta:delta2,used,sameTheme,sameRoom,spread,canFit});
    }
@@ -1255,7 +1264,8 @@ function buildIntelligentPlan(){
        const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
        const sameRoom=arr.some(y=>y.room===x.room);
        const roomCompatible=arr.length===0||sameRoom;
-       const score=(roomCompatible?0:1000000)+(canFit?0:100000)+((sameRoom?-90:(sameTheme?-18:0)))+roomSpreadPenalty(arr,x)+used*10+Math.abs(offset)*0.1;
+       if(!roomCompatible)continue;
+       const score=(canFit?0:100000)+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+used*10+Math.abs(offset)*0.1;
        if(!best||score<best.score)best={k,d,score};
      }
    }
@@ -1271,8 +1281,9 @@ function buildIntelligentPlan(){
          if(d.getDay()===0)continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
+         if(!roomCompatible)continue;
          const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
-         const score=(roomCompatible?0:1000000)+countPenalty+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
+         const score=countPenalty+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
          if(!best||score<best.score)best={k,d,score};
        }
      }
