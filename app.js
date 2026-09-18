@@ -1,5 +1,5 @@
-/* Unser Zuhause – V239 · ein klares Raum-Thema pro Haushaltstag */
-const APP_BUILD="V239";
+/* Unser Zuhause – V240 · schlanke Haushaltsthemen statt Aufgaben-Splitter */
+const APP_BUILD="V240";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -907,6 +907,21 @@ function efficiencyWorkflow(x){
  if(/abwischen|reinigen|abstauben|entstauben|lichtschalter|türklink|türrahmen|handlauf|geländer|spiegel/.test(t))return roomWorkflow(x);
  return roomWorkflow(x);
 }
+function planningTheme(x){
+ const t=String(x?.text||"").toLowerCase();
+ const room=String(x?.room||"");
+ const area=String(x?.area||"").toLowerCase();
+ // Some work is more useful as a single practical theme than as dozens of
+ // individual room tasks. These themes may span several rooms on one floor.
+ if(/türklink|türblatt|türrahmen|zarge/.test(t)) return `🚪 Türen ${area.includes("keller")||area.includes("kg")||["Flur KG","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Waschküche"].includes(room)?"KG":area.includes("og")||["Flur OG","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(room)?"OG":"EG"}`;
+ if(/boden saugen|boden wischen|küchenboden|ecken absaugen|stufen saugen|stufen wischen/.test(t)) return `🧹 Böden ${area.includes("keller")||area.includes("kg")||["Flur KG","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Waschküche"].includes(room)?"KG":area.includes("og")||["Flur OG","Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(room)?"OG":"EG"}`;
+ if(/handtücher wechseln/.test(t)) return "🧺 Handtücher";
+ if(/bettwäsche wechseln|matratze|bettpflege|bettbezug|kissenbezug|deckenbezug/.test(t)) return `🛏️ Bett & Bettwäsche · ${room}`;
+ if(/fensterbank|fenster|raffstore|sonnenschutz/.test(t)) return `🪟 Fenster & Sonnenschutz · ${room}`;
+ if(room) return `🏠 ${room}`;
+ return taskCategory(x);
+}
+
 function roomSpreadPenalty(arr,x){
  const rooms=new Set((arr||[]).map(y=>y.room).filter(Boolean));
  const sameRoom=rooms.has(x?.room);
@@ -926,7 +941,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v239|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v240|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1103,6 +1118,7 @@ function buildIntelligentPlan(){
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
      const samePackage=arr.some(y=>workPackage(y).key===pkg.key);
      const sameRoom=arr.some(y=>y.room===occ.x.room);
+     const samePlanningTheme=arr.some(y=>planningTheme(y)===planningTheme(occ.x));
      const packageWeight=arr.filter(y=>workPackage(y).key===pkg.key).reduce((n,y)=>n+taskWeight(y),0);
      const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
      // Windows and raffstores are deliberately isolated. They may share only
@@ -1120,14 +1136,13 @@ function buildIntelligentPlan(){
      if(packageWeight+weight>(pkg.heavy?10:6))continue;
      if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
      const empty=arr.length===0;
-     if(!samePackage&&!empty&&!sameRoom)continue;
-     // Room theme is the hard daily boundary: no third-room spillover.
-     // A package may contain several tasks, but they must belong to the same room.
-     if(!empty&&!sameRoom)continue;
+     // One practical household theme owns the day. A theme may be a room
+     // (e.g. Küche) or a coherent cross-room job (e.g. Türen KG).
+     if(!empty&&!samePlanningTheme&&!samePackage)continue;
      const breathing=dayBreathingScore(d,arr);
      const packageBonus=samePackage?-110:0;
-     const roomBonus=sameRoom?-90:0;
-     const themeBonus=!sameRoom&&arr.some(y=>groupFor(y)===groupFor(occ.x))?-18:0;
+     const roomBonus=sameRoom?-55:0;
+     const themeBonus=samePlanningTheme?-105:0;
      const emptyBonus=empty?-8:0;
      const spread=roomSpreadPenalty(arr,occ.x);
      const dueDistance=Math.abs(delta)*0.8+(delta>0?delta*0.35:0);
@@ -1153,11 +1168,11 @@ function buildIntelligentPlan(){
        const isExteriorHeavy=!!(occ.x.window||occ.x.raffstore||occ.x.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(occ.x.text||""));
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
        const canFit=arr._fixedRoutine ? false : (arr.length>=dayTaskLimit(d) ? false : (isExteriorHeavy ? arr.length===0 : (hasExteriorHeavy ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap)))));
-       const sameTheme=arr.some(y=>taskCategory(y)===taskCategory(occ.x));
+       const sameTheme=arr.some(y=>planningTheme(y)===planningTheme(occ.x));
        const sameRoom=arr.some(y=>y.room===occ.x.room);
-       const roomCompatible=arr.length===0||sameRoom;
+       const roomCompatible=arr.length===0||sameRoom||sameTheme;
        if(!roomCompatible)continue;
-       const score=(canFit?0:100000)+(sameRoom?-90:0)+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
+       const score=(canFit?0:100000)+(sameTheme?-110:0)+(sameRoom?-35:0)+roomSpreadPenalty(arr,occ.x)+used*10+Math.abs(delta)*0.1;
        candidates.push({k,score,canFit,used,delta});
      }
      candidates.sort((a,b)=>a.score-b.score);
@@ -1190,12 +1205,13 @@ function buildIntelligentPlan(){
      if(d.getDay()===0)continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
-     const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
-     const roomCompatible=arr.length===0||sameRoom;
+     const used=arr._weight||0, sameTheme=arr.some(y=>planningTheme(y)===planningTheme(x)), sameRoom=arr.some(y=>y.room===x.room);
+     const roomCompatible=arr.length===0||sameRoom||sameTheme;
      if(!roomCompatible)continue;
-     candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
+     const capacityOk=!arr._fixedRoutine && arr.length<dayTaskLimit(d) && used+taskWeight(x)<=dayBudget(d);
+     candidates.push({k,delta,used,sameTheme,sameRoom,capacityOk,spread:roomSpreadPenalty(arr,x)});
    }
-   candidates.sort((a,b)=>((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||(a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
+   candidates.sort((a,b)=>((b.capacityOk?1:0)-(a.capacityOk?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||(a.used-b.used)||(Math.abs(a.delta)-Math.abs(b.delta)));
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
@@ -1401,48 +1417,12 @@ function themeFor(d){
  if(d.getDay()===0)return "Haushaltsfrei ❤️";
  const tasks=plannedForDate(d).filter(x=>x.source!=="rotation"&&!isDailyTask(x));
  if(!tasks.length)return "🌿 Puffer & Luft";
- // The room remains the visible theme. Efficiency may add one nearby room,
- // but it never replaces the main room focus with a generic category.
- const roomScores={};
- for(const x of tasks){if(!x.room)continue;roomScores[x.room]=(roomScores[x.room]||0)+taskWeight(x)}
- const primaryRoom=Object.entries(roomScores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0];
- if(primaryRoom){
-   const floor=floorOf(tasks.find(x=>x.room===primaryRoom));
-   const extraRooms=[...new Set(tasks.map(x=>x.room).filter(r=>r&&r!==primaryRoom))];
-   const suffix=extraRooms.length===1?` · + ${extraRooms[0]}`:"";
-   return `${floor?floor+" · ":""}${primaryRoom}${suffix}`;
- }
- const cat=dominantCategory(tasks);
- const labels={
-   "🪟 Fenster & Fensterbänke":"🪟 Fenster & frische Aussichten",
-   "☀️ Sonnenschutz":"🏡 Rund ums Haus",
-   "🚿 Sanitär & WCs":"🚿 Bad & Sanitär",
-   "🛁 Dusche, Wanne & Fugen":"🛁 Badpflege",
-   "🧹 Böden & Sockelleisten":"🧹 Böden & Grundreinigung",
-   "🧺 Textilien & Wäsche":"🧺 Wäsche & Textilien",
-   "🍽️ Küche & Geräte":"🍽️ Küche & Geräte",
-   "📦 Ordnung & Organisation":"📦 Ordnung & Organisation",
-   "✨ Staub & Oberflächen":"✨ Oberflächen & Staub",
-   "🔥 Kamin & Feuerstelle":"🔥 Kamin & Feuerstelle",
-   "🧖 Sauna":"🧖 Wellness & Sauna",
-   "🔧 Technik & Keller":"🔧 Technik & Keller"
- };
- return labels[cat]||"✨ Haushalt & Pflege";
+ const themes=new Map();
+ for(const x of tasks){const k=planningTheme(x);themes.set(k,(themes.get(k)||0)+taskWeight(x));}
+ const primary=[...themes.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0];
+ return primary||"🌿 Puffer & Luft";
 }
 
-function dailyTasks(){
- const out=[];
- for(const [group,tasks] of DAILY){
-   for(const text of tasks){
-     const key=`daily|${text}`;
-     if(catalogDeleted(key))continue;
-     const e=editFor(key)||{};
-     out.push({key,id:key,text:e.text??text,room:e.room??"Alltag",area:e.area??"Haushalt",place:e.place??"",description:e.description??"",group,source:"daily",editable:true});
-   }
- }
- return out;
-}
-function recent(x,d=today,days=7){const l=lastDone(x);return !!l&&(d-fromKey(l))/86400000<days}
 function groupFor(x){if(x.window)return "🪟 Fenster & Fensterbänke";if(x.raffstore)return "☀️ Sonnenschutz";if(["Wohnzimmer","Essbereich","Küche"].includes(x.room))return "EG · Wohnen, Essen & Küche";if(["Gäste-WC","Kinderbad","Bad","Eltern-WC"].includes(x.room))return "Bäder & WCs";if(["Schlafzimmer","Ankleidezimmer","Kinderzimmer 1","Kinderzimmer 2","Saunaraum"].includes(x.room))return "OG · Schlafen, Kinder & Sauna";if(["Eingangsbereich","Garderobe","Flur","Büro","Abstellraum","Speis"].includes(x.room))return "EG · Nebenräume";if(BASEMENT.includes(x.room))return "Keller · "+x.room;return "Weitere Aufgaben"}
 // A task category is deliberately more granular than the room/floor group. It is
 // used by the planner to bundle compatible work together, while groupFor()
