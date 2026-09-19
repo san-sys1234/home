@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V249";
+const APP_BUILD="V250";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -918,7 +918,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v235|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ return "v250|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -2104,7 +2104,12 @@ function renderToday(){
   const main=document.getElementById("main");
   const sunday=today.getDay()===0;
   const freeToday=isHouseholdFree(today);
-  const tasks=freeToday?[]:plannedToday(),done=tasks.filter(x=>isDone(x)).length;
+  // A household-free day suppresses the automatic plan, but explicit tasks
+  // pulled forward by the user must still be visible and executable today.
+  const tasks=freeToday
+    ? (state.todayExtras||[]).filter(e=>e.date===dayKey(today)).map(e=>({...e,key:e.id,source:"extra",group:"Heute zusätzlich"}))
+    : plannedToday();
+  const done=tasks.filter(x=>isDone(x)).length;
   main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">${freeToday?"🏖️ Haushaltsfrei":(state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal"))}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button><button class="btn" id="free">🏖️ Ausflug / Urlaub</button></div></div>`;
   if(freeToday){const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🏖️ Heute bleibt der Haushalt liegen.</div><div class="small">${esc(state.householdFreeDays?.[dayKey(today)]||"Ausflug / Urlaub")} · Deine gespeicherten Erledigungen und Fälligkeiten bleiben erhalten.</div>`;main.appendChild(note);} else if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
@@ -2284,12 +2289,16 @@ function pullCatalogTaskToday(x){
     existing.text=canonical.text;existing.room=canonical.room;existing.area=canonical.area;
     existing.place=canonical.place||existing.place||'';existing.description=canonical.description||existing.description||'';
     existing.interval=canonical.interval;existing.start=canonical.start;existing.manual=true;
+    plannerCache={key:"",days:new Map(),next:new Map()};
+    calendarCache={year:null,days:new Map()};
     save();
     toast(`„${canonical.text}“ ist heute bereits eingeplant ❤️`);
     return;
   }
   state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:canonical.text,room:canonical.room,area:canonical.area,place:canonical.place||"",description:canonical.description||"",source:"extra",sourceKey:tid,canonical:tid,interval:canonical.interval,start:canonical.start,manual:true});
   state.energySeen=[...(state.energySeen||[]),tid].slice(-200);
+  plannerCache={key:"",days:new Map(),next:new Map()};
+  calendarCache={year:null,days:new Map()};
   save();
   toast(`„${canonical.text}“ für heute vorgezogen ❤️`);
 }
