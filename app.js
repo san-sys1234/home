@@ -1,5 +1,5 @@
-/* Unser Zuhause – V245 · zentrale Planung für Katalog, Kalender & Heute */
-const APP_BUILD="V245";
+/* Unser Zuhause – V247 · zentrale Planung: Themen, Bündelung & echte Lufttage */
+const APP_BUILD="V248";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -800,18 +800,29 @@ function fixedRoutineDate(x,ref=today){
  if(!isFixedRhythmRoutine(x))return null;
  const due=nextDue(x,ref);
  const d=new Date(due); d.setHours(12,0,0,0);
- // Fixed routines are distributed by physical theme/room across the week.
- // All weekly hygiene tasks belonging to one bathroom stay together, while
- // bedrooms get their own bed/linen theme. This prevents several rooms from
- // landing on one day while keeping every routine reliably scheduled.
  const room=String(x?.room||"");
- const roomDow={
-   "Gäste-WC":1, "Kinderbad":2, "Bad":3, "Eltern-WC":4,
-   "Schlafzimmer":5, "Kinderzimmer 1":6, "Kinderzimmer 2":2
- }[room];
- const dow=roomDow===undefined?(/bettwäsche wechseln/.test((x.text||"").toLowerCase())?5:2):roomDow;
- const delta=(dow-d.getDay()+7)%7;
- return addDays(d,delta);
+ const t=String(x?.text||"").toLowerCase();
+ // Weekly bathroom focus: each bathroom owns one weekday. WC + brush/holder
+ // + the actual washbasin + hand towels in that bathroom stay together.
+ const hygieneDow={"Gäste-WC":1,"Kinderbad":2,"Bad":4,"Eltern-WC":5};
+ if(hygieneDow[room]!==undefined){
+   const dow=hygieneDow[room];
+   const delta=(dow-d.getDay()+7)%7;
+   return addDays(d,delta);
+ }
+ // Bed linen is a 14-day rhythm, not a weekly task. Give each bedroom a
+ // distinct Friday/Saturday focus so it never gets mixed into a bathroom day.
+ if(/bettwäsche wechseln/.test(t) && ["Schlafzimmer","Kinderzimmer 1","Kinderzimmer 2"].includes(room)){
+   const target={"Schlafzimmer":5,"Kinderzimmer 1":6,"Kinderzimmer 2":5}[room];
+   const delta=(target-d.getDay()+7)%7;
+   let out=addDays(d,delta);
+   // The third bedroom uses the following fortnight's Friday if its natural
+   // Friday would coincide with another bed package. This remains within the
+   // allowed planning tolerance and keeps one clear theme per day.
+   if(room==="Kinderzimmer 2" && out.getDay()===5) out=addDays(out,7);
+   return out;
+ }
+ return d;
 }
 function fixedWeeklyDate(x,ref=today){return fixedRoutineDate(x,ref)}
 function taskWeight(x){const t=(x.text||"").toLowerCase();
@@ -858,19 +869,18 @@ function workPackage(x){
 }
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
+ // Capacity is deliberately generous enough for a genuinely bundled work
+ // package (up to roughly 8–10 small tasks), but whole rest days remain.
  if(d.getDay()===0)return 0;
- // A little more breathing room than V243: a theme may contain several
- // genuinely compatible tasks, but the day still has a clear practical limit.
- if(d.getDay()===6)return 3;
- if(d.getDay()===3)return 4;
- if(d.getDay()===5)return 4;
- return 5;
+ if(d.getDay()===6)return 0;
+ if(d.getDay()===3)return 0; // Wednesday = breathing day unless a fixed/user item needs it
+ return 8;
 }
 function dayTaskLimit(d){
- // Keep the visible list compact while allowing sensible bundling inside the
- // day's one theme. Daily routines are separate and are not counted here.
- if(d.getDay()===0)return 0;
- return 8;
+ // Daily routines are separate and do not count here. Household work may use
+ // up to ten compact tasks when they genuinely belong to the same theme.
+ if(d.getDay()===0 || d.getDay()===6 || d.getDay()===3)return 0;
+ return 10;
 }
 function canAddByTaskCount(d,arr,x,allowFixedRoutine=false){
  const limit=dayTaskLimit(d);
@@ -946,7 +956,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v245|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.plannedOverrides||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v247|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.plannedOverrides||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1024,11 +1034,15 @@ function buildIntelligentPlan(){
    if(isDone(x))continue;
    const d=fixedRoutineDate(x,today);
    if(!d||!usable(d)||!canUseToday(x))continue;
-   const a=days.get(dayKey(d));
-   const theme=themeOf(x);
-   if(!a.length || dayTheme(a)===theme){
-     add(d,x);
-     // Fixed routine is protected: no unrelated theme may be added later.
+   // Fixed weekly bathroom routines stay on their assigned weekday.
+   // Do not slide them forward just because another theme happens to be there:
+   // the WC/washbasin focus is a protected weekly anchor.
+   const target=d;
+   const a=days.get(dayKey(target));
+   if(a){
+     // Keep the fixed bathroom focus as the day's anchor. Other flexible tasks
+     // must yield to it later in the planner rather than moving this routine.
+     add(target,x);
      a._fixedRoutine=true;
    }
  }
@@ -1122,7 +1136,28 @@ function buildIntelligentPlan(){
    }
  }
 
- // 5) Final controlled placement. Every active task still gets a concrete
+ // 5) Package-fill pass: once a theme has a real slot, pull other compatible
+ // tasks from the same room/workflow into that slot until capacity is reached.
+ // This is what makes a day feel like one efficient cleaning session rather
+ // than a list of isolated clicks.
+ for(const [k,a] of days){
+   if(!a.length || a._fixedRoutine===true && a.length>=dayTaskLimit(fromKey(k)))continue;
+   const theme=dayTheme(a); const d=fromKey(k); const used=a._weight||0;
+   if(!theme || dayTaskLimit(d)===0)continue;
+   const candidates=CATALOG.filter(x=>x.area!=="Alltag"&&!isDailyTask(x)&&!isDone(x)&&!isFixedTask(x)&&themeOf(x)===theme)
+     .filter(x=>!a.some(y=>taskId(y)===taskId(x)))
+     .sort((u,v)=>nextDue(u,today)-nextDue(v,today)||taskWeight(u)-taskWeight(v));
+   for(const x of candidates){
+     const due=nextDue(x,today);
+     if(Math.abs(Math.round((d-due)/86400000))>30)continue;
+     const w=taskWeight(x);
+     if(used+w>dayBudget(d) || a.length>=dayTaskLimit(d))break;
+     if(isHeavyTask(x))continue;
+     add(d,x);
+   }
+ }
+
+ // 6) Final controlled placement. Every active task still gets a concrete
  // planned date, but ONLY inside an empty or same-theme day with real capacity.
  // If no such day exists, use the least-loaded same-theme day. Never relax the
  // theme boundary and never exceed +/-30 days. This is what prevents the old
