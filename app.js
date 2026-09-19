@@ -1,5 +1,5 @@
-/* Unser Zuhause – V236 · luftige Raum-Themen mit sanfter Effizienz */
-const APP_BUILD="V237";
+/* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
+const APP_BUILD="V249";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -149,6 +149,8 @@ function pad(n){return String(n).padStart(2,"0")}
 function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
 function fromKey(k){return new Date(k+"T12:00:00")}
 function dayKey(d=new Date()){return iso(d)}
+function isHouseholdFree(d){return !!state.householdFreeDays?.[dayKey(d)]}
+function plannerBlocked(d){return d.getDay()===0&&!state.sundayOptional[dayKey(d)] || isHouseholdFree(d)}
 function sameDay(a,b){return iso(a)===iso(b)}
 function formatDateKey(k){const d=fromKey(k);return d.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function addDays(d,n){const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()+n);return x}
@@ -180,7 +182,7 @@ function purgeWholeHouseDoorFrameData(s){
    for(const [k,v] of Object.entries(s.postponed)) if(isInvalidLegacyTask(v)){delete s.postponed[k]}
  }
 }
-function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{}}}
+function defaultState(){return {done:{},lastDone:{},completionHistory:{},dailyDone:{},postponed:{},custom:[],catalogEdits:{},catalogDates:{},manualDates:{},catalogDeleted:{},todayExtras:[],completedDays:{},dayCelebrations:{},plannedOverrides:{},completedOpen:false,postponedOpen:false,chaos:false,sundayOptional:{},energyOffset:0,energySkipDay:"",energySeen:[],calendarYear:new Date().getFullYear(),todayPlanLock:{},todayPlanSnapshot:{},householdFreeDays:{}}}
 function migrateWCRoomNames(s){
  if(!s)return;
  const renameKey=k=>String(k||"").replace(/\|WC(?=\||$)/g,"|Eltern-WC");
@@ -234,7 +236,7 @@ function loadState(){
  s.catalogEdits=s.catalogEdits||{};s.catalogDates=s.catalogDates||{};s.manualDates=s.manualDates||{};s.catalogDeleted=s.catalogDeleted||{};
  purgeWholeHouseDoorFrameData(s);
   migrateTaskCatalogQuality(s);
- s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayPlanHistory=s.dayPlanHistory&&typeof s.dayPlanHistory==="object"?s.dayPlanHistory:{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};
+ s.todayExtras=Array.isArray(s.todayExtras)?s.todayExtras:[];s.completedDays=s.completedDays||{};s.dayPlanHistory=s.dayPlanHistory&&typeof s.dayPlanHistory==="object"?s.dayPlanHistory:{};s.dayCelebrations=s.dayCelebrations&&typeof s.dayCelebrations==="object"?s.dayCelebrations:{};s.completedOpen=false;s.postponedOpen=false;s.todayPlanLock=s.todayPlanLock&&typeof s.todayPlanLock==="object"?s.todayPlanLock:{};s.todayPlanSnapshot=s.todayPlanSnapshot&&typeof s.todayPlanSnapshot==="object"?s.todayPlanSnapshot:{};s.energyOffset=Number.isFinite(Number(s.energyOffset))?Number(s.energyOffset):0;s.energySkipDay=s.energySkipDay||"";s.energySeen=Array.isArray(s.energySeen)?s.energySeen:[];s.roomFocus=s.roomFocus&&typeof s.roomFocus==="object"?s.roomFocus:{};s.householdFreeDays=s.householdFreeDays&&typeof s.householdFreeDays==="object"?s.householdFreeDays:{};
  // Purge legacy global door-frame edits/custom tasks once, so old data cannot resurrect them.
  for(const [k,v] of Object.entries(s.catalogEdits)){if(isInvalidLegacyTask(v)){s.catalogDeleted[k]=true;delete s.catalogEdits[k]}}
  // Alte generische „Ganzes Haus“-/„Keller allgemein“-Aufgaben dürfen nicht wieder im Katalog auftauchen.
@@ -916,7 +918,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v235|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{});
+ return "v235|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -970,7 +972,7 @@ function buildIntelligentPlan(){
    // Sunday stays a true household-free day for the automatic planner.
    // Explicitly pulled-forward tasks live in todayExtras and are added separately,
    // so opening Sunday for one manual task must never cause the planner to refill it.
-   if(d.getDay()===0)continue;
+   if(plannerBlocked(d))continue;
    // Fixed-rhythm routines are placed on their anchor weekday. Their own
    // cadence still determines WHEN they are due; the weekday only determines
    // the practical planning slot.
@@ -1021,7 +1023,7 @@ function buildIntelligentPlan(){
    const room=pkgKey.split("|").pop();
    const candidates=[];
    for(let rel=lower;rel<=Math.min(upper,30);rel++){
-     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||d.getDay()===0&&!state.sundayOptional[k])continue;
+     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||plannerBlocked(d))continue;
      if(k===todayKey&&hasTodayLock&&!pending.every(o=>lockedToday.includes(taskId(o.x))))continue;
      const arr=days.get(k);
      const total=wcPackageWeight(group.map(o=>o.x)),used=arr._weight||0,cap=dayBudget(d);
@@ -1172,7 +1174,7 @@ function buildIntelligentPlan(){
      const d=addDays(due,delta),k=dayKey(d);
      if(d<today||!days.has(k))continue;
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-     if(d.getDay()===0)continue;
+     if(plannerBlocked(d))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
@@ -1236,7 +1238,7 @@ function buildIntelligentPlan(){
      for(const sign of delta===0?[1]:[1,-1]){
        const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
        if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-       if(d.getDay()===0)continue;
+       if(plannerBlocked(d))continue;
        const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
@@ -1258,7 +1260,7 @@ function buildIntelligentPlan(){
          const d=addDays(due,delta*sign),k=dayKey(d);
          if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
-         if(d.getDay()===0)continue;
+         if(plannerBlocked(d))continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
          const roomCompatible=arr.length===0||sameRoom;
          const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
@@ -1313,13 +1315,13 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
+function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=isHouseholdFree(d)?[]:plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
+ if(preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
  // The catalog must describe the exact same visible plan as Today. In particular,
  // after "Später" has been used, a task that is excluded by today's lock is NOT
  // allowed to keep showing "Geplant: heute" in the catalog.
@@ -1352,7 +1354,7 @@ function plannedDateForTask(x){
      for(const sign of delta===0?[1]:[1,-1]){
        const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
        if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
-       if(d.getDay()===0)continue;
+       if(plannerBlocked(d))continue;
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
@@ -2065,13 +2067,46 @@ function renderRoomFocus(main, tasks){
   if(selected)renderSelected();
 }
 
+function setHouseholdFreeRange(startKey,endKey,label){
+  const s=fromKey(startKey),e=fromKey(endKey);
+  if(!(s instanceof Date)||!(e instanceof Date)||s>e)return false;
+  state.householdFreeDays=state.householdFreeDays&&typeof state.householdFreeDays==="object"?state.householdFreeDays:{};
+  for(let d=new Date(s);d<=e;d=addDays(d,1)) state.householdFreeDays[dayKey(d)]=label||"Haushaltsfrei";
+  save(); return true;
+}
+function clearHouseholdFreeRange(startKey,endKey){
+  const s=fromKey(startKey),e=fromKey(endKey); if(!(s instanceof Date)||!(e instanceof Date)||s>e)return;
+  for(let d=new Date(s);d<=e;d=addDays(d,1)) delete state.householdFreeDays?.[dayKey(d)];
+  save();
+}
+function openHouseholdFreeDialog(){
+  const overlay=document.createElement("div");overlay.className="catalogEditorOverlay";overlay.id="freeDayEditor";
+  const t=dayKey(today);
+  overlay.innerHTML=`<div class="catalogEditorSheet"><div class="sheetTop"><div><div class="small">Haushaltsplanung pausieren</div><h2>🏖️ Ausflug / Urlaub</h2></div><button class="close" id="x">×</button></div>
+  <p class="small" style="margin-top:8px">Für diese Tage wird kein Haushalt eingeplant. Fälligkeiten und Erledigungen bleiben unverändert; die Planung sucht danach automatisch neue passende Tage.</p>
+  <div class="editorTwo"><label class="editorLabel">Von<input id="s" type="date" value="${t}"></label><label class="editorLabel">Bis<input id="e" type="date" value="${t}"></label></div>
+  <label class="editorLabel">Anlass<input id="l" value="🏖️ Ausflug / Urlaub"></label>
+  <div class="editorActions"><button class="btn" id="cancel">Abbrechen</button><button class="btn primary" id="saveFree">Diese Tage haushaltsfrei machen</button></div>
+  <div class="editorHint">Bereits eingetragene haushaltsfreie Tage werden unten angezeigt und können wieder entfernt werden.</div><div id="freeList"></div></div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();overlay.querySelector("#x").onclick=close;overlay.querySelector("#cancel").onclick=close;
+  const list=overlay.querySelector("#freeList");
+  const grouped=[]; const keys=Object.keys(state.householdFreeDays||{}).sort();
+  let cur=null;
+  for(const k of keys){const label=state.householdFreeDays[k]||"Haushaltsfrei";if(!cur||cur.label!==label||dayKey(addDays(fromKey(cur.end),1))!==k){cur={start:k,end:k,label};grouped.push(cur)}else cur.end=k;}
+  list.innerHTML=grouped.length?grouped.map(g=>`<div class="result"><div class="resultText"><b>🏖️ ${esc(g.label)}</b><div class="meta">${esc(formatDateKey(g.start))}${g.start!==g.end?` – ${esc(formatDateKey(g.end))}`:""}</div></div><button class="btn" data-del="${g.start}|${g.end}">Entfernen</button></div>`).join(""):``;
+  list.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const [a,z]=b.dataset.del.split("|");clearHouseholdFreeRange(a,z);close();render();});
+  overlay.querySelector("#saveFree").onclick=()=>{const a=overlay.querySelector("#s").value,z=overlay.querySelector("#e").value,l=overlay.querySelector("#l").value.trim()||"Haushaltsfrei";if(!a||!z||a>z)return toast("Bitte einen gültigen Zeitraum auswählen ❤️");setHouseholdFreeRange(a,z,l);close();render();toast("🏖️ Diese Tage sind jetzt haushaltsfrei ❤️")};
+}
+
 function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
   const sunday=today.getDay()===0;
-  const tasks=plannedToday(),done=tasks.filter(x=>isDone(x)).length;
-  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">🧸 ${state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal")}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button></div></div>`;
-  if(sunday){
+  const freeToday=isHouseholdFree(today);
+  const tasks=freeToday?[]:plannedToday(),done=tasks.filter(x=>isDone(x)).length;
+  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">${freeToday?"🏖️ Haushaltsfrei":(state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal"))}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button><button class="btn" id="free">🏖️ Ausflug / Urlaub</button></div></div>`;
+  if(freeToday){const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🏖️ Heute bleibt der Haushalt liegen.</div><div class="small">${esc(state.householdFreeDays?.[dayKey(today)]||"Ausflug / Urlaub")} · Deine gespeicherten Erledigungen und Fälligkeiten bleiben erhalten.</div>`;main.appendChild(note);} else if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
   // Regular Today tasks: daily routines and scheduled tasks are rendered here
@@ -2143,6 +2178,7 @@ function renderToday(){
   // The “Später” section above is intentionally scoped to today's action date.
   // Its stored planned date is never changed by the midnight reset.
   main.querySelector("#energy").onclick=showEnergy;
+  main.querySelector("#free").onclick=openHouseholdFreeDialog;
   main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()};
 }
 function showEnergy(){
@@ -2259,8 +2295,8 @@ function pullCatalogTaskToday(x){
 }
 
 function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=new Map();for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
-function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
-function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0||isHouseholdFree(d)?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(isHouseholdFree(d)?"🏖️ Haushaltsfrei":themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
 function showCalendarDay(d,tasks){const box=document.getElementById("detailDay"),completed=calendarDayCompleted(d,tasks),done=completedTasksForDate(d,tasks),doneBy={};done.forEach(x=>(doneBy[x.room]??=[]).push(x));const plannedBy={};tasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));box.innerHTML=`<div class="yearDetail"><h3>${esc(dateLabel(d))}${completed?` ✨`:``}</h3><div class="small">${esc(themeFor(d))}</div>${completed?`<div class="completedDayBadge">✨ <b>Tag geschafft!</b><br><span class="small">Alle geplanten Aufgaben dieses Tages wurden erledigt.</span></div>`:""}${done.length?`<div class="detailTasks"><b>✓ Erledigte Arbeiten · ${done.length}</b>${Object.entries(doneBy).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)}</b>${arr.map(x=>`<div class="detailTask">✓ ${esc(x.text)}</div>`).join("")}</div>`).join("")}</div>`:`<div class="empty">An diesem Tag sind keine erledigten Arbeiten gespeichert.</div>`}${tasks.length&&!completed?`<div class="detailTasks"><b>Geplante Arbeiten · ${tasks.length}</b>${Object.entries(plannedBy).map(([r,arr])=>`<div class="detailTasks"><b>${esc(r)}</b>${arr.map(x=>`<div class="detailTask">• ${esc(x.text)}</div>`).join("")}</div>`).join("")}</div>`:""}</div>`;box.scrollIntoView({behavior:"smooth",block:"nearest"})}
 
 function syncCurrentDay(){
