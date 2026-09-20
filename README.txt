@@ -1,13 +1,3 @@
-Unser Zuhause – V257
+Unser Zuhause V258
 
-Diese Version enthält den Kalender-Performance-Fix.
-
-Dateien für GitHub Pages:
-- index.html
-- app.js
-- style.css
-- icon-192.png
-- icon-512.png
-- apple-touch-icon.png
-
-Wichtig: index.html lädt app.js?v=257.
+Bestehende GitHub-Pages-Dateien ersetzen. STORAGE bleibt unverändert (unser-zuhause-v168). Homescreen-Lesezeichen und lokale Daten bleiben erhalten.

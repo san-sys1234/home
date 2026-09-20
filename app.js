@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V257";
+const APP_BUILD="V258";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1355,32 +1355,58 @@ function nextDue(x,ref=today){
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
 function buildCalendarYearCache(year){
   if(calendarCache.year===year && calendarCache.days.size)return calendarCache;
-  // Build the calendar from the FINAL canonical planned dates once.
-  // Do not calculate one day at a time: plannedDateForTask() can mutate the
-  // planner fallback, which could otherwise leave an earlier cached day stale.
-  buildIntelligentPlan();
+  // CANONICAL CALENDAR SOURCE: use the final planner map directly.
+  // Never call plannedDateForTask() while constructing the calendar because its
+  // safety fallback can mutate the planner bucket and make a task appear on a
+  // different day from the date shown in the catalog.
+  const plan=buildIntelligentPlan();
   const days=new Map();
   const add=(k,x)=>{if(!days.has(k))days.set(k,[]);days.get(k).push(x)};
+  const seen=new Set();
+
   for(const x of CATALOG){
     if(isDailyTask(x)||isDone(x))continue;
-    const pd=plannedDateForTask(x);
-    if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year)continue;
-    const k=dayKey(pd);
-    if(!isHouseholdFree(pd))add(k,x);
+    const id=taskId(x);
+    let pd=null;
+
+    // A valid explicit planned override is authoritative.
+    const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
+    if(preserved){
+      const candidate=fromKey(preserved);
+      const due=nextDue(x,today);
+      if(candidate>=today&&!isHouseholdFree(candidate)&&
+         Math.abs(Math.round((candidate-due)/86400000))<=30) pd=candidate;
+    }
+
+    // Otherwise use exactly the final date produced by the intelligent planner.
+    if(!pd){
+      const candidate=plan.next.get(id);
+      const due=nextDue(x,today);
+      if(candidate instanceof Date&&!Number.isNaN(candidate.getTime())&&candidate>=today&&
+         Math.abs(Math.round((candidate-due)/86400000))<=30) pd=candidate;
+    }
+
+    if(pd&&pd.getFullYear()===year&&!isHouseholdFree(pd)){
+      add(dayKey(pd),x);
+      seen.add(id);
+    }
   }
-  // Postponed dates are authoritative and must appear on their exact day.
+
+  // A postponed date is authoritative and remains visible on that exact date.
   for(const p of Object.values(state.postponed||{})){
     if(!p)continue;
     const k=normalizeDateKey(p.postponedUntil);
-    if(!k||fromKey(k).getFullYear()!==year)continue;
+    if(!k)continue;
     const pd=fromKey(k);
-    if(isHouseholdFree(pd))continue;
+    if(pd.getFullYear()!==year||isHouseholdFree(pd))continue;
     const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
-    const arr=days.get(k)||[];
-    if(arr.some(x=>taskId(x)===id))continue;
-    const x=CATALOG.find(y=>taskId(y)===id)||CATALOG.find(y=>String(y.key||'')===String(p.key||''))||CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
-    if(x&&!isDone(x))add(k,x);
+    if(seen.has(id))continue;
+    const x=CATALOG.find(y=>taskId(y)===id)||
+      CATALOG.find(y=>String(y.key||'')===String(p.key||''))||
+      CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
+    if(x&&!isDone(x)){add(k,x);seen.add(taskId(x));}
   }
+
   calendarCache={year,days};
   return calendarCache;
 }
