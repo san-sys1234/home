@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V255";
+const APP_BUILD="V256";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1353,7 +1353,40 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=isHouseholdFree(d)?[]:plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
+function calendarTasksForDate(d){
+  const year=d.getFullYear();
+  if(calendarCache.year!==year){
+    // Build the complete year index ONCE. The old implementation called
+    // plannedForDate() separately for every one of the ~365 calendar days;
+    // plannedForDate() then scanned the complete catalog again. On mobile this
+    // could monopolize the main thread when opening the calendar.
+    const days=new Map();
+    const add=(k,x)=>{
+      if(!days.has(k))days.set(k,[]);
+      const arr=days.get(k);
+      if(!arr.some(y=>taskId(y)===taskId(x)))arr.push(x);
+    };
+    for(const x of CATALOG){
+      if(isDailyTask(x)||isDone(x))continue;
+      const pd=plannedDateForTask(x);
+      if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year)continue;
+      if(isHouseholdFree(pd))continue;
+      add(dayKey(pd),x);
+    }
+    // Keep the same authoritative postponed-date behavior as plannedForDate().
+    for(const p of Object.values(state.postponed||{})){
+      if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(String(p.postponedUntil||'')))continue;
+      const pd=fromKey(String(p.postponedUntil));
+      if(pd.getFullYear()!==year||isHouseholdFree(pd))continue;
+      const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
+      const x=CATALOG.find(y=>taskId(y)===id) || CATALOG.find(y=>String(y.key||'')===String(p.key||'')) || CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
+      if(x&&!isDone(x))add(String(p.postponedUntil),x);
+    }
+    calendarCache={year,days};
+  }
+  const k=iso(d);
+  return isHouseholdFree(d)?[]:(calendarCache.days.get(k)||[]);
+}
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
