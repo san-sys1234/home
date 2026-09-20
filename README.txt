@@ -9,3 +9,4 @@ Zum Veröffentlichen auf GitHub Pages die bestehenden Dateien dieses Projekts er
 
 
 V262: Homescreen/Heute kompakter gestaltet; Daten-Storage und bestehende URL bleiben unverändert.
+V264: Performance-Optimierungen für schnelleres Laden und flüssigeres Wischen; bestehende Datenhaltung unverändert.

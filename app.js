@@ -1,5 +1,5 @@
 /* Unser Zuhause – V260 · Bald fällige Aufgaben statt Wochenansicht */
-const APP_BUILD="V263";
+const APP_BUILD="V264";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -270,12 +270,14 @@ let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
+let plannerKeyMemo={revision:null,key:null};
+function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()};plannerKeyMemo={revision:null,key:null}}
 // UI-only saves should not throw away the expensive planner cache. The planner
 // itself is keyed by the state that actually affects scheduling, so it will
 // automatically rebuild when a scheduling input changes.
 function invalidatePlans(){calendarCache={year:null,days:new Map()};invalidatePlanner()}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
+function persistUIState(){localStorage.setItem(STORAGE,JSON.stringify(state));calendarCache={year:null,days:new Map()}}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
@@ -511,7 +513,7 @@ function celebrateCompletedDay(){
   save();
 }
 
-function toggleTask(x){
+function toggleTask(x,opts={}){
   const beforePlan=plannedToday();
   rememberDayPlan(today,beforePlan);
   const wasComplete=beforePlan.length>0 && beforePlan.every(isDone);
@@ -532,8 +534,10 @@ function toggleTask(x){
   }
   syncCompletedDay(today);
   const nowComplete=plannedToday().length>0 && plannedToday().every(isDone);
-  save();render();
+  save();
   if(!wasComplete && nowComplete) celebrateCompletedDay();
+  if(opts.fromSwipe)requestAnimationFrame(()=>render());
+  else render();
 }
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
@@ -931,9 +935,15 @@ function roomSpreadPenalty(arr,x){
 function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedRhythmRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
- // Do not key the expensive planner off the generic save revision: toggling a
- // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v253|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ // The planner key used to stringify several large state objects on every
+ // task row. That made a normal Today render increasingly expensive. All
+ // planner-changing mutations go through save(), which increments
+ // __planRevision, so build the expensive signature only once per revision.
+ const revision=Number(state.__planRevision||0);
+ if(plannerKeyMemo.revision===revision && plannerKeyMemo.key)return plannerKeyMemo.key;
+ const key="v264|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ plannerKeyMemo={revision,key};
+ return key;
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1580,8 +1590,21 @@ function plannedToday(){
  for(const x of CATALOG){
    if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
    if(locked && !locked.has(taskId(x)))continue;
-   const pd=plannedDateForTask(x);
-   if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
+   const id=taskId(x);
+   let pd=null;
+   const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
+   if(preserved){
+     const candidate=fromKey(preserved),due=nextDue(x,d);
+     if(candidate>=d&&!isHouseholdFree(candidate)&&Math.abs(Math.round((candidate-due)/86400000))<=30)pd=candidate;
+   }
+   if(!pd){
+     const candidate=plan.next.get(id);
+     if(candidate instanceof Date&&candidate>=d&&!isHouseholdFree(candidate)){
+       const due=nextDue(x,d);
+       if(Math.abs(Math.round((candidate-due)/86400000))<=30)pd=candidate;
+     }
+   }
+   if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(id);}
  }
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{
@@ -2104,23 +2127,34 @@ function definition(x){
 }
 function openDetail(x){const d=definition(x),hist=completionHistoryFor(x);document.getElementById("detailMeta").textContent=[x.room,x.area].filter(Boolean).join(" · ")+" · "+(isDailyTask(x)?"Fälligkeit: täglich":"nächster Termin: "+nextDueLabel(x));document.getElementById("detailTitle").textContent=x.text;document.getElementById("detailContent").innerHTML=`<div class="detailBox"><b>Zuletzt erledigt</b><div>${hist.length?hist.map((v,i)=>`<div style="margin-top:6px"><b>${i===0?"Letztes Mal":"Davor"}:</b> ${esc(formatDateKey(v))}</div>`).join(""):"Noch keine Erledigung gespeichert."}</div><div class="detailBox"><b>Was mache ich?</b><div>${esc(d.what)}</div></div><div class="detailBox"><b>Was gehört dazu?</b><ul>${d.belongs.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Was gehört nicht dazu?</b><ul>${d.not.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div><div class="detailBox"><b>Worauf achten?</b><ul>${d.care.map(v=>`<li>${esc(v)}</li>`).join("")}</ul></div>`;document.getElementById("detailOverlay").classList.add("open")}
 function swipeRow(el,x){
-  let sx=0,sy=0,dx=0,drag=false,moved=false;
+  let sx=0,sy=0,dx=0,drag=false,moved=false,pointerId=null;
   const c=el.querySelector(".taskContent"),bg=el.querySelector(".swipeBg");
-  const reset=()=>{dx=0;drag=false;moved=false;c.style.transition="transform .18s";c.style.transform="translateX(0)";bg.style.opacity="0";bg.classList.remove("green","red")};
-  const upd=()=>{c.style.transform=`translateX(${dx}px)`;bg.classList.toggle("green",dx>0);bg.classList.toggle("red",dx<0);bg.style.opacity=Math.min(1,Math.abs(dx)/70);bg.querySelector(".swipeLabel").textContent=dx<0?"↩ Später":"✓ Erledigt"};
-  const start=(clientX,clientY)=>{sx=clientX;sy=clientY;dx=0;drag=true;moved=false;c.style.transition="none"};
-  const move=(clientX,clientY,e)=>{if(!drag)return;const rawX=clientX-sx,rawY=clientY-sy;if(!moved && Math.abs(rawY)>Math.abs(rawX)+6){drag=false;return}dx=Math.max(-150,Math.min(150,rawX));if(Math.abs(dx)>6)moved=true;if(moved){if(e&&e.cancelable)e.preventDefault();upd()}};
-  const end=()=>{if(!drag)return;drag=false;c.style.transition="transform .18s";if(dx>75){c.style.transform="translateX(105%)";bg.classList.add("green");bg.style.opacity="1";setTimeout(()=>toggleTask(x),120)}else if(dx<-75){c.style.transform="translateX(-105%)";bg.classList.add("red");bg.style.opacity="1";setTimeout(()=>postponeTask(x),120)}else reset()};
-  el.addEventListener("pointerdown",e=>{if(e.pointerType==="mouse"&&e.button!==0)return;start(e.clientX,e.clientY);el.setPointerCapture?.(e.pointerId)},{passive:true});
-  el.addEventListener("pointermove",e=>move(e.clientX,e.clientY,e),{passive:false});
-  el.addEventListener("pointerup",end,{passive:true});
+  const reset=()=>{dx=0;drag=false;moved=false;pointerId=null;c.style.transition="transform .14s";c.style.transform="translate3d(0,0,0)";bg.style.opacity="0";bg.classList.remove("green","red")};
+  const upd=()=>{c.style.transform=`translate3d(${dx}px,0,0)`;bg.classList.toggle("green",dx>0);bg.classList.toggle("red",dx<0);bg.style.opacity=Math.min(1,Math.abs(dx)/70);bg.querySelector(".swipeLabel").textContent=dx<0?"↩ Später":"✓ Erledigt"};
+  el.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse"&&e.button!==0)return;
+    if(e.target.closest("button"))return;
+    sx=e.clientX;sy=e.clientY;dx=0;drag=true;moved=false;pointerId=e.pointerId;c.style.transition="none";
+    el.setPointerCapture?.(e.pointerId);
+  },{passive:true});
+  el.addEventListener("pointermove",e=>{
+    if(!drag||e.pointerId!==pointerId)return;
+    const rawX=e.clientX-sx,rawY=e.clientY-sy;
+    if(!moved && Math.abs(rawY)>Math.abs(rawX)+6){drag=false;pointerId=null;return}
+    dx=Math.max(-150,Math.min(150,rawX));
+    if(Math.abs(dx)>6)moved=true;
+    if(moved)upd();
+  },{passive:true});
+  el.addEventListener("pointerup",e=>{
+    if(!drag||e.pointerId!==pointerId)return;
+    drag=false;pointerId=null;c.style.transition="transform .14s";
+    if(dx>75){c.style.transform="translate3d(105%,0,0)";bg.classList.add("green");bg.style.opacity="1";setTimeout(()=>toggleTask(x,{fromSwipe:true}),70)}
+    else if(dx<-75){c.style.transform="translate3d(-105%,0,0)";bg.classList.add("red");bg.style.opacity="1";setTimeout(()=>postponeTask(x),70)}
+    else reset();
+  },{passive:true});
   el.addEventListener("pointercancel",reset,{passive:true});
-  el.addEventListener("touchstart",e=>start(e.touches[0].clientX,e.touches[0].clientY),{passive:true});
-  el.addEventListener("touchmove",e=>move(e.touches[0].clientX,e.touches[0].clientY,e),{passive:false});
-  el.addEventListener("touchend",end,{passive:true});
-  el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");const done=isDone(x);el.className="task"+(done?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const dueDate=nextDue(x),due=isDailyTask(x)?"täglich":dueDate.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-dueDate)/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${done?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!done?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${done?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!done?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room || isDailyTask(x))return false;
@@ -2454,7 +2488,7 @@ function applySandraSept2026Completed(){
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
 }
 applySandraSept2026Completed();
-function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;persistUIState();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;persistUIState();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();persistUIState();renderCalendar()}}
 function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
  // Use exactly the task list rendered for this calendar day. A later planner

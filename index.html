@@ -71,6 +71,11 @@
   .hero + .card{padding:11px 13px;border-radius:21px}
   .hero + .card .celebrate{font-size:15px;padding:9px 11px}
 }
+
+/* V264 – flüssigeres Wischen und weniger Layout-Arbeit */
+.task{contain:layout paint;will-change:auto}
+.taskContent{transform:translate3d(0,0,0);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+@media(max-width:500px){.task{content-visibility:auto;contain-intrinsic-size:64px auto}.taskContent{min-height:62px}}
 </style>
 </head>
 <body>
