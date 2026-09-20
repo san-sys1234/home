@@ -1,5 +1,5 @@
-/* Unser Zuhause – V260 · Bald fällige Aufgaben statt Wochenansicht */
-const APP_BUILD="V264";
+/* Unser Zuhause – V265 · stabile Heute-Ansicht + Performance */
+const APP_BUILD="V265";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1581,31 +1581,9 @@ function plannedToday(){
    if(locked && x.source!=="daily" && x.source!=="extra" && !locked.has(taskId(x))) continue;
    out.push({...x,group:groupFor(x)});
  }
- // Final display invariant: every non-daily catalog task whose authoritative
- // planned date is today must be present in Today. This is intentionally a
- // second guard against any stale/legacy planner entry becoming visible only
- // in the catalog. The today lock remains authoritative and can still exclude
- // tasks that were not part of the frozen plan.
- const visibleIds=new Set(out.map(taskId));
- for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
-   if(locked && !locked.has(taskId(x)))continue;
-   const id=taskId(x);
-   let pd=null;
-   const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
-   if(preserved){
-     const candidate=fromKey(preserved),due=nextDue(x,d);
-     if(candidate>=d&&!isHouseholdFree(candidate)&&Math.abs(Math.round((candidate-due)/86400000))<=30)pd=candidate;
-   }
-   if(!pd){
-     const candidate=plan.next.get(id);
-     if(candidate instanceof Date&&candidate>=d&&!isHouseholdFree(candidate)){
-       const due=nextDue(x,d);
-       if(Math.abs(Math.round((candidate-due)/86400000))<=30)pd=candidate;
-     }
-   }
-   if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(id);}
- }
+ // plannedForDate() is the authoritative source for the non-daily plan.
+ // Do not walk the whole catalog a second time here: on a large household
+ // catalog that duplicate pass made the Today view unnecessarily expensive.
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{
    const id=taskId(x);
