@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V254";
+const APP_BUILD="V255";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1306,12 +1306,21 @@ function buildIntelligentPlan(){
  return plannerCache;
 }
 function plannedForDate(d){
- const arr=buildIntelligentPlan().days.get(dayKey(d))||[];
- // A user-postponed date is authoritative. Even if an older planner/cache
- // failed to place the task, the task must still appear on that exact date in
- // Today, the room view, week view and calendar. This is not a new plan: it is
- // simply the persisted user choice being surfaced everywhere consistently.
- const k=dayKey(d),seen=new Set(arr.map(taskId));
+ const k=dayKey(d);
+ const plan=buildIntelligentPlan();
+ // SINGLE SOURCE OF TRUTH: the calendar/today/week views must contain exactly
+ // the tasks whose canonical planned date is this day. Never use the planner's
+ // transient bucket alone, because legacy/override/fallback placement can leave
+ // an item in a bucket that differs from the date shown in the catalog.
+ const arr=[];
+ const seen=new Set();
+ for(const x of CATALOG){
+   if(isDailyTask(x)||isDone(x))continue;
+   const pd=plannedDateForTask(x);
+   if(pd && dayKey(pd)===k){arr.push(x);seen.add(taskId(x));}
+ }
+ // A user-postponed date is authoritative and remains visible on that exact
+ // date, but only once.
  for(const p of Object.values(state.postponed||{})){
    if(!p||String(p.postponedUntil)!==k)continue;
    const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
