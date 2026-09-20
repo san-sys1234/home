@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V256";
+const APP_BUILD="V257";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1353,39 +1353,40 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){
-  const year=d.getFullYear();
-  if(calendarCache.year!==year){
-    // Build the complete year index ONCE. The old implementation called
-    // plannedForDate() separately for every one of the ~365 calendar days;
-    // plannedForDate() then scanned the complete catalog again. On mobile this
-    // could monopolize the main thread when opening the calendar.
-    const days=new Map();
-    const add=(k,x)=>{
-      if(!days.has(k))days.set(k,[]);
-      const arr=days.get(k);
-      if(!arr.some(y=>taskId(y)===taskId(x)))arr.push(x);
-    };
-    for(const x of CATALOG){
-      if(isDailyTask(x)||isDone(x))continue;
-      const pd=plannedDateForTask(x);
-      if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year)continue;
-      if(isHouseholdFree(pd))continue;
-      add(dayKey(pd),x);
-    }
-    // Keep the same authoritative postponed-date behavior as plannedForDate().
-    for(const p of Object.values(state.postponed||{})){
-      if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(String(p.postponedUntil||'')))continue;
-      const pd=fromKey(String(p.postponedUntil));
-      if(pd.getFullYear()!==year||isHouseholdFree(pd))continue;
-      const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
-      const x=CATALOG.find(y=>taskId(y)===id) || CATALOG.find(y=>String(y.key||'')===String(p.key||'')) || CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
-      if(x&&!isDone(x))add(String(p.postponedUntil),x);
-    }
-    calendarCache={year,days};
+function buildCalendarYearCache(year){
+  if(calendarCache.year===year && calendarCache.days.size)return calendarCache;
+  // Build the calendar from the FINAL canonical planned dates once.
+  // Do not calculate one day at a time: plannedDateForTask() can mutate the
+  // planner fallback, which could otherwise leave an earlier cached day stale.
+  buildIntelligentPlan();
+  const days=new Map();
+  const add=(k,x)=>{if(!days.has(k))days.set(k,[]);days.get(k).push(x)};
+  for(const x of CATALOG){
+    if(isDailyTask(x)||isDone(x))continue;
+    const pd=plannedDateForTask(x);
+    if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year)continue;
+    const k=dayKey(pd);
+    if(!isHouseholdFree(pd))add(k,x);
   }
-  const k=iso(d);
-  return isHouseholdFree(d)?[]:(calendarCache.days.get(k)||[]);
+  // Postponed dates are authoritative and must appear on their exact day.
+  for(const p of Object.values(state.postponed||{})){
+    if(!p)continue;
+    const k=normalizeDateKey(p.postponedUntil);
+    if(!k||fromKey(k).getFullYear()!==year)continue;
+    const pd=fromKey(k);
+    if(isHouseholdFree(pd))continue;
+    const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
+    const arr=days.get(k)||[];
+    if(arr.some(x=>taskId(x)===id))continue;
+    const x=CATALOG.find(y=>taskId(y)===id)||CATALOG.find(y=>String(y.key||'')===String(p.key||''))||CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
+    if(x&&!isDone(x))add(k,x);
+  }
+  calendarCache={year,days};
+  return calendarCache;
+}
+function calendarTasksForDate(d){
+  const cache=buildCalendarYearCache(d.getFullYear());
+  return cache.days.get(dayKey(d))||[];
 }
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
@@ -2379,9 +2380,9 @@ function renderWeek(){const main=document.getElementById("main"),base=addDays(to
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
 function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
- // Calendar day details always come from the same canonical plan as Today and
- // the catalog. Keep manually pulled-forward tasks visible even on a free day.
- const dayTasks=plannedForDate(d).filter(x=>x.source!=="daily");
+ // Use exactly the task list rendered for this calendar day. A later planner
+ // recalculation must never move a task into this day's detail view.
+ const dayTasks=(Array.isArray(tasks)?tasks:calendarTasksForDate(d)).filter(x=>x.source!=="daily");
  const completed=calendarDayCompleted(d,dayTasks),done=completedTasksForDate(d,dayTasks),doneBy={};
  done.forEach(x=>(doneBy[x.room]??=[]).push(x));
  const plannedBy={};dayTasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));
