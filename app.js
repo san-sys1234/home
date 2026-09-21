@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V266";
+const APP_BUILD="V267";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1353,7 +1353,45 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=isHouseholdFree(d)?[]:plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
+function populateCalendarYear(year){
+  if(calendarCache.year===year && calendarCache.days.size)return;
+  const days=new Map();
+  for(let m=0;m<12;m++){
+    const count=new Date(year,m+1,0).getDate();
+    for(let n=1;n<=count;n++)days.set(iso(new Date(year,m,n,12)),[]);
+  }
+  // Build the canonical plan only once for the whole calendar year.
+  // The old implementation recalculated the full catalog for every single day,
+  // which could freeze the iPhone while opening the Calendar view.
+  for(const x of CATALOG){
+    if(isDailyTask(x)||isDone(x))continue;
+    const pd=plannedDateForTask(x);
+    if(pd && pd.getFullYear()===year){
+      const k=dayKey(pd),arr=days.get(k);
+      if(arr && !arr.some(y=>taskId(y)===taskId(x)))arr.push(x);
+    }
+  }
+  // Postponed dates remain authoritative and must also be represented once.
+  const seen=new Set();
+  for(const arr of days.values())for(const x of arr)seen.add(taskId(x));
+  for(const p of Object.values(state.postponed||{})){
+    if(!p)continue;
+    const k=normalizeDateKey(p.postponedUntil);
+    if(!k||!k.startsWith(String(year)+'-')||seen.has(String(p.sourceKey||p.canonical||p.key||'')))continue;
+    const id=String(p.sourceKey||p.canonical||p.key||p.id||'');
+    const x=CATALOG.find(y=>taskId(y)===id)||CATALOG.find(y=>String(y.key||'')===String(p.key||''))||CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
+    const arr=days.get(k);
+    if(x&&arr&&!isDailyTask(x)&&!isDone(x)&&!arr.some(y=>taskId(y)===taskId(x))){arr.push(x);seen.add(taskId(x));}
+  }
+  for(const arr of days.values())arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||roomLabel(a.room).localeCompare(roomLabel(b.room),'de')||a.text.localeCompare(b.text,'de'));
+  calendarCache={year,days};
+}
+function calendarTasksForDate(d){
+  const year=d.getFullYear();
+  populateCalendarYear(year);
+  const k=iso(d),cached=calendarCache.days.get(k)||[];
+  return isHouseholdFree(d)?[]:cached;
+}
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
