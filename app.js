@@ -2171,6 +2171,23 @@ function appendRoomGroups(container,tasks,opts={}){
 function roomGroupTasksSorted(tasks){
   return [...tasks].sort((a,b)=>roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||nextDue(a)-nextDue(b)||taskWeight(b)-taskWeight(a)||String(a.text||"").localeCompare(String(b.text||""),"de"));
 }
+function appendDailyRoutineGroups(container,tasks){
+  const order=["☀️ Morgenroutine","🍽️ Nach Mahlzeiten","🌙 Abend · max. 10 Minuten","🔎 Tagescheck"];
+  const groups=new Map();
+  tasks.filter(x=>x.source==="daily").forEach(x=>{const g=x.group||"Alltag";if(!groups.has(g))groups.set(g,[]);groups.get(g).push(x)});
+  order.forEach(g=>{
+    const arr=groups.get(g);
+    if(!arr||!arr.length)return;
+    const sec=document.createElement("section");
+    sec.className="dailyRoutineGroup";
+    const head=document.createElement("div");
+    head.className="dailyRoutineHead";
+    head.innerHTML=`<span class="dailyRoutineName">${esc(g)}</span><span class="roomGroupCount">${arr.length} ${arr.length===1?"Aufgabe":"Aufgaben"}</span>`;
+    sec.appendChild(head);
+    arr.forEach(x=>sec.appendChild(taskRow(x)));
+    container.appendChild(sec);
+  });
+}
 function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
@@ -2190,12 +2207,21 @@ function renderToday(){
   // before the collapsed summary sections. Keep this as the authoritative
   // visible task list; V187 accidentally omitted this block.
   const openTasks=tasks.filter(x=>!isDone(x));
-  if(openTasks.length){
+  const dailyOpen=openTasks.filter(x=>x.source==="daily");
+  const roomOpen=openTasks.filter(x=>x.source!=="daily");
+  if(dailyOpen.length){
+    const dailyIntro=document.createElement("div");
+    dailyIntro.className="roomViewIntro";
+    dailyIntro.textContent="Alltag · morgens, Tagescheck, nach Mahlzeiten & abends";
+    main.appendChild(dailyIntro);
+    appendDailyRoutineGroups(main,dailyOpen);
+  }
+  if(roomOpen.length){
     const roomIntro=document.createElement("div");
     roomIntro.className="roomViewIntro";
     roomIntro.textContent="Nach Räumen geordnet · alles, was zusammengehört, bleibt beieinander";
     main.appendChild(roomIntro);
-    appendRoomGroups(main,roomGroupTasksSorted(openTasks));
+    appendRoomGroups(main,roomGroupTasksSorted(roomOpen));
   }
 
   // Erledigt stays before the optional room-focus area, and both collapsible
