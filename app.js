@@ -1328,7 +1328,43 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function calendarTasksForDate(d){const year=d.getFullYear();if(calendarCache.year!==year)calendarCache={year,days:new Map()};const k=iso(d);if(calendarCache.days.has(k))return calendarCache.days.get(k);const v=isHouseholdFree(d)?[]:plannedForDate(d).filter(x=>!isDailyTask(x));calendarCache.days.set(k,v);return v}
+function calendarTasksForDate(d){
+ const year=d.getFullYear();
+ if(calendarCache.year!==year){
+   calendarCache={year,days:new Map()};
+   const start=new Date(year,0,1,12),end=new Date(year,11,31,12);
+   for(let cur=new Date(start);cur<=end;cur=addDays(cur,1)){
+     if(!isHouseholdFree(cur))calendarCache.days.set(iso(cur),[]);
+   }
+   const seen=new Map();
+   for(const x of CATALOG){
+     if(isDailyTask(x)||isDone(x)||isPostponed(x))continue;
+     const pd=plannedDateForTask(x);
+     if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year||isHouseholdFree(pd))continue;
+     const k=iso(pd);
+     if(!calendarCache.days.has(k))continue;
+     const id=taskId(x);
+     if(seen.has(k)&&seen.get(k).has(id))continue;
+     if(!seen.has(k))seen.set(k,new Set());
+     seen.get(k).add(id);
+     calendarCache.days.get(k).push(x);
+   }
+   for(const p of Object.values(state.postponed||{})){
+     if(!p||!/^\d{4}-\d{2}-\d{2}$/.test(String(p.postponedUntil||"")))continue;
+     const k=String(p.postponedUntil);
+     if(!k.startsWith(String(year))||!calendarCache.days.has(k))continue;
+     const id=String(p.sourceKey||p.canonical||p.key||"");
+     const x=CATALOG.find(y=>taskId(y)===id)||CATALOG.find(y=>String(y.key||"")==String(p.key||""))||CATALOG.find(y=>String(y.text||"")==String(p.text||"")&&String(y.room||"")==String(p.room||""));
+     if(!x||isDone(x))continue;
+     if(!seen.has(k))seen.set(k,new Set());
+     if(seen.get(k).has(taskId(x)))continue;
+     seen.get(k).add(taskId(x));
+     calendarCache.days.get(k).push(x);
+   }
+ }
+ const k=iso(d);
+ return calendarCache.days.get(k)||[];
+}
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
