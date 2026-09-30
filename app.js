@@ -759,10 +759,10 @@ function isWCSubtask(x){
  // weekly WC routine. They keep their own long/seasonal cadence.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
  const t=(x.text||"").toLowerCase();
- // Weekly fixed WC care contains only the toilet itself and its brush.
- // Peripheral bathroom work (paper holder, door, lights, skirting, floors,
- // grout, mirror, etc.) stays flexible and may be spread to other days.
- return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter/.test(t);
+ // Tuesday WC package: toilet, WC brush/holder and the actual washbasin.
+ // Peripheral work (paper holder, door, lights, skirting, floors, grout,
+ // mirror, etc.) keeps its own cadence and is not part of this fixed package.
+ return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter|waschbecken/.test(t);
 }
 function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
 function isWCPackageTask(x){return !!wcPackage(x);}
@@ -774,14 +774,9 @@ function isFixedWeeklyRoutine(x){
  // Bathroom windows, sills and raffstores are deliberately excluded from the
  // weekly hygiene routine. They retain their own long/seasonal intervals.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
- // WC care is handled by the dedicated WC work-package planner below.
- // Do not classify individual WC subtasks as fixed routines here; otherwise a
- // single task (e.g. only the brush holder) can be placed before the package
- // bundler gets a chance to collect the complete WC package.
- if(isWCSubtask(x))return false;
- // WC/toilet tasks are always part of the Tuesday hygiene block. The
- // dedicated package logic keeps their physical work together, while the
- // fixed-rhythm planner pins the occurrence to Tuesday.
+ // WC/toilet/washbasin tasks are always part of the Tuesday hygiene block.
+ // They are still bundled as one physical package by the planner, but each
+ // checklist item must inherit the same fixed Tuesday occurrence.
  if(isWCSubtask(x))return true;
  // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
  // basin-cleaning task belongs here; descaling an armature keeps its own
@@ -1320,13 +1315,20 @@ function buildIntelligentPlan(){
    const vacuum=CATALOG.find(x=>x.room===mop.room&&!isDone(x)&&isVacuumTask(x));
    if(!vacuum)continue;
    const vd=next.get(taskId(vacuum));
-   if(!(vd instanceof Date))continue;
+   if(!(vd instanceof Date)){
+     // A due mop is never allowed to exist without its matching vacuum step.
+     // Use the mop's canonical day as the common occurrence if the vacuum has
+     // not yet received a planner date.
+     movePlannedTask(vacuum,md);
+     continue;
+   }
    const diff=Math.abs(Math.round((md-vd)/86400000));
-   // A weekly vacuum is the anchor. If the mop is due within its legal
-   // +/-7-day planning window, put it on the vacuum day. Otherwise move the
-   // vacuum occurrence onto the mop day; the two physical steps stay together.
-   if(diff<=7){
-     movePlannedTask(mop,vd);
+   // The mop is less frequent, but whenever it is due it MUST be on the same
+   // day as vacuuming. The weekly vacuum may therefore be moved to the mop
+   // occurrence; this does not change its recurrence, only this planned date.
+   if(diff!==0){
+     movePlannedTask(vacuum,md);
+     movePlannedTask(mop,md);
    }
  }
  plannerCache={key,days,next};
