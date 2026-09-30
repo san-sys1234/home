@@ -923,9 +923,11 @@ function roomSpreadPenalty(arr,x){
 function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedRhythmRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
- // Do not key the expensive planner off the generic save revision: toggling a
- // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v253|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ // Persistent planning changes go through save(), which increments __planRevision
+ // and invalidates the planner cache. This avoids rebuilding/stringifying the
+ // full household state for every task lookup. Today is part of the key because
+ // relative due dates change at midnight.
+ return "v276|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1302,8 +1304,8 @@ function plannedForDate(d){
  const seen=new Set();
  for(const x of CATALOG){
    if(isDailyTask(x)||isDone(x)||isPostponed(x))continue;
-   const pd=plannedDateForTask(x);
-   if(pd && dayKey(pd)===k){arr.push(x);seen.add(taskId(x));}
+   const pd=plan.next.get(taskId(x));
+   if(pd instanceof Date && dayKey(pd)===k){arr.push(x);seen.add(taskId(x));}
  }
  // A user-postponed date is authoritative and remains visible on that exact
  // date, but only once.
@@ -1348,9 +1350,10 @@ function calendarTasksForDate(d){
      if(!isHouseholdFree(cur))calendarCache.days.set(iso(cur),[]);
    }
    const seen=new Map();
+   const plan=buildIntelligentPlan();
    for(const x of CATALOG){
      if(isDailyTask(x)||isDone(x)||isPostponed(x))continue;
-     const pd=plannedDateForTask(x);
+     const pd=plan.next.get(taskId(x));
      if(!(pd instanceof Date)||Number.isNaN(pd.getTime())||pd.getFullYear()!==year||isHouseholdFree(pd))continue;
      const k=iso(pd);
      if(!calendarCache.days.has(k))continue;
@@ -1522,10 +1525,11 @@ function plannedToday(){
  // in the catalog. The today lock remains authoritative and can still exclude
  // tasks that were not part of the frozen plan.
  const visibleIds=new Set(out.map(taskId));
+ const todayPlan=buildIntelligentPlan();
  for(const x of CATALOG){
    if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
-   const pd=plannedDateForTask(x);
-   if(pd && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
+   const pd=todayPlan.next.get(taskId(x));
+   if(pd instanceof Date && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
  }
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{
