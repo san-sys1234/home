@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V279";
+const APP_BUILD="V281";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -474,8 +474,8 @@ function syncCompletedDay(d=today){
 function plannedTodayForDate(d){
  const old=today;today=new Date(d);today.setHours(12,0,0,0);const result=plannedToday();today=old;return result;
 }
-function celebrateCompletedDay(){
-  const k=dayKey(),tasks=plannedToday(),count=tasks.length;
+function celebrateCompletedDay(tasksOverride=null){
+  const k=dayKey(),tasks=Array.isArray(tasksOverride)?tasksOverride:plannedToday(),count=tasks.length;
   if(!count || !tasks.every(isDone) || state.dayCelebrations?.[k]) return;
   state.dayCelebrations=state.dayCelebrations&&typeof state.dayCelebrations==="object"?state.dayCelebrations:{};
   state.dayCelebrations[k]=true;
@@ -521,9 +521,19 @@ function toggleTask(x){
     }else { markDone(x); delete state.plannedOverrides?.[target.key]; }
   }
   syncCompletedDay(today);
-  const nowComplete=plannedToday().length>0 && plannedToday().every(isDone);
+  // Completion is evaluated against the exact set that was visible when the
+  // user started checking off the day. The planner is allowed to reflow after
+  // completion, so re-reading plannedToday() here could otherwise make the
+  // final task disappear before the celebration test runs.
+  const afterPlan=plannedToday();
+  const plannedIds=beforePlan.map(taskId).filter(Boolean);
+  const stableComplete=plannedIds.length>0 && plannedIds.every(id=>{
+    const x=CATALOG.find(y=>taskId(y)===id) || beforePlan.find(y=>taskId(y)===id);
+    return x ? isDone(x) : false;
+  });
+  const nowComplete=stableComplete || (afterPlan.length>0 && afterPlan.every(isDone));
   save();render();
-  if(!wasComplete && nowComplete) celebrateCompletedDay();
+  if(nowComplete && !wasComplete) celebrateCompletedDay(beforePlan);
 }
 
 function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
@@ -680,6 +690,13 @@ function frequentInterval(x){
 }
 
 function rawNextDue(x,ref=today){
+ // WC + washbasin are a fixed Tuesday hygiene block. Ignore legacy/manual
+ // per-task anchors here so an old date cannot split the physical package.
+ if(isWCSubtask(x)){
+   const last=lastDone(x);
+   const anchor=last?addDays(fromKey(last),1):ref;
+   return nextDow(anchor,2);
+ }
  const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
  if(/^\d{4}-\d{2}-\d{2}$/.test(manual||""))return explicitNext({...x,start:manual},ref);
  if(x.start)return explicitNext(x,ref);
@@ -722,6 +739,9 @@ function rawNextDue(x,ref=today){
  return d;
 }
 function rawDueOn(x,d){
+ // WC + washbasin are always Tuesday work. Ignore legacy/manual per-task
+ // anchors so an old planned date cannot split the physical package.
+ if(isWCSubtask(x))return sameDay(rawNextDue(x,d),d);
  const manual=state.manualDates?.[x.key]||state.catalogDates?.[x.key];
  if(/^\d{4}-\d{2}-\d{2}$/.test(manual||"")){
    const start=fromKey(manual),interval=catalogInterval(x),last=lastDone(x);
@@ -759,9 +779,10 @@ function isWCSubtask(x){
  // weekly WC routine. They keep their own long/seasonal cadence.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
  const t=(x.text||"").toLowerCase();
- // Tuesday WC package: toilet, WC brush/holder and the actual washbasin.
- // Peripheral work (paper holder, door, lights, skirting, floors, grout,
- // mirror, etc.) keeps its own cadence and is not part of this fixed package.
+ // The weekly WC block includes the toilet, its brush/holder AND the actual
+ // washbasin. These are one physical cleaning job and must always travel
+ // together. Other bathroom work (shower, tub, mirror, floor, doors, etc.)
+ // keeps its own cadence.
  return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter|waschbecken/.test(t);
 }
 function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
@@ -774,9 +795,14 @@ function isFixedWeeklyRoutine(x){
  // Bathroom windows, sills and raffstores are deliberately excluded from the
  // weekly hygiene routine. They retain their own long/seasonal intervals.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
- // WC/toilet/washbasin tasks are always part of the Tuesday hygiene block.
- // They are still bundled as one physical package by the planner, but each
- // checklist item must inherit the same fixed Tuesday occurrence.
+ // WC care is handled by the dedicated WC work-package planner below.
+ // Do not classify individual WC subtasks as fixed routines here; otherwise a
+ // single task (e.g. only the brush holder) can be placed before the package
+ // bundler gets a chance to collect the complete WC package.
+ if(isWCSubtask(x))return false;
+ // WC/toilet tasks are always part of the Tuesday hygiene block. The
+ // dedicated package logic keeps their physical work together, while the
+ // fixed-rhythm planner pins the occurrence to Tuesday.
  if(isWCSubtask(x))return true;
  // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
  // basin-cleaning task belongs here; descaling an armature keeps its own
@@ -926,7 +952,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v276|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v281|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1036,11 +1062,14 @@ function buildIntelligentPlan(){
    const room=pkgKey.split("|").pop();
    const candidates=[];
    for(let rel=lower;rel<=Math.min(upper,30);rel++){
-     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||plannerBlocked(d))continue;
-          const arr=days.get(k);
+     const d=addDays(today,rel),k=dayKey(d); if(!days.has(k)||plannerBlocked(d)||d.getDay()!==2)continue;
+     const arr=days.get(k);
      const total=wcPackageWeight(group.map(o=>o.x)),used=arr._weight||0,cap=dayBudget(d);
      const samePkg=arr.some(y=>workPackage(y).key===pkgKey);
-     const canFit=used+total<=cap || samePkg;
+     // Tuesday is the dedicated WC/hygiene slot. Keep the complete package
+     // together even when the normal small-day weight would otherwise reject
+     // the last checklist items. No unrelated flexible work is added here.
+     const canFit=used+total<=cap || samePkg || d.getDay()===2;
      if(!canFit)continue;
      const dueCenter=group.reduce((n,o)=>n+Math.abs(Math.round((d-o.base)/86400000)),0);
      const empty=arr.length===0;
@@ -1315,20 +1344,13 @@ function buildIntelligentPlan(){
    const vacuum=CATALOG.find(x=>x.room===mop.room&&!isDone(x)&&isVacuumTask(x));
    if(!vacuum)continue;
    const vd=next.get(taskId(vacuum));
-   if(!(vd instanceof Date)){
-     // A due mop is never allowed to exist without its matching vacuum step.
-     // Use the mop's canonical day as the common occurrence if the vacuum has
-     // not yet received a planner date.
-     movePlannedTask(vacuum,md);
-     continue;
-   }
+   if(!(vd instanceof Date))continue;
    const diff=Math.abs(Math.round((md-vd)/86400000));
-   // The mop is less frequent, but whenever it is due it MUST be on the same
-   // day as vacuuming. The weekly vacuum may therefore be moved to the mop
-   // occurrence; this does not change its recurrence, only this planned date.
-   if(diff!==0){
-     movePlannedTask(vacuum,md);
-     movePlannedTask(mop,md);
+   // A weekly vacuum is the anchor. If the mop is due within its legal
+   // +/-7-day planning window, put it on the vacuum day. Otherwise move the
+   // vacuum occurrence onto the mop day; the two physical steps stay together.
+   if(diff<=7){
+     movePlannedTask(mop,vd);
    }
  }
  plannerCache={key,days,next};
@@ -1362,6 +1384,10 @@ function plannedForDate(d){
 function scheduledForDate(d){return plannedForDate(d)}
 function normalizeDateKey(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||""))?String(v):""}
 function nextDue(x,ref=today){
+ // WC + washbasin are a fixed Tuesday hygiene block. Their canonical due date
+ // is always the next Tuesday; completion on another weekday must not split the
+ // package or move one checklist item to a different weekday.
+ if(isWCSubtask(x))return rawNextDue(x,ref);
  // The lifecycle has a strict order:
  // 1) after completion, the next due date is completion + this task's interval;
  // 2) a postponement changes planning only; it never changes due date;
@@ -2398,6 +2424,15 @@ function renderToday(){
   main.querySelector("#energy").onclick=showEnergy;
   main.querySelector("#free").onclick=openHouseholdFreeDialog;
   main.querySelector("#chaos").onclick=()=>{state.chaos=!state.chaos;save();render()};
+
+  // If a complete day was restored from existing data, or the planner changed
+  // its composition after the last check-off, still show the one-time reward.
+  // This is deliberately after the Today UI is rendered so the popup cannot
+  // be lost during a re-render.
+  const celebrationTasks=tasks.slice();
+  if(!freeToday && !sunday && celebrationTasks.length>0 && celebrationTasks.every(isDone)){
+    setTimeout(()=>celebrateCompletedDay(celebrationTasks),40);
+  }
 }
 function showEnergy(){
   const main=document.getElementById("main");
