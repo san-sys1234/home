@@ -2138,6 +2138,58 @@ function openHouseholdFreeDialog(){
   overlay.querySelector("#saveFree").onclick=()=>{const a=overlay.querySelector("#s").value,z=overlay.querySelector("#e").value,l=overlay.querySelector("#l").value.trim()||"Haushaltsfrei";if(!a||!z||a>z)return toast("Bitte einen gültigen Zeitraum auswählen ❤️");setHouseholdFreeRange(a,z,l);close();render();toast("🏖️ Diese Tage sind jetzt haushaltsfrei ❤️")};
 }
 
+function roomColorClass(room){
+  const r=String(room||"Alltag").toLowerCase();
+  if(r.includes("küche")||r.includes("speis"))return "room-kueche";
+  if(r.includes("bad")||r.includes("wc")||r.includes("sauna"))return "room-bad";
+  if(r.includes("wohn")||r.includes("ess"))return "room-wohnen";
+  if(r.includes("schlaf")||r.includes("ankleide"))return "room-schlaf";
+  if(r.includes("kind"))return "room-kind";
+  if(r.includes("büro")||r.includes("musik")||r.includes("training"))return "room-arbeits";
+  if(r.includes("flur")||r.includes("garderobe")||r.includes("eingang")||r.includes("stiegen"))return "room-flur";
+  if(r.includes("keller")||r.includes("lager")||r.includes("technik")||r.includes("waschk"))return "room-keller";
+  return "room-sonst";
+}
+function roomLabel(room){return String(room||"Alltag");}
+function appendRoomGroups(container,tasks,opts={}){
+  const groups=new Map();
+  tasks.forEach(x=>{
+    const room=roomLabel(x.room);
+    if(!groups.has(room))groups.set(room,[]);
+    groups.get(room).push(x);
+  });
+  [...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],"de")).forEach(([room,arr])=>{
+    const sec=document.createElement("section");
+    sec.className="roomGroup "+roomColorClass(room);
+    const head=document.createElement("div");
+    head.className="roomGroupHead";
+    head.innerHTML=`<span class="roomStripe"></span><span class="roomGroupName">${esc(room)}</span><span class="roomGroupCount">${arr.length} ${arr.length===1?"Aufgabe":"Aufgaben"}</span>`;
+    sec.appendChild(head);
+    arr.forEach(x=>sec.appendChild(taskRow(x,opts)));
+    container.appendChild(sec);
+  });
+}
+function roomGroupTasksSorted(tasks){
+  return [...tasks].sort((a,b)=>roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||nextDue(a)-nextDue(b)||taskWeight(b)-taskWeight(a)||String(a.text||"").localeCompare(String(b.text||""),"de"));
+}
+function appendDailyRoutineGroups(container,tasks){
+  const order=["☀️ Morgenroutine","🍽️ Nach Mahlzeiten","🌙 Abend · max. 10 Minuten","🔎 Tagescheck"];
+  const groups=new Map();
+  tasks.filter(x=>x.source==="daily").forEach(x=>{const g=x.group||"Alltag";if(!groups.has(g))groups.set(g,[]);groups.get(g).push(x)});
+  order.forEach(g=>{
+    const arr=groups.get(g);
+    if(!arr||!arr.length)return;
+    const sec=document.createElement("section");
+    sec.className="dailyRoutineGroup";
+    const head=document.createElement("div");
+    head.className="dailyRoutineHead";
+    head.innerHTML=`<span class="dailyRoutineName">${esc(g)}</span><span class="roomGroupCount">${arr.length} ${arr.length===1?"Aufgabe":"Aufgaben"}</span>`;
+    sec.appendChild(head);
+    arr.forEach(x=>sec.appendChild(taskRow(x)));
+    container.appendChild(sec);
+  });
+}
+
 function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
@@ -2156,13 +2208,22 @@ function renderToday(){
   // Regular Today tasks: daily routines and scheduled tasks are rendered here
   // before the collapsed summary sections. Keep this as the authoritative
   // visible task list; V187 accidentally omitted this block.
-  const groups={};
-  for(const x of tasks.filter(x=>!isDone(x)))(groups[x.group||groupFor(x)]??=[]).push(x);
-  for(const [g,arr] of Object.entries(groups)){
-    const sec=document.createElement("section");
-    sec.innerHTML=`<div class="sectionTitle">${esc(g)}</div>`;
-    arr.forEach(x=>sec.appendChild(taskRow(x)));
-    main.appendChild(sec);
+  const openTasks=tasks.filter(x=>!isDone(x));
+  const dailyOpen=openTasks.filter(x=>x.source==="daily");
+  const roomOpen=openTasks.filter(x=>x.source!=="daily");
+  if(dailyOpen.length){
+    const dailyIntro=document.createElement("div");
+    dailyIntro.className="roomViewIntro";
+    dailyIntro.textContent="Alltag · morgens, Tagescheck, nach Mahlzeiten & abends";
+    main.appendChild(dailyIntro);
+    appendDailyRoutineGroups(main,dailyOpen);
+  }
+  if(roomOpen.length){
+    const roomIntro=document.createElement("div");
+    roomIntro.className="roomViewIntro";
+    roomIntro.textContent="Nach Räumen geordnet · alles, was zusammengehört, bleibt beieinander";
+    main.appendChild(roomIntro);
+    appendRoomGroups(main,roomGroupTasksSorted(roomOpen));
   }
 
   // Erledigt stays before the optional room-focus area, and both collapsible
@@ -2343,7 +2404,18 @@ function pullCatalogTaskToday(x){
 }
 
 function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=new Map();for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
-function renderWeek(){const main=document.getElementById("main"),base=addDays(today,-((today.getDay()||7)-1));main.innerHTML=`<div class="card"><h2 style="margin-top:0">Diese Woche</h2><p class="small">Wochenanker sind Themen, keine Pflicht, jeden Raum komplett zu schaffen.</p><div class="weekgrid" id="wg"></div></div>`;const wg=main.querySelector("#wg");for(let i=0;i<7;i++){const d=addDays(base,i),tasks=scheduledForDate(d),el=document.createElement("div");el.className="daycard"+(sameDay(d,today)?" today":"")+(d.getDay()===0||isHouseholdFree(d)?" free":"");el.innerHTML=`<div class="dayname">${new Intl.DateTimeFormat("de-AT",{weekday:"long",day:"2-digit",month:"2-digit"}).format(d)}</div><div class="daytheme">${esc(isHouseholdFree(d)?"🏖️ Haushaltsfrei":themeFor(d))}</div><div class="small" style="margin-top:8px">${tasks.length} sinnvoll eingeplante Aufgaben</div>`;wg.appendChild(el)}}
+function renderWeek(){
+  const main=document.getElementById("main");
+  const candidates=CATALOG.filter(x=>x&&!isDone(x)&&!isPostponed(x)&&!isDailyTask(x)&&!x.window&&x.source!=="rotation")
+    .map(x=>({...x,_planned:plannedDateForTask(x)}))
+    .filter(x=>x._planned instanceof Date && x._planned>=today)
+    .sort((a,b)=>a._planned-b._planned||roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||taskWeight(b)-taskWeight(a))
+    .slice(0,20);
+  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">Bald fällig</h2><div class="small">Die nächsten 20 offenen Aufgaben · nach Räumen gebündelt</div></div><span class="badge">${candidates.length}</span></div><div id="soonList"></div></div>`;
+  const list=main.querySelector("#soonList");
+  if(!candidates.length){list.innerHTML=`<div class="empty">Gerade ist nichts offen, das bald ansteht. 🥰</div>`;return;}
+  appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:true});
+}
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
 function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
@@ -2360,8 +2432,7 @@ function showCalendarDay(d,tasks){
  </div>`;
  const list=box.querySelector("#calendarDayTasks");
  if(list){
-   const ordered=[...dayTasks].sort((a,b)=>String(a.room||"").localeCompare(String(b.room||""),"de")||String(a.text||"").localeCompare(String(b.text||""),"de"));
-   ordered.forEach(x=>list.appendChild(taskRow(x,{showDue:true,showPullToday:true,showManage:true,returnTo:"calendar"})));
+   appendRoomGroups(list,roomGroupTasksSorted(dayTasks),{showDue:true,showPullToday:true,showManage:true,returnTo:"calendar"});
  }
  box.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
