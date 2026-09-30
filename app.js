@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V275";
+const APP_BUILD="V277";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1028,6 +1028,7 @@ function buildIntelligentPlan(){
    wcGroups.get(k).push(occ);
  }
  const wcHandled=new Set();
+ const next=new Map();
  for(const [pkgKey,group] of wcGroups){
    const pending=group.filter(o=>!postponedEntry(o.x)?.postponedUntil);
    if(!pending.length)continue;
@@ -1173,7 +1174,6 @@ function buildIntelligentPlan(){
    }
  }
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
- const next=new Map();
  for(const [k,arr] of days){
    for(const y of arr){
      const id=taskId(y);
