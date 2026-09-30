@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V273";
+const APP_BUILD="V275";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1047,8 +1047,17 @@ function buildIntelligentPlan(){
    }
    candidates.sort((a,b)=>a.score-b.score);
    if(candidates[0]){
-     const a=days.get(candidates[0].k);
-     for(const occ of pending){a.push(occ.x);wcHandled.add(taskId(occ.x));}
+     const targetKey=candidates[0].k;
+     const a=days.get(targetKey);
+     const targetDate=fromKey(targetKey);
+     for(const occ of pending){
+       // WC is a single physical work package. Keep every checklist item on
+       // the same canonical planned date; otherwise the final invariant would
+       // see the individual items as unplanned and split them again.
+       a.push(occ.x);
+       wcHandled.add(taskId(occ.x));
+       next.set(taskId(occ.x),targetDate);
+     }
      a._weight=(a._weight||0)+wcPackageWeight(pending.map(o=>o.x));
    }
  }
@@ -1371,8 +1380,10 @@ function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").start
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
+ // A WC work package is one physical planning unit. Legacy/manual per-task
+ // planned overrides must not split its checklist items across different days.
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
+ if(!isWCPackageTask(x) && preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
  // The planner's date is the canonical planned date. A "todayPlanLock" is
  // only an action/display mechanism for tasks explicitly sent to "Später"; it
  // must never make an otherwise valid planned date disappear from the catalog
