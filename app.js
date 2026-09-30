@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V277";
+const APP_BUILD="V279";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -779,6 +779,10 @@ function isFixedWeeklyRoutine(x){
  // single task (e.g. only the brush holder) can be placed before the package
  // bundler gets a chance to collect the complete WC package.
  if(isWCSubtask(x))return false;
+ // WC/toilet tasks are always part of the Tuesday hygiene block. The
+ // dedicated package logic keeps their physical work together, while the
+ // fixed-rhythm planner pins the occurrence to Tuesday.
+ if(isWCSubtask(x))return true;
  // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
  // basin-cleaning task belongs here; descaling an armature keeps its own
  // longer cadence.
@@ -1288,6 +1292,41 @@ function buildIntelligentPlan(){
    }
    if(best){
      const arr=days.get(best.k);arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(id,best.d);
+   }
+ }
+ // FLOOR COUPLING: mopping is less frequent, but whenever it is due it
+ // must happen together with vacuuming in the same room. We enforce this
+ // after the normal planner has placed all occurrences, so the visible
+ // calendar/Today view and the canonical next-date map stay in sync.
+ const isVacuumTask=x=>/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x?.text||''));
+ const isMopTask=x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x?.text||''));
+ const movePlannedTask=(x,target)=>{
+   const id=taskId(x),from=next.get(id);
+   if(!(target instanceof Date)||Number.isNaN(target.getTime())||!days.has(dayKey(target)))return false;
+   if(from instanceof Date && sameDay(from,target))return true;
+   if(from instanceof Date){
+     const old=days.get(dayKey(from));
+     if(old){const i=old.findIndex(y=>taskId(y)===id);if(i>=0){old.splice(i,1);old._weight=Math.max(0,(old._weight||0)-taskWeight(x));}}
+   }
+   const a=days.get(dayKey(target));
+   if(!a)return false;
+   if(!a.some(y=>taskId(y)===id)){a.push(x);a._weight=(a._weight||0)+taskWeight(x);}
+   next.set(id,target);
+   return true;
+ };
+ for(const mop of CATALOG.filter(x=>!isDailyTask(x)&&!isDone(x)&&isMopTask(x))){
+   const mid=taskId(mop),md=next.get(mid);
+   if(!(md instanceof Date))continue;
+   const vacuum=CATALOG.find(x=>x.room===mop.room&&!isDone(x)&&isVacuumTask(x));
+   if(!vacuum)continue;
+   const vd=next.get(taskId(vacuum));
+   if(!(vd instanceof Date))continue;
+   const diff=Math.abs(Math.round((md-vd)/86400000));
+   // A weekly vacuum is the anchor. If the mop is due within its legal
+   // +/-7-day planning window, put it on the vacuum day. Otherwise move the
+   // vacuum occurrence onto the mop day; the two physical steps stay together.
+   if(diff<=7){
+     movePlannedTask(mop,vd);
    }
  }
  plannerCache={key,days,next};
