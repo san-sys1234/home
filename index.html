@@ -21,13 +21,64 @@
 .room-kueche .roomStripe{background:#7e9db2}.room-bad .roomStripe{background:#8fa88f}.room-wohnen .roomStripe{background:#b49a78}.room-schlaf .roomStripe{background:#9c8eaa}.room-kind .roomStripe{background:#c39483}.room-arbeits .roomStripe{background:#8797a8}.room-flur .roomStripe{background:#aaa08d}.room-keller .roomStripe{background:#8f8b84}.room-sonst .roomStripe{background:#b0aaa3}
 .detailTasks .roomGroup{margin-top:9px}
 @media(max-width:500px){.roomGroup{border-radius:15px;margin-bottom:11px}.roomGroupHead{padding:8px 10px}.roomGroup .taskContent{padding:8px 10px}.roomGroup .taskName{font-size:13px}.roomGroup .meta{font-size:11px}}
-.dailyRoutineGroup{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 10px;margin:0 0 12px;overflow:hidden}.dailyRoutineHead{display:flex;align-items:center;gap:8px;padding:6px 4px 8px;border-bottom:1px solid var(--line);font-size:13px;font-weight:800}.dailyRoutineName{flex:1}.dailyRoutineGroup .task{border-left:0;border-right:0;border-radius:0;margin:0}.dailyRoutineGroup .task:last-child{border-bottom:0}</style>
+.dailyRoutineGroup{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:8px 10px;margin:0 0 12px;overflow:hidden}.dailyRoutineHead{display:flex;align-items:center;gap:8px;padding:6px 4px 8px;border-bottom:1px solid var(--line);font-size:13px;font-weight:800}.dailyRoutineName{flex:1}.dailyRoutineGroup .task{border-left:0;border-right:0;border-radius:0;margin:0}.dailyRoutineGroup .task:last-child{border-bottom:0}
+/* V273 – Arbeitspakete: Planungseinheit mit sichtbarer Einzel-Checkliste */
+.workPackage{margin:7px 8px 10px;border:1px solid var(--line);border-radius:15px;background:#fff;overflow:hidden}
+.workPackageHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;background:#fbfaf8;border-bottom:1px solid #eee8e2}
+.workPackageTitle{display:flex;align-items:center;gap:8px;min-width:0}
+.workPackageIcon{font-size:15px;flex:none}
+.workPackageName{font-size:12px;font-weight:800;line-height:1.2}
+.workPackageMeta{font-size:10px;color:var(--muted);margin-top:2px}
+.workPackageToggle{border:0;background:var(--accent2);color:var(--ink);border-radius:10px;width:28px;height:28px;font-weight:900;flex:none}
+.workPackageHint{font-size:9px;color:var(--muted);padding:6px 10px 2px;text-transform:uppercase;letter-spacing:.04em}
+.workPackage .task{margin:0;border-radius:0;min-height:52px}
+.workPackage .taskContent{border:0;border-bottom:1px solid #f2eee9;border-radius:0;min-height:52px;padding:7px 9px}
+.workPackage .task:last-child .taskContent{border-bottom:0}
+.workPackage .taskName{font-size:13px}
+.workPackage .meta{font-size:10px}
+.workPackageHeavy .workPackageHead{background:#f8f5f1}
+@media(max-width:500px){.workPackage{margin-left:5px;margin-right:5px;border-radius:13px}.workPackageHead{padding:8px}.workPackage .taskContent{padding:7px 8px}.workPackage .check{width:24px;height:24px;flex-basis:24px}.workPackage .taskName{font-size:12.5px}}
+
+/* V274 – kompakter Start-/Heute-Bildschirm: weniger Höhe, gleiche Funktionen */
+@media(max-width:500px){
+  .app{padding:12px 10px 82px}
+  .brand{font-size:13px;margin:0 3px 1px}
+  h1{font-size:29px;line-height:1.02;margin:0 0 6px;letter-spacing:-1px}
+  .subtitle{font-size:13px;margin-bottom:10px}
+  .tabs{gap:6px;margin-bottom:10px;flex-wrap:nowrap;overflow:hidden}
+  .tab{padding:9px 10px;border-radius:18px;font-size:13px;white-space:nowrap;min-width:0}
+  .card{border-radius:18px;padding:13px;margin-bottom:10px}
+  .hero{padding:13px}
+  .hero .topline{gap:7px}
+  .hero .topline b{font-size:17px}
+  .hero .small{font-size:11px}
+  .badge{padding:7px 10px;border-radius:15px;font-size:12px}
+  .progress{height:7px;margin:9px 0}
+  .actions{gap:6px;margin-top:9px}
+  .btn{padding:8px 10px;border-radius:15px;font-size:12px}
+  .roomViewIntro{font-size:10px;margin:2px 3px 6px}
+  .dailyRoutineGroup{border-radius:14px;padding:5px 7px;margin-bottom:8px}
+  .dailyRoutineHead{padding:5px 3px 6px;font-size:12px}
+  .roomGroup{border-radius:14px;margin-bottom:8px}
+  .roomGroupHead{padding:6px 8px;gap:7px}
+  .roomGroupName{font-size:12px}
+  .roomGroupCount{font-size:10px}
+  .roomGroup .task{min-height:50px}
+  .roomGroup .taskContent{min-height:50px;padding:6px 8px;gap:8px}
+  .roomGroup .taskName{font-size:12px;line-height:1.18}
+  .roomGroup .meta{font-size:10px;margin-top:2px}
+  .roomGroup .check{width:23px;height:23px;flex-basis:23px}
+  .taskButtons{gap:4px}
+  .iconBtn{padding:6px 7px;border-radius:10px;font-size:13px}
+  .sectionTitle{font-size:15px;margin:13px 3px 7px}
+}
+</style>
 </head>
 <body>
 <div class="app"><div class="brand">🌿 Unser Zuhause</div><h1>Haushaltsplan</h1>
 <div class="tabs"><button class="tab active" data-tab="today">Heute</button><button class="tab" data-tab="week">⏳ Bald fällig</button><button class="tab" data-tab="calendar">📅 Kalender</button><button class="tab" data-tab="catalog">📚 Aufgabenkatalog</button></div>
 <main id="main"></main><footer>Flexibel statt perfekt. Ein ausgelassener Tag wird nicht automatisch nachgeholt. ❤️</footer></div>
 <div class="detailOverlay" id="detailOverlay"><div class="sheet"><div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div><div id="detailContent"></div></div></div><div class="toast" id="toast"></div>
-<script src="app.js?v=271"></script>
+<script src="app.js?v=274"></script>
 </body></html>
 

@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V269";
+const APP_BUILD="V273";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -774,9 +774,11 @@ function isFixedWeeklyRoutine(x){
  // Bathroom windows, sills and raffstores are deliberately excluded from the
  // weekly hygiene routine. They retain their own long/seasonal intervals.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
- // The complete WC is one weekly routine. Never let a single WC subtask
- // drift onto its own day.
- if(isWCSubtask(x))return true;
+ // WC care is handled by the dedicated WC work-package planner below.
+ // Do not classify individual WC subtasks as fixed routines here; otherwise a
+ // single task (e.g. only the brush holder) can be placed before the package
+ // bundler gets a chance to collect the complete WC package.
+ if(isWCSubtask(x))return false;
  // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
  // basin-cleaning task belongs here; descaling an armature keeps its own
  // longer cadence.
@@ -2151,6 +2153,58 @@ function roomColorClass(room){
   return "room-sonst";
 }
 function roomLabel(room){return String(room||"Alltag");}
+function packageLabelFor(x){
+  const p=workPackage(x);
+  return p?.label || `${roomLabel(x.room)} · ${roomWorkflow(x)}`;
+}
+function packageKeyFor(x){
+  const p=workPackage(x);
+  return p?.key || `single|${taskId(x)}`;
+}
+function packageGroups(tasks){
+  const groups=new Map();
+  for(const x of tasks){
+    const key=packageKeyFor(x);
+    if(!groups.has(key))groups.set(key,{key,label:packageLabelFor(x),tasks:[],heavy:!!workPackage(x)?.heavy});
+    groups.get(key).tasks.push(x);
+  }
+  return [...groups.values()].sort((a,b)=>{
+    const ar=a.tasks[0],br=b.tasks[0];
+    return String(ar?.room||'').localeCompare(String(br?.room||''),'de') ||
+      String(a.label||'').localeCompare(String(b.label||''),'de');
+  });
+}
+function appendPackageGroups(container,tasks,opts={}){
+  const groups=packageGroups(tasks);
+  for(const pkg of groups){
+    const sec=document.createElement('section');
+    sec.className='workPackage'+(pkg.heavy?' workPackageHeavy':'');
+    const done=pkg.tasks.filter(isDone).length;
+    const total=pkg.tasks.length;
+    const body=document.createElement('div');
+    body.className='workPackageBody';
+    const head=document.createElement('div');
+    head.className='workPackageHead';
+    const room=pkg.tasks[0]?.room||'';
+    const icon=pkg.heavy?'🧽':'🧹';
+    head.innerHTML=`<div class="workPackageTitle"><span class="workPackageIcon">${icon}</span><div><div class="workPackageName">${esc(pkg.label)}</div><div class="workPackageMeta">${esc(room)} · ${done}/${total} erledigt</div></div></div><button class="workPackageToggle" type="button" aria-expanded="true">⌃</button>`;
+    sec.appendChild(head);
+    const intro=document.createElement('div');
+    intro.className='workPackageHint';
+    intro.textContent=total>1?'Arbeitspaket · einzelne Arbeiten als Checkliste':'Einzelarbeit';
+    body.appendChild(intro);
+    const sorted=[...pkg.tasks].sort((a,b)=>Number(isDone(a))-Number(isDone(b))||taskWeight(b)-taskWeight(a)||String(a.text||'').localeCompare(String(b.text||''),'de'));
+    sorted.forEach(x=>body.appendChild(taskRow(x,opts)));
+    sec.appendChild(body);
+    head.querySelector('.workPackageToggle').onclick=()=>{
+      const open=body.style.display!=='none';
+      body.style.display=open?'none':'';
+      head.querySelector('.workPackageToggle').textContent=open?'⌄':'⌃';
+      head.querySelector('.workPackageToggle').setAttribute('aria-expanded',String(!open));
+    };
+    container.appendChild(sec);
+  }
+}
 function appendRoomGroups(container,tasks,opts={}){
   const groups=new Map();
   tasks.forEach(x=>{
@@ -2165,7 +2219,7 @@ function appendRoomGroups(container,tasks,opts={}){
     head.className="roomGroupHead";
     head.innerHTML=`<span class="roomStripe"></span><span class="roomGroupName">${esc(room)}</span><span class="roomGroupCount">${arr.length} ${arr.length===1?"Aufgabe":"Aufgaben"}</span>`;
     sec.appendChild(head);
-    arr.forEach(x=>sec.appendChild(taskRow(x,opts)));
+    appendPackageGroups(sec,roomGroupTasksSorted(arr),opts);
     container.appendChild(sec);
   });
 }
