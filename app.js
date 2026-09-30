@@ -2234,7 +2234,10 @@ function appendRoomGroups(container,tasks,opts={}){
     head.className="roomGroupHead";
     head.innerHTML=`<span class="roomStripe"></span><span class="roomGroupName">${esc(room)}</span><span class="roomGroupCount">${arr.length} ${arr.length===1?"Aufgabe":"Aufgaben"}</span>`;
     sec.appendChild(head);
-    appendPackageGroups(sec,roomGroupTasksSorted(arr),opts);
+    // Arbeitspakete bleiben reine Planungslogik im Hintergrund.
+    // In den Übersichten zeigen wir bewusst nur die normalen Raumgruppen
+    // und die einzelnen Aufgaben – keine zusätzlichen Paket-Unterüberschriften.
+    roomGroupTasksSorted(arr).forEach(x=>sec.appendChild(taskRow(x,opts)));
     container.appendChild(sec);
   });
 }
