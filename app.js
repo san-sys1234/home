@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V297";
+const APP_BUILD="V298";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -411,7 +411,9 @@ function postponedTodayEntries(){
 function postponeTask(x){
  const day=dayKey();
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
- state.todayPlanLock=state.todayPlanLock||{};
+
+ state.todayPlanSnapshot=state.todayPlanSnapshot||{};
+ if(!state.todayPlanSnapshot[day])state.todayPlanSnapshot[day]=current.map(taskId).filter(Boolean); state.todayPlanLock=state.todayPlanLock||{};
  state.todayPlanLock[day]=[...new Set([...(state.todayPlanLock[day]||[]),...current.map(taskId)])].filter(id=>id!==taskId(x));
  // "Später" verschiebt ausschließlich die aktuelle Planung. Die Fälligkeit
  // bleibt unverändert und wird erst nach echtem "Erledigt" neu berechnet.
@@ -2090,6 +2092,39 @@ function buildIntelligentPlan(){
    }
  }
 
+ // TODAY FREEZE: once the first automatic plan for today has been shown, its
+ // task set is stable. Completing or postponing one task must never refill the
+ // freed slot with an unrelated room. Only explicit user actions may add work.
+ const freezeKey=dayKey(today);
+ const frozenIds=Array.isArray(state.todayPlanSnapshot?.[freezeKey]) ? new Set(state.todayPlanSnapshot[freezeKey].map(String)) : null;
+ if(frozenIds && frozenIds.size){
+   const todayArr=days.get(freezeKey)||[];
+   const displaced=todayArr.filter(x=>!frozenIds.has(String(taskId(x)))&&!isDailyTask(x));
+   todayArr.length=0; todayArr._weight=0;
+   for(const x of CATALOG){
+     const id=String(taskId(x));
+     if(!frozenIds.has(id)||isDailyTask(x)||isDone(x)||isPostponed(x))continue;
+     const old=next.get(taskId(x));
+     if(old instanceof Date){const oa=days.get(dayKey(old));if(oa){const ix=oa.findIndex(y=>taskId(y)===taskId(x));if(ix>=0){oa.splice(ix,1);oa._weight=Math.max(0,(oa._weight||0)-taskWeight(x));}}}
+     next.set(taskId(x),today); todayArr.push(x); todayArr._weight=(todayArr._weight||0)+taskWeight(x);
+   }
+   for(const x of displaced){
+     const id=taskId(x); if(isDone(x)||isPostponed(x))continue;
+     const due=nextDue(x,today); let best=null;
+     for(let delta=-7;delta<=7;delta++){
+       const pd=addDays(due,delta),pk=dayKey(pd),pa=days.get(pk);
+       if(!pa||pk===freezeKey||pd<today||plannerBlocked(pd)||pa._fixedRoutine||isProtectedHygieneDay(pa,pd)||pa.some(y=>taskId(y)===id))continue;
+       if(pa.length>=dayTaskLimit(pd))continue;
+       const sameRoom=pa.some(y=>y.room===x.room),empty=pa.length===0,w=taskWeight(x);
+       if(!sameRoom&&pa.length&&uniqueRooms(pa).length>=2)continue;
+       if((pa._weight||0)+w>dayBudget(pd)&&!sameRoom)continue;
+       const score=(sameRoom?-1000:(empty?-500:100000))+(pa._weight||0)*10+Math.abs(delta);
+       if(!best||score<best.score)best={pk,score};
+     }
+     if(best){const pa=days.get(best.pk);pa.push(x);pa._weight=(pa._weight||0)+taskWeight(x);next.set(id,fromKey(best.pk));}
+     else for(let delta=-7;delta<=7;delta++){const pd=addDays(due,delta),pk=dayKey(pd),pa=days.get(pk);if(!pa||pk===freezeKey||pd<today||plannerBlocked(pd))continue;pa.push(x);pa._weight=(pa._weight||0)+taskWeight(x);next.set(id,pd);break;}
+   }
+ }
  // 7) Rebuild buckets from the canonical next map. Nothing downstream is
  // allowed to infer a different date.
  for(const a of days.values()){a.length=0;a._weight=0;}
@@ -2336,7 +2371,15 @@ function plannedToday(){
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
  const plan=plannedForDate(d);
- // Once "Später" is used today, the non-daily plan for today is a fixed set.
+
+ // Persist the first visible automatic plan for today. This prevents a completion
+ // or postponement from causing unrelated rooms to slide into the freed slot.
+ if(!state.todayPlanSnapshot || typeof state.todayPlanSnapshot!=="object")state.todayPlanSnapshot={};
+ const freezeTodayKey=dayKey(d);
+ if(!state.todayPlanSnapshot[freezeTodayKey] && plan.length){
+   state.todayPlanSnapshot[freezeTodayKey]=plan.filter(x=>!isDailyTask(x)).map(taskId).filter(Boolean);
+   localStorage.setItem(STORAGE,JSON.stringify(state));
+ } // Once "Später" is used today, the non-daily plan for today is a fixed set.
  // Never let the planner refill a freed slot with another task. The planner
  // already respects this lock when calculating dates; this second guard keeps
  // the Today view stable even if an older cached/legacy plan contains extras.
