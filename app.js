@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V288";
+const APP_BUILD="V289";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -966,7 +966,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v286|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v289|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1394,6 +1394,98 @@ function buildIntelligentPlan(){
      for(const x of group){target.push(x);target._weight=(target._weight||0)+taskWeight(x);next.set(taskId(x),fromKey(best.tk));}
    }
  }
+
+ // ABSOLUTE ROOM-FOCUS NORMALIZATION (V289)
+ // This is deliberately the final planning operation. Earlier heuristics and
+ // invariant repairs are allowed to choose legal dates, but the user-facing
+ // day must still feel like a coherent household session. A normal day has
+ // one main room and at most one secondary room. WC Tuesday is the explicit
+ // hygiene exception. Daily routines are rendered separately and never count.
+ // Move whole work packages, not individual checklist items. Capacity is a
+ // soft preference here: preserving a coherent room is more important than
+ // squeezing one unrelated room onto the current day. Every moved task still
+ // remains inside its own strict +/-7-day window.
+ const focusRoomNormalization=()=>{
+   const movableTask=x=>!isDailyTask(x)&&!isFixedRhythmRoutine(x)&&!isWCSubtask(x);
+   const protectedDay=(arr,d)=>isProtectedHygieneDay(arr,d);
+   const packageFor=x=>workPackage(x).key;
+   const removeGroup=(arr,group)=>{
+     const ids=new Set(group.map(taskId));
+     let removed=0;
+     for(let i=arr.length-1;i>=0;i--){if(ids.has(taskId(arr[i]))){removed+=taskWeight(arr[i]);arr.splice(i,1);}}
+     arr._weight=Math.max(0,(arr._weight||0)-removed);
+   };
+   const addGroup=(arr,group,targetDate)=>{
+     for(const x of group){arr.push(x);next.set(taskId(x),targetDate);}
+     arr._weight=(arr._weight||0)+group.reduce((n,x)=>n+taskWeight(x),0);
+   };
+   const groupCandidates=(group,fromKeyValue)=>{
+     const windows=group.map(x=>{
+       const due=nextDue(x,today);
+       return {lo:addDays(due,-7),hi:addDays(due,7)};
+     });
+     let lo=new Date(Math.max(...windows.map(w=>w.lo.getTime()))); let hi=new Date(Math.min(...windows.map(w=>w.hi.getTime())));
+     lo.setHours(12,0,0,0);hi.setHours(12,0,0,0);
+     if(lo<today){lo=new Date(today);lo.setHours(12,0,0,0);}
+     const out=[];
+     for(let d=new Date(lo);d<=hi;d=addDays(d,1)){
+       const k=dayKey(d),a=days.get(k);
+       if(!a||k===fromKeyValue||plannerBlocked(d)||d.getDay()===0&&!state.sundayOptional[k])continue;
+       if(protectedDay(a,d)||a._fixedRoutine)continue;
+       const rooms=uniqueRooms(a);
+       if(rooms.length>=2&&!rooms.includes(group[0].room))continue;
+       // Never add a third room merely to repair another day.
+       const sameRoom=rooms.includes(group[0].room),empty=rooms.length===0;
+       const distance=Math.min(...group.map(x=>Math.abs(Math.round((d-nextDue(x,today))/86400000))));
+       const load=a._weight||0;
+       // Strongly prefer an existing same-room day, then an empty day, then a
+       // one-room day. Do not reject on capacity here; room coherence wins.
+       const score=(sameRoom?-100000:empty?-50000:0)+load*8+distance*1.5+rooms.length*40;
+       out.push({k,d,score});
+     }
+     out.sort((a,b)=>a.score-b.score);
+     return out;
+   };
+   // A few local passes are enough because every move reduces the number of
+   // rooms on its source day. No full-horizon rebuild is performed.
+   for(let pass=0;pass<3;pass++){
+     let changed=false;
+     for(const [k,arr] of days){
+       if(!arr.length)continue;
+       const d=fromKey(k); if(protectedDay(arr,d))continue;
+       let rooms=uniqueRooms(arr); if(rooms.length<=2)continue;
+       const roomScore=new Map();
+       for(const x of arr)roomScore.set(x.room,(roomScore.get(x.room)||0)+taskWeight(x));
+       // Fixed/seasonal work gets a modest anchor bonus, but it can still move
+       // within its legal window. This prevents a single window task from
+       // automatically dictating the entire day.
+       for(const x of arr){if(x.source==='seasonal'||x.window)roomScore.set(x.room,(roomScore.get(x.room)||0)+0.75);}
+       rooms.sort((a,b)=>(roomScore.get(b)||0)-(roomScore.get(a)||0)||a.localeCompare(b,'de'));
+       const keep=new Set(rooms.slice(0,2));
+       const groups=new Map();
+       for(const x of arr){
+         if(keep.has(x.room)||!movableTask(x))continue;
+         const key=packageFor(x);
+         if(!groups.has(key))groups.set(key,[]);
+         groups.get(key).push(x);
+       }
+       for(const group of groups.values()){
+         if(!group.length)continue;
+         const candidates=groupCandidates(group,k);
+         if(!candidates.length)continue;
+         const best=candidates[0];
+         removeGroup(arr,group);
+         addGroup(days.get(best.k),group,best.d);
+         changed=true;
+         // Recompute room count before moving another package from this day.
+         if(uniqueRooms(arr).length<=2)break;
+       }
+     }
+     if(!changed)break;
+   }
+ };
+ focusRoomNormalization();
+
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
  for(const [k,arr] of days){
    for(const y of arr){
