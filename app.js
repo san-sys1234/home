@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V303";
+const APP_BUILD="V304";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1571,35 +1571,32 @@ function plannedToday(){
  const d=today;
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
  const out=dailyTasks();
- const plan=plannedForDate(d);
-
- // Persist the first visible automatic plan for today. This prevents a completion
- // or postponement from causing unrelated rooms to slide into the freed slot.
  if(!state.todayPlanSnapshot || typeof state.todayPlanSnapshot!=="object")state.todayPlanSnapshot={};
  const freezeTodayKey=dayKey(d);
- if(!state.todayPlanSnapshot[freezeTodayKey] && plan.length){
-   state.todayPlanSnapshot[freezeTodayKey]=plan.filter(x=>!isDailyTask(x)).map(taskId).filter(Boolean);
+
+ // TODAY IS A FROZEN SELECTION. Once the first automatic plan for today has
+ // been created, completing or postponing an item must NEVER cause another
+ // task (especially from another room) to slide into the freed capacity.
+ // Therefore the snapshot is the sole source for non-daily tasks shown in
+ // Heute. We intentionally do NOT re-read plannedForDate()/buildIntelligentPlan()
+ // here after the snapshot exists.
+ let ids=Array.isArray(state.todayPlanSnapshot[freezeTodayKey])
+   ? state.todayPlanSnapshot[freezeTodayKey].map(String)
+   : null;
+ if(!ids){
+   const initial=plannedForDate(d).filter(x=>!isDailyTask(x)&&x.source!=="extra");
+   ids=initial.map(taskId).filter(Boolean).map(String);
+   state.todayPlanSnapshot[freezeTodayKey]=ids;
    localStorage.setItem(STORAGE,JSON.stringify(state));
- } // Once "Später" is used today, the non-daily plan for today is a fixed set.
- // Never let the planner refill a freed slot with another task. The planner
- // already respects this lock when calculating dates; this second guard keeps
- // the Today view stable even if an older cached/legacy plan contains extras.
- for(const x of plan){
+ }
+ const byId=new Map(CATALOG.map(x=>[String(taskId(x)),x]));
+ for(const id of ids){
+   const x=byId.get(String(id));
+   if(!x)continue;
+   if(isDone(x)||isPostponed(x))continue;
    out.push({...x,group:groupFor(x)});
  }
- // Final display invariant: every non-daily catalog task whose authoritative
- // planned date is today must be present in Today. This is intentionally a
- // second guard against any stale/legacy planner entry becoming visible only
- // in the catalog. The today lock remains authoritative and can still exclude
- // tasks that were not part of the frozen plan.
- const visibleIds=new Set(out.map(taskId));
- const todayPlan=buildIntelligentPlan();
- for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
-   const pd=todayPlan.next.get(taskId(x));
-   if(pd instanceof Date && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
- }
- for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
+ for(const e of state.todayExtras.filter(e=>e.date===freezeTodayKey))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
  const seen=new Set();return out.filter(x=>{
    const id=taskId(x);
    if(seen.has(id))return false;
