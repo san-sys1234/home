@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V286";
+const APP_BUILD="V287";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1344,11 +1344,56 @@ function buildIntelligentPlan(){
      for(const x of group){target.push(x);target._weight=(target._weight||0)+taskWeight(x);next.set(taskId(x),fromKey(best.tk));}
    }
  }
- // Room focus is enforced during candidate selection above. We deliberately
- // do not run another multi-pass redistribution over the full planning horizon
- // here: with a large household catalog that makes Today unnecessarily expensive.
- // The canonical plan is already room-aware and keeps each day to a compact
- // room combination without a second full-horizon sweep.
+ // FINAL LIGHTWEIGHT ROOM-FOCUS PASS: all hard-date/fallback/floor-coupling
+ // rules have now run. Some of those rules can legitimately reintroduce a
+ // third/fourth room after the earlier focus pass. Compact only overloaded
+ // days here; do not rebuild the full horizon. A room package moves as one
+ // unit and never farther than its own +/-7-day planning window.
+ for(const [k,arr] of days){
+   if(!arr.length)continue;
+   const d=fromKey(k);
+   if(isProtectedHygieneDay(arr,d))continue;
+   let rooms=uniqueRooms(arr);
+   if(rooms.length<=2)continue;
+   const scoreRoom=(room)=>arr.filter(x=>x.room===room).reduce((n,x)=>n+taskWeight(x),0);
+   rooms.sort((a,b)=>scoreRoom(b)-scoreRoom(a)||a.localeCompare(b,"de"));
+   const keep=new Set(rooms.slice(0,2));
+   const groups=new Map();
+   for(const x of arr){
+     if(keep.has(x.room)||isFixedRhythmRoutine(x)||x.window||x.source==="seasonal"||isWCSubtask(x))continue;
+     const pkg=workPackage(x).key;
+     if(!groups.has(pkg))groups.set(pkg,[]);
+     groups.get(pkg).push(x);
+   }
+   for(const group of groups.values()){
+     if(!group.length)continue;
+     const room=group[0].room;
+     const dueMs=Math.max(...group.map(x=>nextDue(x,today).getTime()));
+     let best=null;
+     for(let delta=-7;delta<=7;delta++){
+       const td=new Date(dueMs); td.setHours(12,0,0,0);
+       const target=addDays(td,delta),tk=dayKey(target),ta=days.get(tk);
+       if(!ta||tk===k||target<today||plannerBlocked(target)||isProtectedHygieneDay(ta,target))continue;
+       const tr=uniqueRooms(ta);
+       if(tr.length>=2&&!tr.includes(room))continue;
+       if(ta._fixedRoutine)continue;
+       const gw=group.reduce((n,x)=>n+taskWeight(x),0);
+       const sameRoom=tr.includes(room), empty=tr.length===0;
+       const newWeight=(ta._weight||0)+gw;
+       if(tr.length>0 && newWeight>dayBudget(target)+2)continue;
+       if(tr.length>0 && ta.length+group.length>dayTaskLimit(target))continue;
+       const score=(sameRoom?-10000:(empty?-5000:1000000))+newWeight*10+Math.abs(delta)*2+roomSpreadPenalty(ta,group[0]);
+       if(!best||score<best.score)best={tk,score};
+     }
+     if(!best)continue;
+     for(const x of group){
+       const ix=arr.findIndex(y=>taskId(y)===taskId(x));
+       if(ix>=0){arr.splice(ix,1);arr._weight=Math.max(0,(arr._weight||0)-taskWeight(x));}
+     }
+     const target=days.get(best.tk);
+     for(const x of group){target.push(x);target._weight=(target._weight||0)+taskWeight(x);next.set(taskId(x),fromKey(best.tk));}
+   }
+ }
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
  for(const [k,arr] of days){
    for(const y of arr){
