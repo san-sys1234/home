@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V289";
+const APP_BUILD="V290";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -966,7 +966,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v289|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v290|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1805,8 +1805,12 @@ function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
  // A WC work package is one physical planning unit. Legacy/manual per-task
  // planned overrides must not split its checklist items across different days.
+ // V290: the intelligent planner is the single source of truth for display.
+ // Legacy plannedOverrides are retained in storage for data safety, but they must
+ // not resurrect stale dates from older planner versions and split the new room
+ // focus. A manual edit still becomes part of the planner through the normal
+ // planning state; we therefore consult the canonical plan first.
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(!isWCPackageTask(x) && preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=7)return pd;}
  // The planner's date is the canonical planned date. A "todayPlanLock" is
  // only an action/display mechanism for tasks explicitly sent to "Später"; it
  // must never make an otherwise valid planned date disappear from the catalog
@@ -1821,6 +1825,12 @@ function plannedDateForTask(x){
    if(!arr.some(y=>taskId(y)===id))continue;
    const dd=fromKey(k);
    if(dd>=today && !isHouseholdFree(dd) && Math.abs(Math.round((dd-due)/86400000))<=7)return dd;
+ }
+ // A legacy override is only a fallback when the canonical planner genuinely
+ // has no date. It can no longer override a valid room-focused plan.
+ if(!isWCPackageTask(x) && preserved){
+   const pd=fromKey(preserved);
+   if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=7)return pd;
  }
  // Absolute display invariant: an active task may NEVER be shown without a
  // concrete plan. If an older/overloaded planner state somehow failed to expose
