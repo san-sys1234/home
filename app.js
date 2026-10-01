@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V290";
+const APP_BUILD="V292";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -966,7 +966,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v290|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v291|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1705,6 +1705,58 @@ function buildIntelligentPlan(){
      if(best)finalFocusMove(group,best.tk);
    }
  }
+ // V291 ABSOLUTE DISPLAY COHERENCE PASS.
+ // All scheduling/fallback rules are complete. The user-facing day must now be
+ // spatially calm. We deliberately do NOT enforce the time/weight budget here:
+ // moving a small room package to a legal date is preferable to showing five
+ // unrelated rooms on one day. Every moved package remains inside the shared
+ // +/-7-day window of its tasks. WC Tuesday is the explicit multi-room hygiene
+ // exception.
+ const finalCoherence=()=>{
+   const movable=x=>!isDailyTask(x)&&!isFixedRhythmRoutine(x)&&!isWCSubtask(x);
+   const windowForGroup=g=>{
+     let lo=null,hi=null;
+     for(const x of g){const due=nextDue(x,today);const a=addDays(due,-7),b=addDays(due,7);lo=lo?new Date(Math.max(lo,a)):a;hi=hi?new Date(Math.min(hi,b)):b;}
+     if(!lo||!hi)return null;lo.setHours(12,0,0,0);hi.setHours(12,0,0,0);if(lo<today){lo=new Date(today);lo.setHours(12,0,0,0)}return {lo,hi};
+   };
+   const moveGroup=(from,group,targetDate)=>{
+     const ids=new Set(group.map(taskId));let w=0;
+     for(let i=from.length-1;i>=0;i--){if(ids.has(taskId(from[i]))){w+=taskWeight(from[i]);from.splice(i,1)}}
+     from._weight=Math.max(0,(from._weight||0)-w);
+     const target=days.get(dayKey(targetDate));if(!target)return false;
+     for(const x of group){if(!target.some(y=>taskId(y)===taskId(x)))target.push(x);next.set(taskId(x),targetDate)}
+     target._weight=(target._weight||0)+w;return true;
+   };
+   for(let pass=0;pass<5;pass++){
+     let changed=false;
+     for(const [k,arr] of days){
+       if(!arr.length)continue;const d=fromKey(k);if(isProtectedHygieneDay(arr,d))continue;
+       const rooms=uniqueRooms(arr);if(rooms.length<=2)continue;
+       const score=new Map();for(const x of arr){if(isDailyTask(x))continue;score.set(x.room,(score.get(x.room)||0)+taskWeight(x))}
+       const sorted=[...rooms].sort((a,b)=>(score.get(b)||0)-(score.get(a)||0)||a.localeCompare(b,'de'));
+       const keep=new Set(sorted.slice(0,2));
+       const groupsByRoom=new Map();
+       for(const x of arr){if(keep.has(x.room)||!movable(x))continue;const pk=workPackage(x).key;if(!groupsByRoom.has(pk))groupsByRoom.set(pk,[]);groupsByRoom.get(pk).push(x)}
+       for(const group of groupsByRoom.values()){
+         const win=windowForGroup(group);if(!win)continue;let best=null;
+         for(let td=new Date(win.lo);td<=win.hi;td=addDays(td,1)){
+           if(td<today||plannerBlocked(td)||td.getDay()===0&&!state.sundayOptional[dayKey(td)])continue;
+           const tk=dayKey(td),ta=days.get(tk);if(!ta||tk===k||ta._fixedRoutine||isProtectedHygieneDay(ta,td))continue;
+           const tr=uniqueRooms(ta),room=group[0].room;
+           const same=tr.includes(room),empty=tr.length===0,oneOther=tr.length===1;
+           const allowed=same||empty||oneOther;
+           if(!allowed)continue;
+           const scoreTarget=(same?-100000:(empty?-50000:0)) + tr.length*100 + (ta._weight||0)*2 + Math.abs(Math.round((td-nextDue(group[0],today))/86400000));
+           if(!best||scoreTarget<best.score)best={td,score:scoreTarget};
+         }
+         if(best&&moveGroup(arr,group,best.td))changed=true;
+         if(uniqueRooms(arr).length<=2)break;
+       }
+     }
+     if(!changed)break;
+   }
+ };
+ finalCoherence();
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,'de')||a.text.localeCompare(b.text,'de'));
  plannerCache={key,days,next};
  return plannerCache;
