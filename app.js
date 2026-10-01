@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V302";
+const APP_BUILD="V303";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1035,10 +1035,28 @@ function buildIntelligentPlan(){
   const capacity=d=>{
     if(d.getDay()===0)return 0;
     if(d.getDay()===6)return 4;
-    if(d.getDay()===2)return 7; // WC-Dienstag braucht bewusst mehr Luft.
+    if(d.getDay()===2)return 7; // WC-Dienstag braucht bewusst etwas mehr Luft.
     return 6;
   };
   const taskLimit=d=>d.getDay()===2?12:6;
+  // Hard capacity invariant: room focus never means "fill the whole day with
+  // one room". A normal day stays within the household capacity even when all
+  // tasks happen to belong to the same room. A single genuinely heavy task may
+  // occupy a day by itself, but a second task may only be added if the combined
+  // weight fits. This is the guard that prevents 50/100-task room dumps.
+  const fits=(a,xs,d)=>{
+    const list=Array.isArray(xs)?xs:[xs];
+    const add=list.reduce((n,x)=>n+weightOf(x),0);
+    const used=a?Number(a._weight||0):0;
+    const limit=capacity(d);
+    if(!limit)return false;
+    if(!a || !a.length) return add<=limit || (list.length===1 && add>limit);
+    return used+add<=limit;
+  };
+  const fitsCount=(a,xs,d)=>{
+    const list=Array.isArray(xs)?xs:[xs];
+    return (a?.length||0)+list.length<=taskLimit(d);
+  };
 
   const put=(xs,d)=>{
     if(!d)return false;
@@ -1096,8 +1114,8 @@ function buildIntelligentPlan(){
     if(!a)continue;
     const rs=roomCount(a), same=a._rooms.has(x.room), w=weightOf(x);
     if(rs>=2&&!same)continue;
-    if(rs===1&&!same && (a._weight||0)+w>capacity(d))continue;
-    if(a.length+1>taskLimit(d)&&!same)continue;
+    if(!fits(a,[x],d))continue;
+    if(!fitsCount(a,[x],d))continue;
     put([x],d);
   }
 
@@ -1139,8 +1157,8 @@ function buildIntelligentPlan(){
       const a=days.get(dayKey(d));if(!a)continue;
       const rs=roomCount(a),same=a._rooms.has(m.room),nw=a._weight+weightOf(m)+weightOf(v);
       if(rs>=2&&!same)continue;
-      if(!same&&rs===1&&nw>capacity(d))continue;
-      if(a.length+2>taskLimit(d)&&!same)continue;
+      if(!fits(a,[m,v],d))continue;
+      if(!fitsCount(a,[m,v],d))continue;
       const score=(same?-100:0)+(rs===0?-20:0)+nw*8+Math.abs(Math.round((d-due(m))/86400000));
       if(!best||score<best.score)best={d,score};
     }
@@ -1207,8 +1225,8 @@ function buildIntelligentPlan(){
       const a=days.get(dayKey(d));if(!a)continue;
       const rs=roomCount(a),same=a._rooms.has(x.room),nw=a._weight+weightOf(x);
       if(rs>=2&&!same)continue;
-      if(rs===1&&!same&&nw>capacity(d))continue;
-      if(a.length+1>taskLimit(d)&&!same)continue;
+      if(!fits(a,[x],d))continue;
+      if(!fitsCount(a,[x],d))continue;
       const score=(same?-100:rs===0?-30:40)+(a._weight||0)*8+Math.abs(Math.round((d-due(x))/86400000))*4;
       if(!best||score<best.score)best={d,score};
     }
@@ -1232,7 +1250,7 @@ function buildIntelligentPlan(){
       const rs=new Set(others.map(x=>x.room).filter(Boolean));
       if(rs.size>=2&&!rs.has(m.room))continue;
       const nw=others.reduce((n,x)=>n+weightOf(x),0)+weightOf(m)+weightOf(v);
-      if(rs.size===1&&!rs.has(m.room)&&nw>capacity(d))continue;
+      if(others.length && !fits({length:others.length,_weight:others.reduce((n,x)=>n+weightOf(x),0)},[m,v],d))continue;
       const score=(rs.has(m.room)?-100:rs.size?-5:-20)+(others.length*4)+Math.abs(Math.round((d-due(m))/86400000))*3;
       if(!target||score<target.score)target={d,score};
     }
@@ -1299,8 +1317,8 @@ function buildIntelligentPlan(){
       const a=days.get(dayKey(d));if(!a)continue;
       const rs=roomCount(a),same=a._rooms.has(x.room),nw=(a._weight||0)+weightOf(x);
       if(rs>=2&&!same)continue;
-      if(rs===1&&!same&&nw>capacity(d))continue;
-      if(a.length+1>taskLimit(d)&&!same)continue;
+      if(!fits(a,[x],d))continue;
+      if(!fitsCount(a,[x],d))continue;
       put([x],d);placed=true;break;
     }
     if(!placed){
@@ -1311,8 +1329,8 @@ function buildIntelligentPlan(){
         const a=days.get(dayKey(d));if(!a)continue;
         const rs=roomCount(a),same=a._rooms.has(x.room),nw=(a._weight||0)+weightOf(x);
         if(rs>=2&&!same)continue;
-        if(rs===1&&!same&&nw>capacity(d))continue;
-        if(a.length+1>taskLimit(d)&&!same)continue;
+        if(!fits(a,[x],d))continue;
+        if(!fitsCount(a,[x],d))continue;
         put([x],d);placed=true;
       }
     }
