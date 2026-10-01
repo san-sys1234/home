@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V298";
+const APP_BUILD="V299";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -2129,6 +2129,78 @@ function buildIntelligentPlan(){
  // allowed to infer a different date.
  for(const a of days.values()){a.length=0;a._weight=0;}
  for(const x of active295){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d)))put295([x],d);}
+ // V299 HARD FLOOR-PAIR INVARIANT: this is the final operation on the
+ // canonical plan. If a room has a planned floor-mopping task, its matching
+ // floor-vacuum task MUST have exactly the same planned date. This pass runs
+ // after the bucket rebuild so no later room-focus or fallback step can split
+ // the pair again.
+ const hardMop299=x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x.text||''));
+ const hardVac299=x=>/boden saugen|stufen saugen/i.test(String(x.text||''));
+ const legal299=(d,x)=>d instanceof Date && !plannerBlocked(d) && d>=today && Math.abs(Math.round((d-nextDue(x,today))/86400000))<=7;
+ const removeFrom299=x=>{
+   const id=taskId(x),d=next.get(id); if(!(d instanceof Date))return;
+   const a=days.get(dayKey(d)); if(!a)return;
+   const i=a.findIndex(y=>taskId(y)===id);
+   if(i>=0)a.splice(i,1);
+   a._weight=a.reduce((n,y)=>n+taskWeight(y),0);
+ };
+ const putPair299=(xs,d)=>{
+   const a=days.get(dayKey(d)); if(!a)return false;
+   for(const x of xs){
+     const id=taskId(x);
+     if(!a.some(y=>taskId(y)===id))a.push(x);
+     next.set(id,new Date(d));
+   }
+   a._weight=a.reduce((n,y)=>n+taskWeight(y),0);
+   return true;
+ };
+ for(const mop of active295.filter(hardMop299)){
+   const vacs=active295.filter(x=>x.room===mop.room && x!==mop && hardVac299(x));
+   if(!vacs.length)continue;
+   // Normally there is exactly one floor-vacuum task per room. If there are
+   // several, pair the one with the closest due date.
+   vacs.sort((a,b)=>Math.abs(nextDue(a,today)-nextDue(mop,today))-Math.abs(nextDue(b,today)-nextDue(mop,today)));
+   const vac=vacs[0];
+   const md=next.get(taskId(mop)),vd=next.get(taskId(vac));
+   if(sameDay(md,vd))continue;
+   const lo=new Date(Math.max(nextDue(mop,today).getTime(),nextDue(vac,today).getTime())-7*86400000);
+   const hi=new Date(Math.min(nextDue(mop,today).getTime(),nextDue(vac,today).getTime())+7*86400000);
+   let best=null;
+   if(lo<=hi){
+     for(let d=new Date(lo);d<=hi;d=addDays(d,1)){
+       if(!legal299(d,mop)||!legal299(d,vac))continue;
+       const a=days.get(dayKey(d)); if(!a)continue;
+       const otherRooms=rooms295(a).filter(r=>r!==mop.room);
+       if(otherRooms.length>1)continue;
+       const pairWeight=taskWeight(mop)+taskWeight(vac);
+       const cap=dayBudget(d);
+       if((a._weight||0)+pairWeight>cap+1.5 && otherRooms.length)continue;
+       const same=otherRooms.length===0;
+       const score=(same?-100000:0)+(a._weight||0)*10+Math.abs(d-nextDue(mop,today))+Math.abs(d-nextDue(vac,today));
+       if(!best||score<best.score)best={d,score};
+     }
+   }
+   // If the normal capacity-aware search found nothing, still enforce the
+   // explicit user rule by choosing the nearest legal common date. The pair is
+   // more important than leaving mop without its vacuum.
+   if(!best && lo<=hi){
+     for(let d=new Date(lo);d<=hi;d=addDays(d,1)){
+       if(!legal299(d,mop)||!legal299(d,vac))continue;
+       const a=days.get(dayKey(d)); if(!a)continue;
+       const score=(a.some(y=>y.room===mop.room)?-10000:0)+(a._weight||0)*10+Math.abs(d-nextDue(mop,today))+Math.abs(d-nextDue(vac,today));
+       if(!best||score<best.score)best={d,score};
+     }
+   }
+   if(best){
+     removeFrom299(mop);
+     removeFrom299(vac);
+     putPair299([mop,vac],best.d);
+   }
+ }
+ // Final bucket rebuild after V299 pairing.
+ for(const a of days.values()){a.length=0;a._weight=0;}
+ for(const x of active295){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d)))put295([x],d);}
+
  // Guarantee that the canonical map and buckets agree exactly.
  for(const [id,d] of [...next.entries()]){
    if(!(d instanceof Date))next.delete(id);
