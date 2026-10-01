@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V283";
+const APP_BUILD="V284";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -966,7 +966,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v283|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v284|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1283,6 +1283,80 @@ function buildIntelligentPlan(){
      next.set(taskId(paired),fromKey(k));
    }
  }
+ // FINAL ROOM-FOCUS PASS: a normal day should feel like one main room plus at
+ // most one small secondary room. Earlier capacity/fallback passes can legally
+ // place tasks on several rooms; this final pass compresses them again without
+ // changing any task's legal +/-7-day window. Fixed routines, WC hygiene and
+ // already-coupled floor pairs are protected.
+ const protectedTask=x=>isFixedRhythmRoutine(x)||isWCSubtask(x)||x.source==="seasonal"||x.window||x.raffstore;
+ const packageKey=x=>workPackage(x)?.key||`single|${taskId(x)}`;
+ const moveUnitToBestDay=(unit,fromKey)=>{
+   if(!unit.length)return false;
+   const room=unit[0].room;
+   const dueList=unit.map(x=>nextDue(x,today));
+   const candidates=[];
+   for(let delta=-7;delta<=7;delta++){
+     for(const sign of delta===0?[1]:[1,-1]){
+       const d=addDays(dueList[0],delta*sign),k=dayKey(d),a=days.get(k);
+       if(!a||d<today||plannerBlocked(d)||k===fromKey)continue;
+       if(unit.some(x=>Math.abs(Math.round((d-nextDue(x,today))/86400000))>7))continue;
+       const rooms=uniqueRooms(a),sameRoom=rooms.includes(room),empty=!rooms.length;
+       if(rooms.length>=2&&!sameRoom)continue;
+       if(!empty&&!sameRoom)continue;
+       const used=a._weight||0,weight=unit.reduce((n,x)=>n+taskWeight(x),0);
+       const hasHeavy=a.some(isHeavyTask);
+       if(hasHeavy&&!sameRoom)continue;
+       if(a.length+unit.length>dayTaskLimit(d)&&!sameRoom)continue;
+       if(used+weight>dayBudget(d)&&!sameRoom)continue;
+       const score=(sameRoom?-220:0)+(empty?-60:0)+used*10+Math.abs(delta)*0.2+adjacentLoadPenalty(days,d);
+       candidates.push({k,score});
+     }
+   }
+   candidates.sort((a,b)=>a.score-b.score);
+   const best=candidates[0]; if(!best)return false;
+   const old=days.get(fromKey),target=days.get(best.k);
+   if(!old||!target)return false;
+   for(const x of unit){
+     const i=old.findIndex(y=>taskId(y)===taskId(x));
+     if(i>=0)old.splice(i,1);
+     target.push(x); next.set(taskId(x),fromKey(best.k));
+   }
+   old._weight=Math.max(0,(old._weight||0)-unit.reduce((n,x)=>n+taskWeight(x),0));
+   target._weight=(target._weight||0)+unit.reduce((n,x)=>n+taskWeight(x),0);
+   return true;
+ };
+ for(let pass=0;pass<4;pass++){
+   let changed=false;
+   for(const [k,arr] of days){
+     if(!arr.length)continue;
+     const rooms=uniqueRooms(arr);
+     if(rooms.length<=2)continue;
+     const roomScore=new Map();
+     for(const x of arr){
+       const protectedBoost=protectedTask(x)?1000:0;
+       roomScore.set(x.room,(roomScore.get(x.room)||0)+taskWeight(x)+protectedBoost);
+     }
+     const keep=rooms.slice().sort((a,b)=>(roomScore.get(b)||0)-(roomScore.get(a)||0)||a.localeCompare(b,"de")).slice(0,2);
+     const units=new Map();
+     for(const x of arr){
+       if(keep.includes(x.room)||protectedTask(x))continue;
+       const key=`${x.room}|${packageKey(x)}`;
+       if(!units.has(key))units.set(key,[]);
+       units.get(key).push(x);
+     }
+     for(const unit of units.values()){
+       if(!unit.length)continue;
+       const hasMop=unit.some(x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x?.text||""))),hasVac=unit.some(x=>/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x?.text||"")));
+       if(hasMop||hasVac){
+         const paired=arr.filter(x=>x.room===unit[0].room && (/boden wischen|stufen wischen|boden bei bedarf reinigen|boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x?.text||""))));
+         for(const x of paired)if(!unit.some(y=>taskId(y)===taskId(x)))unit.push(x);
+       }
+       if(moveUnitToBestDay(unit,k))changed=true;
+     }
+   }
+   if(!changed)break;
+ }
+
  for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
  for(const [k,arr] of days){
    for(const y of arr){
