@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V287";
+const APP_BUILD="V288";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1546,6 +1546,74 @@ function buildIntelligentPlan(){
      movePlannedTask(mop,vd);
    }
  }
+ // FINAL CANONICAL ROOM FOCUS: after every hard rule, including floor coupling,
+ // has run, compact normal days to one main room plus at most one secondary room.
+ // This is the LAST planning mutation before the cache is published, so no later
+ // coupling/fallback pass can reintroduce a third room. Fixed routines, WC hygiene,
+ // windows and seasonal work remain protected; movable work packages travel together.
+ const finalFocusMove=(group,target)=>{
+   if(!group.length||!target)return false;
+   const targetArr=days.get(target); if(!targetArr)return false;
+   const ids=new Set(group.map(taskId));
+   for(const x of group){
+     const from=next.get(taskId(x));
+     if(from instanceof Date){
+       const old=days.get(dayKey(from));
+       if(old && dayKey(from)!==target){
+         const ix=old.findIndex(y=>taskId(y)===taskId(x));
+         if(ix>=0){old.splice(ix,1);old._weight=Math.max(0,(old._weight||0)-taskWeight(x));}
+       }
+     }
+   }
+   for(const x of group){
+     if(!targetArr.some(y=>taskId(y)===taskId(x))){targetArr.push(x);targetArr._weight=(targetArr._weight||0)+taskWeight(x);}
+     next.set(taskId(x),fromKey(target));
+   }
+   return true;
+ };
+ for(const [k,arr] of [...days.entries()]){
+   if(!arr.length)continue;
+   const d=fromKey(k);
+   // Tuesday is the intentional WC hygiene block. It may contain several WC
+   // rooms and must never be compacted into an unrelated room focus.
+   if(isProtectedHygieneDay(arr,d))continue;
+   let rooms=uniqueRooms(arr);
+   if(rooms.length<=2)continue;
+   const roomScore=r=>arr.filter(x=>x.room===r).reduce((n,x)=>n+taskWeight(x),0);
+   // Prefer rooms containing protected work, then the rooms with the greatest
+   // amount of actual work. This keeps important fixed work from being displaced.
+   const protectedRooms=new Set(arr.filter(x=>isFixedRhythmRoutine(x)||x.window||x.source==='seasonal').map(x=>x.room));
+   rooms.sort((a,b)=>((protectedRooms.has(b)?1:0)-(protectedRooms.has(a)?1:0))||roomScore(b)-roomScore(a)||a.localeCompare(b,'de'));
+   const keep=new Set(rooms.slice(0,2));
+   const groups=new Map();
+   for(const x of arr){
+     if(keep.has(x.room)||isFixedRhythmRoutine(x)||x.window||x.source==='seasonal'||isWCSubtask(x))continue;
+     const pkg=workPackage(x).key;
+     if(!groups.has(pkg))groups.set(pkg,[]);
+     groups.get(pkg).push(x);
+   }
+   for(const group of groups.values()){
+     if(!group.length)continue;
+     const room=group[0].room;
+     let best=null;
+     for(let delta=-7;delta<=7;delta++){
+       const dues=group.map(x=>nextDue(x,today)).filter(x=>x instanceof Date&&!Number.isNaN(x.getTime()));
+       if(!dues.length)continue;
+       const base=new Date(Math.max(...dues.map(x=>x.getTime()))); base.setHours(12,0,0,0);
+       const td=addDays(base,delta),tk=dayKey(td),ta=days.get(tk);
+       if(!ta||tk===k||td<today||plannerBlocked(td)||isProtectedHygieneDay(ta,td))continue;
+       const tr=uniqueRooms(ta);
+       if(tr.length>2)continue;
+       if(tr.length>=2&&!tr.includes(room))continue;
+       const groupWeight=group.reduce((n,x)=>n+taskWeight(x),0);
+       const sameRoom=tr.includes(room),empty=tr.length===0;
+       const score=(sameRoom?-10000:(empty?-5000:1000000))+(ta._weight||0)*8+Math.abs(delta)*2+roomSpreadPenalty(ta,group[0]);
+       if(!best||score<best.score)best={tk,score};
+     }
+     if(best)finalFocusMove(group,best.tk);
+   }
+ }
+ for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,'de')||a.text.localeCompare(b.text,'de'));
  plannerCache={key,days,next};
  return plannerCache;
 }
