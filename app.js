@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V295";
+const APP_BUILD="V297";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1906,7 +1906,7 @@ function buildIntelligentPlan(){
      next.set(id,target);
    }
  }
- // V295 STRICT ROOM-FOCUS PLANNER
+ // V297 ROOM-FOCUS PLANNER: one primary room, optional second room within capacity
  // Rebuild the user-facing plan from scratch at the very end. Earlier heuristic
  // passes were too permissive: they could legally satisfy due dates while still
  // scattering many rooms over one day. This final planner is deliberately simple:
@@ -1944,14 +1944,21 @@ function buildIntelligentPlan(){
      if(forcedDow!==null&&d.getDay()!==forcedDow)continue;
      const a=days.get(dayKey(d)); if(!a)continue;
      const rs=rooms295(a),same=rs.includes(room),empty=rs.length===0;
-     if(rs.length && !same)continue; // the core room-focus rule
-     const heavy=group.some(x=>x.window||x.raffstore||taskWeight(x)>=5);
-     if(heavy&&!empty&&!same)continue;
      const load=a._weight||0;
      const count=a.length;
+     const cap=Math.max(3,dayBudget(d));
+     const heavy=group.some(x=>x.window||x.raffstore||taskWeight(x)>=5);
+     // Room focus is the default, not an absolute one-room prohibition:
+     // a second room is allowed only when the first room fits comfortably
+     // inside the day's capacity. Never allow a third room. Heavy work keeps
+     // the day single-room so a large package cannot be diluted by extras.
+     if(rs.length && !same){
+       if(rs.length>=2)continue;
+       if(heavy || load+gw>cap+1.5)continue;
+     }
+     if(heavy&&!empty&&!same)continue;
      // Keep ordinary days around the user's 30–120 minute target. A larger
      // package may own a day; small compatible work can fill the same room.
-     const cap=Math.max(3,dayBudget(d));
      if(!empty && load+gw>cap+1.5)continue;
      if(count+group.length>(d.getDay()===2?10:6)&&!empty)continue;
      const distance=Math.min(...group.map(x=>Math.abs(Math.round((d-due295(x))/86400000))));
@@ -2046,7 +2053,44 @@ function buildIntelligentPlan(){
    if(c){move295(mop,c.d);move295(vacuum,c.d);}
  }
 
- // 6) Rebuild buckets from the canonical next map. Nothing downstream is
+ // 6) Final invariant pass: whenever a floor-mopping task is planned, the
+ // matching vacuum task(s) in the same room MUST be planned on the same day.
+ // This is deliberately done after every other placement pass, so no later
+ // room-bundling rule can separate the pair again.
+ for(const mop of active295.filter(mop295)){
+   const vacuums=active295.filter(x=>x.room===mop.room&&x!==mop&&vac295(x));
+   if(!vacuums.length)continue;
+   const mopDue=due295(mop);
+   const candidates=vacuums.map(v=>({v,d:next.get(taskId(v))})).filter(o=>o.d instanceof Date);
+   if(!candidates.length)continue;
+   // Prefer the vacuum with the closest due date; then choose the mop date
+   // whenever it is legal for both tasks. Otherwise use the vacuum date if
+   // legal for both, otherwise the nearest legal date in the intersection.
+   candidates.sort((a,b)=>Math.abs(a.d-mopDue)-Math.abs(b.d-mopDue));
+   const vac=candidates[0].v, vacDue=due295(vac);
+   let target=next.get(taskId(mop));
+   const legal=(d,x)=>d instanceof Date&&!plannerBlocked(d)&&d>=today&&Math.abs(Math.round((d-due295(x))/86400000))<=7;
+   if(!legal(target,mop)||!legal(target,vac)){
+     const vd=next.get(taskId(vac));
+     if(legal(vd,mop)&&legal(vd,vac))target=vd;
+     else {
+       const lo=new Date(Math.max(mopDue.getTime(),vacDue.getTime())-7*86400000);
+       const hi=new Date(Math.min(mopDue.getTime(),vacDue.getTime())+7*86400000);
+       let best=null;
+       if(lo<=hi)for(let d=new Date(lo);d<=hi;d=addDays(d,1)){
+         if(!legal(d,mop)||!legal(d,vac))continue;
+         const score=Math.abs(d-mopDue)+Math.abs(d-vacDue);
+         if(!best||score<best.score)best={d,score};
+       }
+       if(best)target=best.d;
+     }
+   }
+   if(legal(target,mop)&&legal(target,vac)){
+     removeTask295(mop);removeTask295(vac);put295([mop,vac],target);
+   }
+ }
+
+ // 7) Rebuild buckets from the canonical next map. Nothing downstream is
  // allowed to infer a different date.
  for(const a of days.values()){a.length=0;a._weight=0;}
  for(const x of active295){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d)))put295([x],d);}
