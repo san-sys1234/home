@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V301";
+const APP_BUILD="V302";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1084,10 +1084,21 @@ function buildIntelligentPlan(){
     return out;
   };
 
-  // ---- 1. Explizite Benutzerplanung hat Vorrang -------------------------
-  // Nur gültige, innerhalb des normalen +/-7-Fensters liegende Overrides.
+  // ---- 1. Explizite Planung – aber niemals kapazitätsblind -------------
+  // Alte Planner-Versionen haben plannedOverrides teilweise massenhaft auf
+  // denselben Tag geschrieben. Diese Werte dürfen die neue Kapazitäts- und
+  // Raumlogik nicht mehr übersteuern. Ein Override wird nur übernommen, wenn
+  // er auch als normale Platzierung in den Tagesrahmen passt.
   for(const x of active){
-    const d=overrideDate(x);if(d)put([x],d);
+    const d=overrideDate(x);
+    if(!d)continue;
+    const a=days.get(dayKey(d));
+    if(!a)continue;
+    const rs=roomCount(a), same=a._rooms.has(x.room), w=weightOf(x);
+    if(rs>=2&&!same)continue;
+    if(rs===1&&!same && (a._weight||0)+w>capacity(d))continue;
+    if(a.length+1>taskLimit(d)&&!same)continue;
+    put([x],d);
   }
 
   // ---- 2. WC-Pakete -------------------------------------------------------
@@ -1249,6 +1260,15 @@ function buildIntelligentPlan(){
   // heute erhalten. Erledigen/Später entfernt nur den jeweiligen Task aus der
   // sichtbaren Liste; es wird NICHT mit einem anderen Raum aufgefüllt.
   const fk=dayKey(today);
+  // Snapshots are derived planning data, not user data. A snapshot created by
+  // an older broken planner must never be allowed to freeze dozens of tasks
+  // onto today. Keep a sane snapshot only when it is within today's capacity.
+  const rawFrozen=Array.isArray(state.todayPlanSnapshot?.[fk])?state.todayPlanSnapshot[fk].map(String):null;
+  const maxFrozen=taskLimit(today);
+  if(rawFrozen && rawFrozen.length>maxFrozen){
+    delete state.todayPlanSnapshot[fk];
+    localStorage.setItem(STORAGE,JSON.stringify(state));
+  }
   const frozen=Array.isArray(state.todayPlanSnapshot?.[fk])?new Set(state.todayPlanSnapshot[fk].map(String)):null;
   if(frozen&&frozen.size){
     const a=days.get(fk);if(a){
@@ -1268,12 +1288,34 @@ function buildIntelligentPlan(){
   for(const a of days.values()){a._weight=0;a._rooms=new Set();a.length=0;}
   for(const x of active){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d)))put([x],d);}
 
-  // Final defensive invariant: every active task has a concrete Date.
-  // If a pathological legacy dataset has no legal slot, use the nearest future
-  // non-Sunday date; this is only a last-resort data-integrity guard.
+  // Final defensive invariant: every active task gets a date, but the fallback
+  // is still subject to the same room/capacity rules. Never dump leftovers onto
+  // today just to manufacture a date.
   for(const x of active){
     if(next.has(taskId(x)))continue;
-    let d=new Date(start);let guard=0;while(guard++<60){if(!plannerBlocked(d)){put([x],d);break;}d=addDays(d,1);}
+    const cs=candidatesFor([x]);
+    let placed=false;
+    for(const d of cs){
+      const a=days.get(dayKey(d));if(!a)continue;
+      const rs=roomCount(a),same=a._rooms.has(x.room),nw=(a._weight||0)+weightOf(x);
+      if(rs>=2&&!same)continue;
+      if(rs===1&&!same&&nw>capacity(d))continue;
+      if(a.length+1>taskLimit(d)&&!same)continue;
+      put([x],d);placed=true;break;
+    }
+    if(!placed){
+      // If no legal +/-7 slot exists, extend forward to the first available
+      // capacity slot. This is preferable to violating the room focus.
+      for(let d=new Date(start),guard=0;guard<120&&!placed;d=addDays(d,1),guard++){
+        if(plannerBlocked(d))continue;
+        const a=days.get(dayKey(d));if(!a)continue;
+        const rs=roomCount(a),same=a._rooms.has(x.room),nw=(a._weight||0)+weightOf(x);
+        if(rs>=2&&!same)continue;
+        if(rs===1&&!same&&nw>capacity(d))continue;
+        if(a.length+1>taskLimit(d)&&!same)continue;
+        put([x],d);placed=true;
+      }
+    }
   }
 
   plannerCache={key,days,next};
