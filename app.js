@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V294";
+const APP_BUILD="V295";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -1906,53 +1906,157 @@ function buildIntelligentPlan(){
      next.set(id,target);
    }
  }
- // V294 FINAL CANONICAL REPAIR
- // The previous build could leave a late hard-date repair with several unrelated
- // rooms on one day and could render an already-planned overdue task as "—".
- // This final pass makes the canonical next-date map authoritative for every UI.
- const active294=CATALOG.filter(x=>!isDailyTask(x)&&!isDone(x)&&!isPostponed(x)&&!isInvalidLegacyTask(x));
- const remove294=x=>{const d=next.get(taskId(x));if(!(d instanceof Date))return;const a=days.get(dayKey(d));if(!a)return;const i=a.findIndex(y=>taskId(y)===taskId(x));if(i>=0){a.splice(i,1);a._weight=Math.max(0,(a._weight||0)-taskWeight(x));}};
- const place294=(x,d)=>{if(!(d instanceof Date)||!days.has(dayKey(d)))return false;remove294(x);const a=days.get(dayKey(d));if(!a.some(y=>taskId(y)===taskId(x))){a.push(x);a._weight=(a._weight||0)+taskWeight(x);}next.set(taskId(x),new Date(d));return true;};
- // Every active task gets a concrete canonical date. Overdue tasks start at today;
- // future tasks may move +/-7 days around the current due date.
- for(const x of active294){
-   if(isWCSubtask(x))continue;
-   const due=nextDue(x,today),pd=next.get(taskId(x));
-   const valid=pd instanceof Date&&pd>=today&&Math.abs(Math.round((pd-due)/86400000))<=7;
-   if(valid)continue;
-   let best=null;const lo=new Date(Math.max(today.getTime(),addDays(due,-7).getTime())),hi=addDays(due,7);
-   for(let d=new Date(lo);d<=hi;d=addDays(d,1)){
-     if(d<today||plannerBlocked(d))continue;const a=days.get(dayKey(d));if(!a)continue;
-     const rooms=uniqueRooms(a),same=rooms.includes(x.room),empty=!rooms.length;
-     const score=(same?-100000:empty?-50000:rooms.length*7000)+(a._weight||0)*8+a.length*2+Math.abs(Math.round((d-due)/86400000));
+ // V295 STRICT ROOM-FOCUS PLANNER
+ // Rebuild the user-facing plan from scratch at the very end. Earlier heuristic
+ // passes were too permissive: they could legally satisfy due dates while still
+ // scattering many rooms over one day. This final planner is deliberately simple:
+ // one room per normal day, WC packages on Tuesday, and floor mop+vacuum together.
+ const active295=CATALOG.filter(x=>!isDailyTask(x)&&!isDone(x)&&!isPostponed(x)&&!isInvalidLegacyTask(x));
+ const clear295=()=>{for(const a of days.values()){a.length=0;a._weight=0;delete a._fixedRoutine;}next.clear();};
+ const put295=(group,d)=>{
+   if(!(d instanceof Date)||!days.has(dayKey(d)))return false;
+   const a=days.get(dayKey(d));
+   for(const x of group){if(!a.some(y=>taskId(y)===taskId(x)))a.push(x);next.set(taskId(x),new Date(d));}
+   a._weight=a.reduce((n,x)=>n+taskWeight(x),0);
+   return true;
+ };
+ const due295=x=>nextDue(x,today);
+ const window295=group=>{
+   let lo=today,hi=null;
+   for(const x of group){
+     const u=due295(x); if(!(u instanceof Date))continue;
+     const a=addDays(u,-7),b=addDays(u,7);
+     lo=new Date(Math.max(lo.getTime(),a.getTime()));
+     hi=hi?new Date(Math.min(hi.getTime(),b.getTime())):b;
+   }
+   if(!hi||lo>hi)return null;
+   lo.setHours(12,0,0,0);hi.setHours(12,0,0,0);
+   return {lo,hi};
+ };
+ const room295=g=>g[0]?.room||'';
+ const weight295=g=>g.reduce((n,x)=>n+taskWeight(x),0);
+ const rooms295=a=>[...new Set(a.map(x=>x.room).filter(Boolean))];
+ const candidate295=(group,forcedDow=null)=>{
+   const win=window295(group); if(!win)return null;
+   const room=room295(group),gw=weight295(group),out=[];
+   for(let d=new Date(win.lo);d<=win.hi;d=addDays(d,1)){
+     if(d<today||plannerBlocked(d))continue;
+     if(forcedDow!==null&&d.getDay()!==forcedDow)continue;
+     const a=days.get(dayKey(d)); if(!a)continue;
+     const rs=rooms295(a),same=rs.includes(room),empty=rs.length===0;
+     if(rs.length && !same)continue; // the core room-focus rule
+     const heavy=group.some(x=>x.window||x.raffstore||taskWeight(x)>=5);
+     if(heavy&&!empty&&!same)continue;
+     const load=a._weight||0;
+     const count=a.length;
+     // Keep ordinary days around the user's 30–120 minute target. A larger
+     // package may own a day; small compatible work can fill the same room.
+     const cap=Math.max(3,dayBudget(d));
+     if(!empty && load+gw>cap+1.5)continue;
+     if(count+group.length>(d.getDay()===2?10:6)&&!empty)continue;
+     const distance=Math.min(...group.map(x=>Math.abs(Math.round((d-due295(x))/86400000))));
+     const score=(same?-100000:0)+(empty?-25000:0)+load*12+count*3+distance*2;
+     out.push({d,score});
+   }
+   out.sort((a,b)=>a.score-b.score||a.d-b.d);
+   return out[0]||null;
+ };
+ const removeTask295=x=>{
+   const old=next.get(taskId(x)); if(!(old instanceof Date))return;
+   const a=days.get(dayKey(old)); if(!a)return;
+   const i=a.findIndex(y=>taskId(y)===taskId(x));
+   if(i>=0)a.splice(i,1);
+   a._weight=a.reduce((n,y)=>n+taskWeight(y),0);
+ };
+ const move295=(x,d)=>{removeTask295(x);put295([x],d);};
+ clear295();
+
+ // 1) WC packages: toilet + brush/holder + washbasin always together on Tuesday.
+ const wc295=new Map();
+ for(const x of active295)if(isWCSubtask(x)){if(!wc295.has(x.room))wc295.set(x.room,[]);wc295.get(x.room).push(x);}
+ for(const group of wc295.values()){
+   let best=candidate295(group,2);
+   // Tuesday may already contain another WC room. candidate295 intentionally
+   // allows only the same room, so choose the nearest Tuesday manually here.
+   if(!best){
+     const due=group.reduce((n,x)=>n+due295(x).getTime(),0)/group.length;let bd=null,bs=Infinity;
+     for(let off=0;off<=21;off++){
+       const d=addDays(today,off);if(d.getDay()!==2||plannerBlocked(d))continue;
+       const s=Math.abs(d.getTime()-due)+((days.get(dayKey(d))?days.get(dayKey(d))._weight:0)*1000000);
+       if(s<bs){bs=s;bd=d;}
+     }
+     if(bd)put295(group,bd);
+   }else put295(group,best.d);
+ }
+
+ // 2) If mopping is due, bind the room's vacuum occurrence to the same day.
+ const mop295=x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x.text||''));
+ const vac295=x=>/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x.text||''));
+ const paired295=new Set();
+ for(const mop of active295.filter(mop295)){
+   const vacuum=active295.find(x=>x.room===mop.room&&vac295(x));
+   if(!vacuum)continue;
+   const group=[mop,vacuum].filter((x,i,a)=>a.findIndex(y=>taskId(y)===taskId(x))===i);
+   if(group.some(x=>next.has(taskId(x)))){ // WC cannot occur here; remove stale placement only
+     for(const x of group)removeTask295(x);
+   }
+   const c=candidate295(group);
+   if(c){put295(group,c.d);paired295.add(taskId(mop));paired295.add(taskId(vacuum));}
+ }
+
+ // 3) Group compatible work in the same room only when their +/-7 windows
+ // overlap. This is the efficient "finish the room" behavior without creating
+ // impossible date shifts.
+ const remaining=active295.filter(x=>!next.has(taskId(x)));
+ const grouped=[];const used295=new Set();
+ for(const x of remaining.slice().sort((a,b)=>due295(a)-due295(b))){
+   if(used295.has(taskId(x)))continue;
+   const pkg=workPackage(x).key, g=remaining.filter(y=>!used295.has(taskId(y))&&y.room===x.room&&workPackage(y).key===pkg);
+   let bundle=[x];
+   if(g.length>1){const w=window295(g);if(w)bundle=g;}
+   for(const y of bundle)used295.add(taskId(y));
+   grouped.push(bundle);
+ }
+ grouped.sort((a,b)=>due295(a[0])-due295(b[0])||weight295(b)-weight295(a));
+ for(const g of grouped){const c=candidate295(g);if(c)put295(g,c.d);}
+
+ // 4) Safety fallback: every active task gets a date within +/-7 days, but the
+ // fallback still refuses to mix rooms when an empty/same-room day exists.
+ for(const x of active295){
+   if(next.has(taskId(x)))continue;
+   const win=window295([x]);if(!win)continue;
+   let best=null;
+   for(let d=new Date(win.lo);d<=win.hi;d=addDays(d,1)){
+     if(d<today||plannerBlocked(d))continue;
+     const a=days.get(dayKey(d));if(!a)continue;const rs=rooms295(a),same=rs.includes(x.room),empty=!rs.length;
+     if(rs.length&&!same)continue;
+     const score=(same?-100000:empty?-50000:0)+(a._weight||0)*10+a.length*2+Math.abs(Math.round((d-due295(x))/86400000));
      if(!best||score<best.score)best={d,score};
    }
-   if(best)place294(x,best.d);
+   if(best)put295([x],best.d);
  }
- // WC/toilet/washbasin is one physical Tuesday package. This runs after all
- // other repairs so nothing can split the package again.
- const wc294=new Map();for(const x of active294)if(isWCSubtask(x)){if(!wc294.has(x.room))wc294.set(x.room,[]);wc294.get(x.room).push(x);}
- for(const group of wc294.values()){
-   const dues=group.map(x=>nextDue(x,today)).filter(Boolean);let best=null;
-   for(let off=0;off<=14;off++){const d=addDays(today,off);if(d.getDay()!==2||plannerBlocked(d))continue;const score=dues.reduce((n,u)=>n+Math.abs(Math.round((d-u)/86400000)),0)+off*.01;if(!best||score<best.score)best={d,score};}
-   if(best)for(const x of group)place294(x,best.d);
+
+ // 5) Final floor pairing after fallback. Moving the pair together is allowed
+ // only inside the intersection of their legal windows.
+ for(const mop of active295.filter(mop295)){
+   const vacuum=active295.find(x=>x.room===mop.room&&vac295(x));if(!vacuum)continue;
+   const md=next.get(taskId(mop)),vd=next.get(taskId(vacuum));
+   if(!(md instanceof Date)||!(vd instanceof Date)||sameDay(md,vd))continue;
+   const c=candidate295([mop,vacuum]);
+   if(c){move295(mop,c.d);move295(vacuum,c.d);}
  }
- // Rebuild buckets from next so Today, Calendar and Catalog use exactly the
- // same canonical planned date.
- const rebuild294=()=>{for(const a of days.values()){a.length=0;a._weight=0;delete a._fixedRoutine;}for(const x of active294){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d))){const a=days.get(dayKey(d));a.push(x);a._weight=(a._weight||0)+taskWeight(x);}}};
- rebuild294();
- // One main room per normal day. Move whole room bundles rather than individual
- // checklist lines, whenever the due-date windows have a legal alternative.
- const roomWindow294=g=>{let lo=today,hi=null;for(const x of g){const due=nextDue(x,today);if(!(due instanceof Date))continue;const a=addDays(due,-7),b=addDays(due,7);lo=new Date(Math.max(lo.getTime(),a.getTime()));hi=hi?new Date(Math.min(hi.getTime(),b.getTime())):b;}if(!hi||lo>hi)return null;lo.setHours(12,0,0,0);hi.setHours(12,0,0,0);return {lo,hi};};
- const moveRoom294=(fromKey,room)=>{const from=days.get(fromKey);if(!from)return false;const group=from.filter(x=>x.room===room&&!isWCSubtask(x));if(!group.length)return false;const win=roomWindow294(group);if(!win)return false;let best=null;for(let d=new Date(win.lo);d<=win.hi;d=addDays(d,1)){if(d<today||plannerBlocked(d)||dayKey(d)===fromKey)continue;const a=days.get(dayKey(d));if(!a||a.some(y=>isWCSubtask(y)))continue;const rooms=uniqueRooms(a),same=rooms.includes(room),empty=!rooms.length;const heavyRooms=[...new Set(a.filter(y=>y.window||y.raffstore||taskWeight(y)>=5).map(y=>y.room))];if(heavyRooms.length&&!heavyRooms.includes(room))continue;const gw=group.reduce((n,x)=>n+taskWeight(x),0);if(a.length+group.length>12||(a._weight||0)+gw>12&&group.length>1)continue;const score=(same?-100000:empty?-50000:rooms.length*6000)+(a._weight||0)*8+a.length*2+Math.min(...group.map(x=>Math.abs(Math.round((d-nextDue(x,today))/86400000))));if(!best||score<best.score)best={d,score};}if(!best)return false;for(const x of group)place294(x,best.d);return true;};
- for(let pass=0;pass<8;pass++){let changed=false;for(const [k,a] of [...days.entries()]){if(!a.length||isProtectedHygieneDay(a,fromKey(k)))continue;const rooms=uniqueRooms(a);if(rooms.length<=1)continue;const scores=new Map();for(const x of a)scores.set(x.room,(scores.get(x.room)||0)+taskWeight(x));const keep=[...rooms].sort((aa,bb)=>(scores.get(bb)||0)-(scores.get(aa)||0)||aa.localeCompare(bb,"de"))[0];for(const r of [...rooms].filter(r=>r!==keep).sort((aa,bb)=>(scores.get(bb)||0)-(scores.get(aa)||0))){if(moveRoom294(k,r)){changed=true;break;}}}if(!changed)break;}
- // Floor rule: when mopping is due, vacuuming is its same-day companion.
- const vac294=x=>/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x?.text||""));
- const mop294=x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x?.text||""));
- for(const mop of active294.filter(mop294)){const vacuum=active294.find(x=>x.room===mop.room&&vac294(x));if(!vacuum)continue;const md=next.get(taskId(mop)),vd=next.get(taskId(vacuum));if(!(md instanceof Date)||!(vd instanceof Date)||sameDay(md,vd))continue;place294(mop,md);place294(vacuum,md);}
- rebuild294();
- for(const [k,arr] of days)arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||a.room.localeCompare(b,"de")||a.text.localeCompare(b.text,"de"));
+
+ // 6) Rebuild buckets from the canonical next map. Nothing downstream is
+ // allowed to infer a different date.
+ for(const a of days.values()){a.length=0;a._weight=0;}
+ for(const x of active295){const d=next.get(taskId(x));if(d instanceof Date&&days.has(dayKey(d)))put295([x],d);}
+ // Guarantee that the canonical map and buckets agree exactly.
+ for(const [id,d] of [...next.entries()]){
+   if(!(d instanceof Date))next.delete(id);
+ }
  plannerCache={key,days,next};
+ return plannerCache;
+
  return plannerCache;
 }
 function plannedForDate(d){
