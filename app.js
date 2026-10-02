@@ -1025,7 +1025,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v272|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ return "v279|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1046,6 +1046,186 @@ function plannerHorizon(){
 }
 function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
 function nearbyCategoryPenalty(days,k,cat){let penalty=0;for(const off of [-1,1]){const a=days.get(dayKey(addDays(fromKey(k),off)));if(a&&dominantCategory(a)===cat)penalty+=12}return penalty}
+
+// V279 – final household workload model
+// One real room / one real focus per day. A second focus is allowed only when
+// the complete non-daily workload stays within 90 minutes. The weekly bathroom
+// hygiene block is explicitly exempt from the focus-count rule, but its time
+// still counts toward the 90-minute household-work budget.
+const DAILY_WORK_MINUTES=90;
+function taskMinutes(x){
+  if(!x||isDailyTask(x))return 0;
+  const t=String(x.text||"").toLowerCase();
+  if(isMegaTask(x))return 90;
+  if(isSanitaryWeeklyCore(x)){
+    if(isWCSubtask(x))return 8;
+    if(/handtücher wechseln/.test(t))return 4;
+    return 8;
+  }
+  if(isFloorVacuumTask(x))return 15;
+  if(isFloorMopTask(x))return 15;
+  if(x.window||x.windowSill)return 15;
+  if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 20;
+  if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return 60;
+  if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten|vorratsschrank|vorratsschränke/.test(t))return 60;
+  const w=taskWeight(x);
+  if(w>=5)return 60;
+  if(w>=3)return 35;
+  if(w>=2)return 20;
+  return 10;
+}
+function focusKeyFor(x){
+  if(!x||isDailyTask(x))return "";
+  if(isSanitaryWeeklyCore(x))return "__SANITAER_ROUTINE__";
+  const room=String(x.room||"Sonstiges").trim();
+  const t=String(x.text||"").toLowerCase();
+  if(isMegaTask(x))return `MEGA|${taskId(x)}`;
+  if(x.window||x.windowSill||/fensterbank/.test(t))return `FENSTER|${room}`;
+  if(x.raffstore||/raffstore|sonnenschutz/.test(t))return `RAFFSTORE|${room}`;
+  if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return `SCHWERPUNKT|KÜCHENFRONTEN|${room}`;
+  if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten/.test(t))return `SCHWERPUNKT|KLEIDUNG|${room}`;
+  if(/vorratsschrank|vorratsschränke/.test(t))return `SCHWERPUNKT|VORRAT|${room}`;
+  return `RAUM|${room}`;
+}
+function dayWorkMinutes(arr){
+  return (arr||[]).reduce((sum,x)=>sum+taskMinutes(x),0);
+}
+function dayFocusKeys(arr){
+  const out=new Set();
+  for(const x of (arr||[])){
+    const f=focusKeyFor(x);
+    if(f&&f!=="__SANITAER_ROUTINE__")out.add(f);
+  }
+  return out;
+}
+function focus90Compatible(arr,x){
+  if(!x||isDailyTask(x))return true;
+  const existing=dayFocusKeys(arr);
+  const incoming=focusKeyFor(x);
+  const total=dayWorkMinutes(arr)+taskMinutes(x);
+  if(total>DAILY_WORK_MINUTES)return false;
+  if(!incoming||incoming==="__SANITAER_ROUTINE__")return true;
+  if(isMegaTask(x))return existing.size===0;
+  if([...existing].some(f=>f.startsWith("MEGA|")))return false;
+  if(existing.has(incoming))return true;
+  return existing.size<2;
+}
+function focus90Score(arr,x,due){
+  const incoming=focusKeyFor(x),existing=dayFocusKeys(arr);
+  const same=existing.has(incoming);
+  const minutes=dayWorkMinutes(arr);
+  const dueDist=Math.abs(Math.round((due-d)/86400000));
+  // Same focus is strongly preferred; empty days are preferred over adding a
+  // second focus. Staying near due date remains important inside the legal ±7d.
+  return (same?-140:existing.size===0?-60:0)+(minutes*1.2)+dueDist*0.8+(arr.length*2);
+}
+function legalFocusCandidate(days,x,due,fromDate=today){
+  let best=null;
+  for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
+    const d=addDays(due,delta),k=dayKey(d),arr=days.get(k);
+    if(!arr||d<fromDate||plannerBlocked(d))continue;
+    if(Math.abs(Math.round((d-due)/86400000))>PLANNING_WINDOW)continue;
+    if(arr.some(y=>taskId(y)===taskId(x)))continue;
+    if(!dayPackageCompatible(arr,x))continue;
+    if(!focus90Compatible(arr,x))continue;
+    const score=focus90Score(arr,x,due);
+    if(!best||score<best.score)best={k,d,score};
+  }
+  return best;
+}
+function removeFromPlan(days,next,id){
+  for(const [k,arr] of days){
+    const ix=arr.findIndex(y=>taskId(y)===id);
+    if(ix<0)continue;
+    const y=arr[ix];arr.splice(ix,1);arr._weight=Math.max(0,(arr._weight||0)-taskWeight(y));
+    if(next.get(id) instanceof Date && dayKey(next.get(id))===k)next.delete(id);
+    return y;
+  }
+  return null;
+}
+function enforceFocus90(days,next){
+  // Rebuild only the flexible workload after the existing planner has selected
+  // dates. Fixed sanitary routines remain where they were placed. Any overflow
+  // is moved to the best legal day within the existing ±7-day window.
+  for(const [k,arr] of [...days]){
+    const routine=arr.filter(isSanitaryWeeklyCore);
+    const nonRoutine=arr.filter(x=>!isSanitaryWeeklyCore(x));
+    if(!nonRoutine.length)continue;
+    const groups=new Map();
+    for(const x of nonRoutine){const f=focusKeyFor(x);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(x)}
+    // A mega focus owns the day. Otherwise retain the most substantial / due
+    // focus and at most one additional focus if the complete day remains <=90m.
+    let focusGroups=[...groups.values()];
+    focusGroups.sort((a,b)=>{
+      const am=a.reduce((n,x)=>n+taskMinutes(x),0),bm=b.reduce((n,x)=>n+taskMinutes(x),0);
+      const ad=Math.min(...a.map(x=>Math.abs(Math.round((nextDue(x,today)-fromKey(k))/86400000))));
+      const bd=Math.min(...b.map(x=>Math.abs(Math.round((nextDue(x,today)-fromKey(k))/86400000))));
+      return (bm-am)||(ad-bd);
+    });
+    const keep=new Set();
+    if(focusGroups.length)keep.add(focusKeyFor(focusGroups[0][0]));
+    if(focusGroups.length>1){
+      const first=focusGroups[0], firstMin=first.reduce((n,x)=>n+taskMinutes(x),0)+routine.reduce((n,x)=>n+taskMinutes(x),0);
+      const second=focusGroups[1], secondMin=second.reduce((n,x)=>n+taskMinutes(x),0);
+      const secondKey=focusKeyFor(second[0]);
+      if(![...keep][0]?.startsWith("MEGA|") && firstMin+secondMin<=DAILY_WORK_MINUTES)keep.add(secondKey);
+    }
+    const overflow=[];
+    for(const x of nonRoutine){if(!keep.has(focusKeyFor(x)))overflow.push(x)}
+    // Even the retained groups may individually exceed 90m. Keep the earliest /
+    // highest-priority work and move the remainder instead of ever showing >90m.
+    let running=routine.reduce((n,x)=>n+taskMinutes(x),0);
+    const retained=[];
+    for(const x of nonRoutine.filter(x=>keep.has(focusKeyFor(x))).sort((a,b)=>nextDue(a,today)-nextDue(b,today)||taskMinutes(b)-taskMinutes(a))){
+      if(running+taskMinutes(x)<=DAILY_WORK_MINUTES) {retained.push(x);running+=taskMinutes(x)}
+      else overflow.push(x);
+    }
+    const desired=[...routine,...retained];
+    arr.length=0;arr.push(...desired);arr._weight=arr.reduce((n,x)=>n+taskWeight(x),0);
+    for(const x of overflow){
+      const oldDate=fromKey(k);
+      const due=nextDue(x,today);
+      // The task is currently removed from its old day, so look for a legal
+      // destination first. Only after a destination is found do we touch the
+      // authoritative next-date map; this guarantees that a task can never
+      // silently disappear from Today/Calendar.
+      const cand=legalFocusCandidate(days,x,due,today);
+      if(cand){
+        const a=days.get(cand.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(taskId(x),cand.d);
+      }else{
+        // Last-resort invariant: retain the task on its original day rather than
+        // losing it. This branch is only reachable when every legal ±7-day slot
+        // is blocked; it still respects the 90-minute cap by choosing the least
+        // loaded existing focus-compatible day if one exists.
+        const fallback=[...days.entries()].map(([dk,a])=>({dk,a})).filter(({dk,a})=>{
+          const d=fromKey(dk);
+          return d>=today && Math.abs(Math.round((d-due)/86400000))<=PLANNING_WINDOW && !plannerBlocked(d) && focus90Compatible(a,x);
+        }).sort((u,v)=>dayWorkMinutes(u.a)-dayWorkMinutes(v.a));
+        if(fallback.length){
+          const a=fallback[0].a;a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(taskId(x),fromKey(fallback[0].dk));
+        }else{
+          arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(taskId(x),oldDate);
+        }
+      }
+    }
+  }
+  // The moves above can create a new conflict on a destination day. Repeat a
+  // small deterministic repair pass until stable; never recurse through the UI.
+  for(let pass=0;pass<3;pass++){
+    let moved=false;
+    for(const [k,arr] of [...days]){
+      const f=dayFocusKeys(arr),m=dayWorkMinutes(arr);
+      if(f.size<=2&&m<=DAILY_WORK_MINUTES)continue;
+      const candidates=arr.filter(x=>!isSanitaryWeeklyCore(x)).sort((a,b)=>taskMinutes(b)-taskMinutes(a)||nextDue(b,today)-nextDue(a,today));
+      if(!candidates.length)continue;
+      const x=candidates[0];removeFromPlan(days,next,taskId(x));
+      const cand=legalFocusCandidate(days,x,nextDue(x,today),today);
+      if(cand){const a=days.get(cand.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(taskId(x),cand.d);moved=true}
+    }
+    if(!moved)break;
+  }
+}
+
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -1469,6 +1649,7 @@ function buildIntelligentPlan(){
      }
    }
  }
+ enforceFocus90(days,next);
  plannerCache={key,days,next};
  return plannerCache;
 }
@@ -1616,8 +1797,9 @@ function plannedDateForTask(x){
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
+       if(!dayPackageCompatible(arr,x)||!focus90Compatible(arr,x))continue;
        const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
-       const score=used*10+(sameTheme?0:20)+Math.abs(delta);
+       const score=focus90Score(arr,x,fallbackDue)+(sameTheme?0:20)+Math.abs(delta);
        if(!best||score<best.score)best={k,d,score};
      }
    }
