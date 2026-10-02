@@ -914,46 +914,10 @@ function dayRoomCompatible(arr,x){
  for(const r of incoming)union.add(r);
  return union.size<=MAX_ROOMS_PER_DAY;
 }
-function taskFocusKey(x){
- const room=String(x?.room||"").trim();
- const t=String(x?.text||"").toLowerCase();
- if(x?.window||x?.windowSill||x?.raffstore||/fenster|fensterbank|raffstore|sonnenschutz/.test(t))return `fenster|${room}`;
- if(isMegaTask(x))return `mega|${taskId(x)}`;
- return `raum|${room}`;
-}
-function taskMinutes(x){
- const w=taskWeight(x);
- if(w>=8)return 90;
- if(w>=5)return 60;
- if(w>=3)return 30;
- if(w>=2)return 20;
- return 10;
-}
-function isBathroomRoutineTask(x){
- const bathrooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
- return bathrooms.includes(String(x?.room||"")) && isFixedRhythmRoutine(x);
-}
-function focusCompatible(arr,x){
- if(!arr||!arr.length)return taskMinutes(x)<=90;
- // Bathroom weekly routine is the explicit multi-room exception. Its own
- // effort is not counted against the optional second focus.
- const flex=arr.filter(y=>!isBathroomRoutineTask(y)&&y.source!=="daily"&&y.source!=="seasonal");
- if(isBathroomRoutineTask(x))return true;
- if(isMegaTask(x)||arr.some(y=>isMegaTask(y)))return false;
- const keys=new Set(flex.map(taskFocusKey));
- const incoming=taskFocusKey(x);
- const minutes=flex.reduce((n,y)=>n+taskMinutes(y),0)+taskMinutes(x);
- if(minutes>90)return false;
- // One main focus; a second focus is allowed only when the total flexible
- // workload remains within 90 minutes. Same focus can naturally contain many
- // related tasks, subject to the existing weight/task limits.
- return keys.size===0 || keys.has(incoming) || keys.size<2;
-}
 function dayPackageCompatible(arr,x){
  if(!arr||!arr.length)return true;
  if(isMegaTask(x))return false;
  if(arr.some(isMegaTask))return false;
- if(!focusCompatible(arr,x))return false;
  return dayRoomCompatible(arr,x);
 }
 function roomWorkflow(x){
@@ -987,9 +951,13 @@ function workPackage(x){
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
  if(d.getDay()===0)return 0;
- // Weight units are mapped conservatively to minutes: 1=10, 2=20,
- // 3=30, 5=60, 8=90. Never schedule more than 90 minutes of flexible work.
- return 9;
+ // Household work should feel light, not like a second full-time job.
+ // Keep the room/work-package logic, but deliberately portion each room into
+ // smaller, manageable chunks. Fixed Tuesday hygiene remains protected below.
+ if(d.getDay()===6)return 1;
+ if(d.getDay()===3)return 2;
+ if(d.getDay()===5)return 2;
+ return 3;
 }
 function dayTaskLimit(d){
  // Keep the visible list small as well as the weighted capacity. The weekly
