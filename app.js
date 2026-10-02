@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V315";
+const APP_BUILD="V316";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1533,7 +1533,7 @@ function buildIntelligentPlan(){
   // HARD room rule: one primary room/focus per day; a second physical room is
   // allowed only when the remaining workload capacity is sufficient. Never a third room.
   ensureInitialBalancedDue();
-  const key=plannerKey()+"|V315-ROOMFOCUS";
+  const key=plannerKey()+"|V316-ROOMFOCUS";
   if(plannerCache.key===key)return plannerCache;
 
   const days=new Map(),next=new Map();
@@ -1816,17 +1816,13 @@ function calendarOccurrenceAnchor(x,year){
   while(d<ys)d=addDays(d,interval);
   return d<=ye?d:null;
 }
-function buildRecurringCalendarYear(year){
-  if(yearPlanCache.year===year&&yearPlanCache.days.size)return yearPlanCache.days;
+function buildRecurringCalendarYearAsync(year,onDone){
+  if(yearPlanCache.year===year&&yearPlanCache.days&&yearPlanCache.days.size){onDone?.(yearPlanCache.days);return}
+  const token=++window.__calendarBuildToken;
   const days=new Map();
   const ys=new Date(year,0,1,12),ye=new Date(year,11,31,12);
   for(let d=new Date(ys);d<=ye;d=addDays(d,1))days.set(dayKey(d),[]);
-  const assigned=new Map();
-  // V314: the annual calendar must not invent a different date for the
-  // currently due occurrence. The canonical planner is the single source of
-  // truth for the next occurrence; the calendar may only schedule later
-  // recurrence occurrences independently.
-  const canonicalNow=buildIntelligentPlan().next;
+  const canonicalNow=(plannerCache&&plannerCache.next&&plannerCache.key===plannerKey())?plannerCache.next:null;
   const postponedById=new Map();
   for(const p of Object.values(state.postponed||{})){
     const id=String(p?.sourceKey||p?.canonical||p?.key||p?.id||'');
@@ -1835,60 +1831,60 @@ function buildRecurringCalendarYear(year){
   }
   const seenUnits=new Set();
   const active=CATALOG.filter(x=>x&&!isDailyTask(x)&&!isDone(x));
-  for(const x of active){
-    const id=taskId(x);
-    if(seenUnits.has(id))continue;
-    const unit=planningUnitForCalendar(x);
-    unit.forEach(y=>seenUnits.add(taskId(y)));
-    const anchor=unit.find(isFloorMopTask)||unit[0];
-    const interval=Math.max(1,catalogInterval(anchor));
-    let due=isFixedRhythmRoutine(anchor)?fixedRoutineDate(anchor,today):nextDue(anchor,today);
-    if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
-    while(due<ys)due=addDays(due,interval);
-    let first=true;
-    while(due<=ye){
-      let target=due;
-      const anchorId=taskId(anchor);
-      const postponed=postponedById.get(anchorId);
-      if(first&&postponed){const pd=fromKey(postponed);if(pd>=today&&pd<=ye)target=pd;}
-      // For the first/current occurrence, use exactly the date chosen by the
-      // canonical planner. This prevents a calendar day from showing a task
-      // whose catalog says it is planned on another date.
-      const canonicalPlanned=first?canonicalNow.get(anchorId):null;
-      const canonicalDate=canonicalPlanned instanceof Date?canonicalPlanned:null;
-      if(first&&canonicalDate&&canonicalDate>=today&&canonicalDate<=ye){
-        target=canonicalDate;
-      }
-      if(target>=today&&target<=ye){
-        const planned=first&&canonicalDate&&sameDay(target,canonicalDate)
-          ? canonicalDate
-          : calendarCandidateDate(target,unit,days);
-        if(planned){
-          const k=dayKey(planned),a=days.get(k);
-          for(const y of unit){
-            if(!a.some(z=>taskId(z)===taskId(y)))a.push(y);
-            assigned.set(taskId(y),planned);
+  let index=0;
+  const finish=()=>{
+    if(token!==window.__calendarBuildToken)return;
+    for(const arr of days.values())arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||roomLabel(a.room).localeCompare(roomLabel(b),'de')||a.text.localeCompare(b.text,'de'));
+    yearPlanCache={year,days};
+    calendarCache={year,days};
+    onDone?.(days);
+  };
+  const step=()=>{
+    if(token!==window.__calendarBuildToken)return;
+    const stop=Math.min(active.length,index+3);
+    for(;index<stop;index++){
+      const x=active[index],id=taskId(x);
+      if(seenUnits.has(id))continue;
+      const unit=planningUnitForCalendar(x);
+      unit.forEach(y=>seenUnits.add(taskId(y)));
+      const anchor=unit.find(isFloorMopTask)||unit[0];
+      const interval=Math.max(1,catalogInterval(anchor));
+      let due=isFixedRhythmRoutine(anchor)?fixedRoutineDate(anchor,today):nextDue(anchor,today);
+      if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
+      while(due<ys)due=addDays(due,interval);
+      let first=true;
+      while(due<=ye){
+        let target=due;
+        const anchorId=taskId(anchor);
+        const postponed=postponedById.get(anchorId);
+        if(first&&postponed){const pd=fromKey(postponed);if(pd>=today&&pd<=ye)target=pd;}
+        const canonicalDate=first&&canonicalNow?canonicalNow.get(anchorId):null;
+        if(first&&canonicalDate instanceof Date&&canonicalDate>=today&&canonicalDate<=ye)target=canonicalDate;
+        if(target>=today&&target<=ye){
+          const planned=first&&canonicalDate instanceof Date&&sameDay(target,canonicalDate)
+            ?canonicalDate:calendarCandidateDate(target,unit,days);
+          if(planned){
+            const a=days.get(dayKey(planned));
+            for(const y of unit)if(!a.some(z=>taskId(z)===taskId(y)))a.push(y);
           }
         }
+        first=false;due=addDays(due,interval);
       }
-      first=false;
-      due=addDays(due,interval);
     }
-  }
-  for(const arr of days.values())arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||roomLabel(a.room).localeCompare(roomLabel(b),'de')||a.text.localeCompare(b.text,'de'));
-  yearPlanCache={year,days};
-  return days;
+    if(index<active.length){
+      (window.requestIdleCallback||function(cb){setTimeout(cb,0)})(step,{timeout:250});
+    }else finish();
+  };
+  step();
 }
 function populateCalendarYear(year){
-  if(calendarCache.year===year && calendarCache.days && calendarCache.days.size) return calendarCache.days;
-  const days=buildRecurringCalendarYear(year);
-  calendarCache={year,days};
-  return days;
+  if(calendarCache.year===year&&calendarCache.days&&calendarCache.days.size)return calendarCache.days;
+  return null;
 }
 function calendarTasksForDate(d){
   if(sameDay(d,today))return isHouseholdFree(d)?[]:plannedForDate(d);
   const year=d.getFullYear();
-  populateCalendarYear(year);
+  if(calendarCache.year!==year||!calendarCache.days||!calendarCache.days.size)return [];
   const k=iso(d),cached=calendarCache.days.get(k)||[];
   return isHouseholdFree(d)?[]:cached;
 }
@@ -2941,7 +2937,7 @@ function renderWeek(){
   if(!candidates.length){list.innerHTML=`<div class="empty">Gerade ist nichts offen, das bald ansteht. 🥰</div>`;return;}
   appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:hasPlan});
 }
-function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],ready=calendarCache.year===year&&calendarCache.days&&calendarCache.days.size;main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>${ready?"Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft":"⏳ Kalender wird vorbereitet …"}</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=ready?calendarTasksForDate(d):[],el=document.createElement("button");const completed=ready&&calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>ready?showCalendarDay(d,tasks):toast("⏳ Der Kalender wird noch vorbereitet …");grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
+function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],ready=calendarCache.year===year&&calendarCache.days&&calendarCache.days.size;main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>${ready?"Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft":"⏳ Kalender wird vorbereitet …"}</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=ready?calendarTasksForDate(d):[],el=document.createElement("button");const completed=ready&&calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>ready?showCalendarDay(d,tasks):toast("⏳ Der Kalender wird noch vorbereitet …");grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=year-1;save();render()};main.querySelector("#next").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=year+1;save();render()};main.querySelector("#cur").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=today.getFullYear();save();render()}}
 function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
  // Calendar day details always come from the same canonical plan as Today and
@@ -2988,9 +2984,33 @@ function render(){
     return;
   }
   if(selectedTab==="calendar"){
+    window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;
     renderCalendar();
     const year=state.calendarYear||today.getFullYear();
-    setTimeout(()=>{if(selectedTab!=="calendar")return;restorePlannerSnapshot();populateCalendarYear(year);renderCalendar()},60);
+    const start=()=>{
+      if(selectedTab!=="calendar")return;
+      const ready=calendarCache.year===year&&calendarCache.days&&calendarCache.days.size;
+      if(ready)return;
+      const key=plannerKey();
+      if(!(plannerCache&&plannerCache.key===key)){
+        // Never build the large canonical plan inside the click handler. Let
+        // the already scheduled idle preparation finish, then start the
+        // calendar in small cooperative chunks.
+        const retry=()=>{
+          if(selectedTab!=="calendar")return;
+          const currentKey=plannerKey();
+          if(plannerCache&&plannerCache.key===currentKey){
+            buildRecurringCalendarYearAsync(year,()=>{if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar()});
+          }else{
+            (window.requestIdleCallback||function(cb){setTimeout(cb,200)})(retry,{timeout:800});
+          }
+        };
+        retry();
+        return;
+      }
+      buildRecurringCalendarYearAsync(year,()=>{if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar()});
+    };
+    if("requestIdleCallback" in window)requestIdleCallback(start,{timeout:1200});else setTimeout(start,300);
     return;
   }
   if(selectedTab==="week"){
@@ -3006,7 +3026,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.datase
 render();
 // V310: after the first paint, build the canonical plan once in the background.
 // Today then converges to exactly the same task IDs shown by Catalog/Week/Calendar.
-setTimeout(()=>{
+const __prepareCanonicalPlan=()=>{
   try{
     const p=buildIntelligentPlan();
     const k=dayKey(today);
@@ -3014,5 +3034,6 @@ setTimeout(()=>{
     state.todayPlanSnapshot[k]=[...p.next.entries()].filter(([,d])=>d instanceof Date&&sameDay(d,today)).map(([id])=>id);
     if(selectedTab==="today")render();
   }catch{}
-},180);
+};
+if("requestIdleCallback" in window)requestIdleCallback(__prepareCanonicalPlan,{timeout:1800});else setTimeout(__prepareCanonicalPlan,1200);
 // V307: no delayed full-state write after boot. It could block Safari during interaction.
