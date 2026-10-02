@@ -404,12 +404,13 @@ let catalogSearchTerm="";
 let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
+let yearPlanCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
 function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
 // UI-only saves should not throw away the expensive planner cache. The planner
 // itself is keyed by the state that actually affects scheduling, so it will
 // automatically rebuild when a scheduling input changes.
-function invalidatePlans(){calendarCache={year:null,days:new Map()};invalidatePlanner()}
+function invalidatePlans(){calendarCache={year:null,days:new Map()};yearPlanCache={year:null,days:new Map()};invalidatePlanner()}
 function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
@@ -1751,37 +1752,97 @@ function nextDue(x,ref=today){
  return rawNextDue(x,ref);
 }
 function dueOn(x,d){return plannedForDate(d).some(y=>taskId(y)===taskId(x))}
-function populateCalendarYear(year){
-  if(calendarCache.year===year && calendarCache.days.size)return;
-  const days=new Map();
-  for(let m=0;m<12;m++){
-    const count=new Date(year,m+1,0).getDate();
-    for(let n=1;n<=count;n++)days.set(iso(new Date(year,m,n,12)),[]);
+function planningUnitForCalendar(x){
+  if(isFloorMopTask(x)){
+    const v=floorPairTaskFor(x,CATALOG);
+    if(v&&!isDone(v)&&!isPostponed(v))return [v,x];
   }
-  // Build the canonical plan only once for the whole calendar year.
-  // The old implementation recalculated the full catalog for every single day,
-  // which could freeze the iPhone while opening the Calendar view.
-  for(const x of CATALOG){
-    if(isDailyTask(x)||isDone(x))continue;
-    const pd=plannedDateForTask(x);
-    if(pd && pd.getFullYear()===year){
-      const k=dayKey(pd),arr=days.get(k);
-      if(arr && !arr.some(y=>taskId(y)===taskId(x)))arr.push(x);
+  if(isFloorVacuumTask(x)){
+    const m=floorPairTaskFor(x,CATALOG);
+    if(m&&!isDone(m)&&!isPostponed(m)){
+      const a=nextDue(m,today),b=nextDue(x,today);
+      if(a instanceof Date&&b instanceof Date&&Math.abs(Math.round((a-b)/86400000))<=PLANNING_WINDOW)return [x,m];
     }
   }
-  // Postponed dates remain authoritative and must also be represented once.
-  const seen=new Set();
-  for(const arr of days.values())for(const x of arr)seen.add(taskId(x));
-  for(const p of Object.values(state.postponed||{})){
-    if(!p)continue;
-    const k=normalizeDateKey(p.postponedUntil);
-    if(!k||!k.startsWith(String(year)+'-')||seen.has(String(p.sourceKey||p.canonical||p.key||'')))continue;
-    const id=String(p.sourceKey||p.canonical||p.key||p.id||'');
-    const x=CATALOG.find(y=>taskId(y)===id)||CATALOG.find(y=>String(y.key||'')===String(p.key||''))||CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
-    const arr=days.get(k);
-    if(x&&arr&&!isDailyTask(x)&&!isDone(x)&&!arr.some(y=>taskId(y)===taskId(x))){arr.push(x);seen.add(taskId(x));}
+  return [x];
+}
+function calendarCandidateDate(d,unit,days){
+  if(!(d instanceof Date))return null;
+  const anchor=unit[0],mins=unit.reduce((n,x)=>n+taskMinutes(x),0);
+  const focus=focusKeyFor(anchor);
+  const candidates=[];
+  for(let dd=-PLANNING_WINDOW;dd<=PLANNING_WINDOW;dd++){
+    const c=addDays(d,dd),k=dayKey(c),a=days.get(k);
+    if(!a||c<today||plannerBlocked(c))continue;
+    const flex=a.filter(x=>!isSanitaryWeeklyCore(x));
+    const minutes=flex.reduce((n,x)=>n+taskMinutes(x),0);
+    if(minutes+mins>DAILY_WORK_MINUTES)continue;
+    const focuses=new Set(flex.map(focusKeyFor).filter(Boolean));
+    if(!isSanitaryWeeklyCore(anchor)&&!focuses.has(focus)&&focuses.size>=2)continue;
+    if(focuses.has(focus)===false && focuses.size>=2)continue;
+    const sameFocus=focuses.has(focus)?0:1;
+    const empty=focuses.size===0?0:1;
+    candidates.push({c,a,score:sameFocus*1000+empty*100+minutes*2+Math.abs(dd)*10});
   }
-  for(const arr of days.values())arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||roomLabel(a.room).localeCompare(roomLabel(b.room),'de')||a.text.localeCompare(b.text,'de'));
+  candidates.sort((a,b)=>a.score-b.score||dayKey(a.c).localeCompare(dayKey(b.c)));
+  return candidates[0]?.c||null;
+}
+function calendarOccurrenceAnchor(x,year){
+  let d=isFixedRhythmRoutine(x)?fixedRoutineDate(x,today):nextDue(x,today);
+  if(!(d instanceof Date)||Number.isNaN(d.getTime()))return null;
+  const ys=new Date(year,0,1,12), ye=new Date(year,11,31,12), interval=Math.max(1,catalogInterval(x));
+  while(d<ys)d=addDays(d,interval);
+  return d<=ye?d:null;
+}
+function buildRecurringCalendarYear(year){
+  if(yearPlanCache.year===year&&yearPlanCache.days.size)return yearPlanCache.days;
+  const days=new Map();
+  const ys=new Date(year,0,1,12),ye=new Date(year,11,31,12);
+  for(let d=new Date(ys);d<=ye;d=addDays(d,1))days.set(dayKey(d),[]);
+  const assigned=new Map();
+  const postponedById=new Map();
+  for(const p of Object.values(state.postponed||{})){
+    const id=String(p?.sourceKey||p?.canonical||p?.key||p?.id||'');
+    const k=normalizeDateKey(p?.postponedUntil);
+    if(id&&k)postponedById.set(id,k);
+  }
+  const seenUnits=new Set();
+  const active=CATALOG.filter(x=>x&&!isDailyTask(x)&&!isDone(x));
+  for(const x of active){
+    const id=taskId(x);
+    if(seenUnits.has(id))continue;
+    const unit=planningUnitForCalendar(x);
+    unit.forEach(y=>seenUnits.add(taskId(y)));
+    const anchor=unit.find(isFloorMopTask)||unit[0];
+    const interval=Math.max(1,catalogInterval(anchor));
+    let due=isFixedRhythmRoutine(anchor)?fixedRoutineDate(anchor,today):nextDue(anchor,today);
+    if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
+    while(due<ys)due=addDays(due,interval);
+    let first=true;
+    while(due<=ye){
+      let target=due;
+      const postponed=postponedById.get(taskId(anchor));
+      if(first&&postponed){const pd=fromKey(postponed);if(pd>=today&&pd<=ye)target=pd;}
+      if(target>=today&&target<=ye){
+        const planned=calendarCandidateDate(target,unit,days);
+        if(planned){
+          const k=dayKey(planned),a=days.get(k);
+          for(const y of unit){
+            if(!a.some(z=>taskId(z)===taskId(y)))a.push(y);
+            assigned.set(taskId(y),planned);
+          }
+        }
+      }
+      first=false;
+      due=addDays(due,interval);
+    }
+  }
+  for(const arr of days.values())arr.sort((a,b)=>taskWeight(b)-taskWeight(a)||roomLabel(a.room).localeCompare(roomLabel(b),'de')||a.text.localeCompare(b.text,'de'));
+  yearPlanCache={year,days};
+  return days;
+}
+function populateCalendarYear(year){
+  const days=buildRecurringCalendarYear(year);
   calendarCache={year,days};
 }
 function calendarTasksForDate(d){
