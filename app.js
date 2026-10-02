@@ -1057,6 +1057,7 @@ function enforceFocus90(days){
      for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
        const d=addDays(due,delta),tk=dayKey(d);
        if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
+       if(tk===dayKey(today)&&Array.isArray(state.todayPlanLock?.[tk])&&!state.todayPlanLock[tk].includes(taskId(x)))continue;
        const ta=days.get(tk);
        if(ta.some(y=>taskId(y)===taskId(x)))continue;
        if(!focus90Compatible(ta,x))continue;
@@ -1090,6 +1091,7 @@ function enforceFocus90(days){
      for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
        const d=addDays(due,delta),tk=dayKey(d);
        if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
+       if(tk===dayKey(today)&&Array.isArray(state.todayPlanLock?.[tk])&&!state.todayPlanLock[tk].includes(taskId(victim)))continue;
        const ta=days.get(tk); if(!focus90Compatible(ta,victim))continue;
        c.push({tk,score:flexibleMinutes(ta)*2+Math.abs(delta)});
      }
@@ -1629,6 +1631,13 @@ function buildIntelligentPlan(){
      }
    }
  }
+ // STRICT FINAL FOCUS PASS: this is the last mutation of day buckets.
+ // It exists because earlier fallback/dependency steps can legitimately add a
+ // task after the first focus pass. The invariant is absolute: flexible work
+ // on one day has at most two focus keys and at most 90 minutes, with sanitary
+ // weekly routines explicitly exempt from that focus count.
+ enforceFocus90(days);
+
  // The focus redistribution may have moved tasks after the earlier placement
  // map was built. Rebuild the canonical next-date map from the final day buckets.
  next.clear();
@@ -1741,7 +1750,14 @@ function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDat
 function plannedDateForTask(x){
  const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=PLANNING_WINDOW)return pd;}
+ if(preserved){
+   const pd=fromKey(preserved);
+   const target=plan.days.get(preserved);
+   const legal=target && !plannerBlocked(pd) && pd>=today && !isHouseholdFree(pd) &&
+     Math.abs(Math.round((pd-due)/86400000))<=PLANNING_WINDOW &&
+     focus90Compatible(target,x);
+   if(legal)return pd;
+ }
  // The catalog must describe the exact same visible plan as Today. In particular,
  // after "Später" has been used, a task that is excluded by today's lock is NOT
  // allowed to keep showing "Geplant: heute" in the catalog.
@@ -1785,6 +1801,7 @@ function plannedDateForTask(x){
        if(k===lockKey&&locked&&!locked.has(id))continue;
        const arr=plan.days.get(k);
        if(arr.some(y=>taskId(y)===id))continue;
+       if(!focus90Compatible(arr,x))continue;
        const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
        const score=used*10+(sameTheme?0:20)+Math.abs(delta);
        if(!best||score<best.score)best={k,d,score};
