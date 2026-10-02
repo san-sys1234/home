@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V313";
+const APP_BUILD="V314";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1533,7 +1533,7 @@ function buildIntelligentPlan(){
   // HARD room rule: one primary room/focus per day; a second physical room is
   // allowed only when the remaining workload capacity is sufficient. Never a third room.
   ensureInitialBalancedDue();
-  const key=plannerKey()+"|V313-ROOMFOCUS";
+  const key=plannerKey()+"|V314-ROOMFOCUS";
   if(plannerCache.key===key)return plannerCache;
 
   const days=new Map(),next=new Map();
@@ -1822,6 +1822,11 @@ function buildRecurringCalendarYear(year){
   const ys=new Date(year,0,1,12),ye=new Date(year,11,31,12);
   for(let d=new Date(ys);d<=ye;d=addDays(d,1))days.set(dayKey(d),[]);
   const assigned=new Map();
+  // V314: the annual calendar must not invent a different date for the
+  // currently due occurrence. The canonical planner is the single source of
+  // truth for the next occurrence; the calendar may only schedule later
+  // recurrence occurrences independently.
+  const canonicalNow=buildIntelligentPlan().next;
   const postponedById=new Map();
   for(const p of Object.values(state.postponed||{})){
     const id=String(p?.sourceKey||p?.canonical||p?.key||p?.id||'');
@@ -1843,10 +1848,21 @@ function buildRecurringCalendarYear(year){
     let first=true;
     while(due<=ye){
       let target=due;
-      const postponed=postponedById.get(taskId(anchor));
+      const anchorId=taskId(anchor);
+      const postponed=postponedById.get(anchorId);
       if(first&&postponed){const pd=fromKey(postponed);if(pd>=today&&pd<=ye)target=pd;}
+      // For the first/current occurrence, use exactly the date chosen by the
+      // canonical planner. This prevents a calendar day from showing a task
+      // whose catalog says it is planned on another date.
+      const canonicalPlanned=first?canonicalNow.get(anchorId):null;
+      const canonicalDate=canonicalPlanned instanceof Date?canonicalPlanned:null;
+      if(first&&canonicalDate&&canonicalDate>=today&&canonicalDate<=ye){
+        target=canonicalDate;
+      }
       if(target>=today&&target<=ye){
-        const planned=calendarCandidateDate(target,unit,days);
+        const planned=first&&canonicalDate&&sameDay(target,canonicalDate)
+          ? canonicalDate
+          : calendarCandidateDate(target,unit,days);
         if(planned){
           const k=dayKey(planned),a=days.get(k);
           for(const y of unit){
