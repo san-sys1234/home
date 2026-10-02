@@ -920,62 +920,6 @@ function dayPackageCompatible(arr,x){
  if(arr.some(isMegaTask))return false;
  return dayRoomCompatible(arr,x);
 }
-
-// V280: lightweight focus guard. This is checked during candidate selection
-// rather than by rebuilding the finished plan afterwards. That keeps the
-// existing planner stable and makes the new rule cheap and deterministic.
-const DAILY_WORK_MINUTES=90;
-function focusMinutes(x){
- if(!x||isDailyTask(x))return 0;
- const t=String(x.text||'').toLowerCase();
- if(isMegaTask(x))return 90;
- if(isSanitaryWeeklyCore(x)){
-   if(isWCSubtask(x))return 7;
-   if(/handtücher wechseln/.test(t))return 4;
-   return 7;
- }
- if(isFloorVacuumTask(x)||isFloorMopTask(x))return 15;
- if(x.window||x.windowSill)return 15;
- if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 20;
- if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return 60;
- if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten|vorratsschrank|vorratsschränke/.test(t))return 60;
- const w=taskWeight(x);
- if(w>=5)return 45;
- if(w>=3)return 30;
- if(w>=2)return 20;
- return 10;
-}
-function focusKey(x){
- if(!x||isDailyTask(x))return '';
- if(isSanitaryWeeklyCore(x))return '__SANITAER__';
- const room=String(x.room||'Sonstiges').trim();
- const t=String(x.text||'').toLowerCase();
- if(isMegaTask(x))return 'MEGA|'+taskId(x);
- if(x.window||x.windowSill||/fensterbank/.test(t))return 'FENSTER|'+room;
- if(x.raffstore||/raffstore|sonnenschutz/.test(t))return 'RAFFSTORE|'+room;
- if(/alle .*fronten|fronten .*küche|küchenfronten|küchenfront/.test(t))return 'FOKUS|KÜCHE|'+room;
- if(/kleidung.*aussort|aussort.*kleidung|kleiderschrank.*aussort|kleidung.*sortieren|kleidung.*ausmisten/.test(t))return 'FOKUS|KLEIDUNG|'+room;
- if(/vorratsschrank|vorratsschränke/.test(t))return 'FOKUS|VORRAT|'+room;
- return 'RAUM|'+room;
-}
-function focusMinutesOnDay(arr){return (arr||[]).reduce((n,x)=>n+focusMinutes(x),0)}
-function focusCountOnDay(arr){
- const s=new Set();
- for(const x of (arr||[])){const f=focusKey(x);if(f&&f!=='__SANITAER__')s.add(f)}
- return s;
-}
-function focusCompatible(arr,x){
- if(!x||isDailyTask(x)||!arr||!arr.length)return true;
- const incoming=focusKey(x);
- if(incoming==='__SANITAER__')return focusMinutesOnDay(arr)+focusMinutes(x)<=DAILY_WORK_MINUTES;
- const existing=focusCountOnDay(arr);
- if(existing.has(incoming))return focusMinutesOnDay(arr)+focusMinutes(x)<=DAILY_WORK_MINUTES;
- if([...existing].some(f=>f.startsWith('MEGA|')))return false;
- if(isMegaTask(x))return false;
- // Sanitary routine is exempt from the focus count, but its time still counts.
- if(existing.size>=1 && existing.size>=2)return false;
- return existing.size<2 && focusMinutesOnDay(arr)+focusMinutes(x)<=DAILY_WORK_MINUTES;
-}
 function roomWorkflow(x){
  const t=(x?.text||"").toLowerCase();
  if(/boden|sockelleiste|tür|türklink|lichtschalter|steckdose/.test(t))return "raum-unterhalb";
@@ -1014,6 +958,146 @@ function dayBudget(d){
  if(d.getDay()===3)return 2;
  if(d.getDay()===5)return 2;
  return 3;
+}
+function taskMinutes(x){
+ const w=taskWeight(x);
+ if(w>=8)return 90;
+ if(w>=5)return 60;
+ if(w>=3)return 30;
+ if(w>=2)return 20;
+ return 10;
+}
+function isProtectedSanitaryRoutine(x){return isSanitaryWeeklyCore(x);}
+function focusKeyFor(x){
+ if(!x)return "";
+ if(isProtectedSanitaryRoutine(x))return `sanitaer|${x.room}`;
+ const t=String(x.text||"").toLowerCase();
+ if(x.window||x.windowSill||/\bfenster(?:bank)?\b/.test(t))return `fenster|${x.room}`;
+ if(x.raffstore||/raffstore|sonnenschutz/.test(t))return `raffstore|${x.room}`;
+ if(isMegaTask(x))return `mega|${taskId(x)}`;
+ return `raum|${physicalRooms(x).join("+")||String(x.room||"")}`;
+}
+function flexibleMinutes(arr){return (arr||[]).reduce((n,x)=>n+(isProtectedSanitaryRoutine(x)?0:taskMinutes(x)),0);}
+function flexibleFocusKeys(arr){return new Set((arr||[]).filter(x=>!isProtectedSanitaryRoutine(x)).map(focusKeyFor));}
+function focus90Compatible(arr,x){
+ if(!arr||!x)return false;
+ if(isProtectedSanitaryRoutine(x))return true;
+ const existing=(arr||[]).filter(y=>!isProtectedSanitaryRoutine(y));
+ const keys=flexibleFocusKeys(existing);
+ const incoming=focusKeyFor(x);
+ if(isMegaTask(x))return existing.length===0;
+ if(existing.some(isMegaTask))return false;
+ const sameFocus=keys.has(incoming);
+ const focusCount=keys.size;
+ if(focusCount>=2&&!sameFocus)return false;
+ return flexibleMinutes(arr)+taskMinutes(x)<=90;
+}
+function moveTaskBetweenDays(days,id,targetKey){
+ let task=null;
+ for(const [k,arr] of days){
+   const ix=arr.findIndex(y=>taskId(y)===id);
+   if(ix>=0){task=arr[ix];arr.splice(ix,1);arr._weight=Math.max(0,(arr._weight||0)-taskWeight(task));break;}
+ }
+ if(!task)return false;
+ const target=days.get(targetKey);
+ if(!target)return false;
+ target.push(task);target._weight=(target._weight||0)+taskWeight(task);
+ return true;
+}
+function enforceFocus90(days){
+ const ordered=[...days.keys()];
+ const priority=(x)=>{
+   const mega=isMegaTask(x)?100:0;
+   return mega+taskWeight(x)*10;
+ };
+ // Work from today forward. Fixed sanitary routines are protected; flexible
+ // work is redistributed into legal +/-7-day slots instead of being dropped.
+ for(const k of ordered){
+   const arr=days.get(k);
+   if(!arr||arr.length<2)continue;
+   const flex=arr.filter(x=>!isProtectedSanitaryRoutine(x));
+   if(!flex.length)continue;
+   const groups=new Map();
+   for(const x of flex){const f=focusKeyFor(x);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(x);}
+   // Keep the largest/most important focus as the primary focus. This avoids
+   // arbitrary task-by-task stripping when an older plan has several rooms.
+   const groupList=[...groups.entries()].sort((a,b)=>{
+     const am=a[1].reduce((n,x)=>n+taskMinutes(x),0),bm=b[1].reduce((n,x)=>n+taskMinutes(x),0);
+     const ap=Math.max(...a[1].map(priority)),bp=Math.max(...b[1].map(priority));
+     return bp-ap||bm-am||a[0].localeCompare(b[0],"de");
+   });
+   const primary=groupList[0]?.[0]||"";
+   let used=0;
+   const keep=[];
+   // Within the primary focus keep as much as fits into 90 minutes.
+   for(const x of groups.get(primary)||[]){
+     const m=taskMinutes(x);
+     if(used+m<=90 || (isMegaTask(x)&&used===0)){keep.push(x);used+=m;}
+   }
+   // At most one additional focus, and only if its combined work actually fits.
+   // A second room/focus may contain several small related tasks; the 90-minute
+   // ceiling, not an arbitrary task count, is the limiting factor.
+   for(const [f,items] of groupList.slice(1)){
+     if(!items.length)continue;
+     const candidate=[...items].sort((a,b)=>taskMinutes(a)-taskMinutes(b)||priority(b)-priority(a));
+     let added=false;
+     for(const x of candidate){
+       const m=taskMinutes(x);
+       if(used+m<=90){keep.push(x);used+=m;added=true;}
+     }
+     if(added)break;
+   }
+   const keepIds=new Set(keep.map(taskId));
+   for(const x of flex){
+     if(keepIds.has(taskId(x)))continue;
+     // Try to place the task on the best legal day within +/-7 days of its due
+     // date. Never place a second focus unless that day remains <=90 minutes.
+     const due=nextDue(x,today);
+     const candidates=[];
+     for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
+       const d=addDays(due,delta),tk=dayKey(d);
+       if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
+       const ta=days.get(tk);
+       if(ta.some(y=>taskId(y)===taskId(x)))continue;
+       if(!focus90Compatible(ta,x))continue;
+       // Keep floor pairs together. If this is vacuum/mop, require its pair to
+       // be on the same candidate day too.
+       if(isFloorVacuumTask(x)||isFloorMopTask(x)){
+         const pair=floorPairTaskFor(x,CATALOG);
+         if(pair&&!isDone(pair)&&!isPostponed(pair)&&!focus90Compatible(ta,pair))continue;
+       }
+       const same=flexibleFocusKeys(ta).has(focusKeyFor(x));
+       candidates.push({tk,score:(same?-120:0)+(ta.length?flexibleMinutes(ta)*2:0)+Math.abs(delta)*0.5});
+     }
+     candidates.sort((a,b)=>a.score-b.score);
+     if(candidates[0])moveTaskBetweenDays(days,taskId(x),candidates[0].tk);
+     // If no legal day exists inside the strict window, keep the task where it
+     // is rather than losing it. A later global fallback can surface the conflict.
+   }
+ }
+ // Final pass: ensure no flexible day contains more than two focus keys or >90m.
+ // If an oversized day remains, move the smallest task first.
+ for(const k of ordered){
+   const arr=days.get(k); if(!arr)continue;
+   let guard=0;
+   while(guard++<arr.length+2){
+     const flex=arr.filter(x=>!isProtectedSanitaryRoutine(x));
+     const keys=flexibleFocusKeys(flex),mins=flexibleMinutes(arr);
+     if(keys.size<=2&&mins<=90)break;
+     const victim=[...flex].sort((a,b)=>taskMinutes(a)-taskMinutes(b)||priority(a)-priority(b))[0];
+     if(!victim)break;
+     const due=nextDue(victim,today),c=[];
+     for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
+       const d=addDays(due,delta),tk=dayKey(d);
+       if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
+       const ta=days.get(tk); if(!focus90Compatible(ta,victim))continue;
+       c.push({tk,score:flexibleMinutes(ta)*2+Math.abs(delta)});
+     }
+     c.sort((a,b)=>a.score-b.score);
+     if(!c.length)break;
+     moveTaskBetweenDays(days,taskId(victim),c[0].tk);
+   }
+ }
 }
 function dayTaskLimit(d){
  // Keep the visible list small as well as the weighted capacity. The weekly
@@ -1081,7 +1165,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v280|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ return "v281-focus90|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1252,7 +1336,7 @@ function buildIntelligentPlan(){
        const cap=dayBudget(pd);
        const sameRoomWeight=arr.filter(y=>y.room===occ.x.room).reduce((n,y)=>n+taskWeight(y),0);
        const roomLimit=(weight>=5||hasMighty)?1:6;
-       if(!arr.some(y=>taskId(y)===taskId(occ.x)) && dayPackageCompatible(arr,occ.x) && focusCompatible(arr,occ.x) &&
+       if(!arr.some(y=>taskId(y)===taskId(occ.x)) && dayPackageCompatible(arr,occ.x) &&
           !(hasMighty&&weight>1) && !(weight>=5&&arr.length) && !(hasLarge&&weight>=3) &&
           used+weight<=cap && sameRoomWeight+weight<=roomLimit){
          chosen=pk;
@@ -1266,7 +1350,7 @@ function buildIntelligentPlan(){
        const vac=floorPairTaskFor(occ.x,CATALOG);
        if(vac&&!isDone(vac)&&!isPostponed(vac)&&floorPairLegalOnDay(fromKey(chosen),occ.x,vac)){
          removeTaskFromDays(days,taskId(vac));
-         if(dayPackageCompatible(a,vac) && focusCompatible(a,vac)){
+         if(dayPackageCompatible(a,vac)){
            a.push(vac);a._weight=(a._weight||0)+taskWeight(vac);
            next.set(taskId(vac),fromKey(chosen));
          }
@@ -1283,7 +1367,7 @@ function buildIntelligentPlan(){
        // The ±7-day rule and room-package rules are hard invariants.
        // If the requested postponed day cannot legally hold the task, it is
        // re-slotted by the normal planner instead of creating a rule violation.
-       if(!a.some(y=>taskId(y)===taskId(occ.x)) && dayPackageCompatible(a,occ.x) && focusCompatible(a,occ.x)){
+       if(!a.some(y=>taskId(y)===taskId(occ.x)) && dayPackageCompatible(a,occ.x)){
          a.push(occ.x);a._weight=(a._weight||0)+taskWeight(occ.x);
          continue;
        }
@@ -1316,7 +1400,7 @@ function buildIntelligentPlan(){
      if(hasHeavy&&!samePackage)continue;
      if(isHeavyTask(occ.x)&&arr.length&&!samePackage)continue;
      if(weight>=5&&hasLarge&&!samePackage)continue;
-     if(!dayPackageCompatible(arr,occ.x)||!focusCompatible(arr,occ.x))continue;
+     if(!dayPackageCompatible(arr,occ.x))continue;
      // Mopping is less frequent than vacuuming. Whenever mopping is due,
      // vacuuming in the same room must be legal on this exact day too.
      if(isFloorMopTask(occ.x)){
@@ -1365,7 +1449,7 @@ function buildIntelligentPlan(){
        const hasExteriorHeavy=arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||""));
        const isExteriorHeavy=!!(occ.x.window||occ.x.raffstore||occ.x.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(occ.x.text||""));
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-       const packageOK=dayPackageCompatible(arr,occ.x)&&focusCompatible(arr,occ.x);
+       const packageOK=dayPackageCompatible(arr,occ.x);
        const canFit=packageOK && (arr._fixedRoutine ? false :
          (arr.length>=dayTaskLimit(d) ? false :
           (isExteriorHeavy ? arr.length===0 :
@@ -1407,7 +1491,7 @@ function buildIntelligentPlan(){
      if(plannerBlocked(d))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
-     if(!dayPackageCompatible(arr,x)||!focusCompatible(arr,x))continue;
+     if(!dayPackageCompatible(arr,x))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
      candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
    }
@@ -1434,7 +1518,7 @@ function buildIntelligentPlan(){
      if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
-     if(!dayPackageCompatible(arr,x)||!focusCompatible(arr,x))continue;
+     if(!dayPackageCompatible(arr,x))continue;
      const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
      const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
@@ -1495,7 +1579,7 @@ function buildIntelligentPlan(){
          if(k===todayKey&&hasTodayLock&&!lockedToday.includes(id))continue;
          if(plannerBlocked(d))continue;
          const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
-         if(!dayPackageCompatible(arr,x)||!focusCompatible(arr,x))continue;
+         if(!dayPackageCompatible(arr,x))continue;
          const roomCompatible=dayRoomCompatible(arr,x);
          const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
          const score=(roomCompatible?0:1000000)+countPenalty+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
@@ -1519,10 +1603,39 @@ function buildIntelligentPlan(){
      if(!floorPairLegalOnDay(d,x,vac))continue;
      if(arr.some(y=>taskId(y)===taskId(vac))){next.set(taskId(vac),d);continue;}
      removeTaskFromDays(days,taskId(vac));
-     if(dayPackageCompatible(arr,vac) && focusCompatible(arr,vac)){
+     if(dayPackageCompatible(arr,vac)){
        arr.push(vac);arr._weight=(arr._weight||0)+taskWeight(vac);
        next.set(taskId(vac),d);
      }
+   }
+ }
+ // FINAL FOCUS RULE: one main room/specialty per day, plus at most one small
+ // second focus when the flexible workload remains <=90 minutes. The weekly
+ // bathroom hygiene routine is explicitly exempt from the focus count.
+ enforceFocus90(days);
+ // Rebuild floor dependency after redistribution so mopping can never remain
+ // without vacuuming on its final day.
+ for(const [k,arr] of [...days]){
+   for(const x of [...arr]){
+     if(!isFloorMopTask(x))continue;
+     const vac=floorPairTaskFor(x,CATALOG);
+     if(!vac||isDone(vac)||isPostponed(vac))continue;
+     const d=fromKey(k);
+     if(!floorPairLegalOnDay(d,x,vac))continue;
+     if(arr.some(y=>taskId(y)===taskId(vac)))continue;
+     if(focus90Compatible(arr,vac)){
+       removeTaskFromDays(days,taskId(vac));
+       arr.push(vac);arr._weight=(arr._weight||0)+taskWeight(vac);
+     }
+   }
+ }
+ // The focus redistribution may have moved tasks after the earlier placement
+ // map was built. Rebuild the canonical next-date map from the final day buckets.
+ next.clear();
+ for(const [k,arr] of days){
+   for(const y of arr){
+     const id=taskId(y);
+     if(!next.has(id)){const d=fromKey(k);if(d>=today)next.set(id,d);}
    }
  }
  plannerCache={key,days,next};
