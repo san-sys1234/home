@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V316";
+const APP_BUILD="V318";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -2942,7 +2942,7 @@ function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
  // Calendar day details always come from the same canonical plan as Today and
  // the catalog. Keep manually pulled-forward tasks visible even on a free day.
- const dayTasks=(sameDay(d,today)?plannedForDate(d):calendarTasksForDate(d)).filter(x=>x.source!=="daily");
+ const dayTasks=calendarTasksForDate(d).filter(x=>x.source!=="daily");
  const completed=calendarDayCompleted(d,dayTasks),done=completedTasksForDate(d,dayTasks),doneBy={};
  done.forEach(x=>(doneBy[x.room]??=[]).push(x));
  const plannedBy={};dayTasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));
@@ -2984,33 +2984,18 @@ function render(){
     return;
   }
   if(selectedTab==="calendar"){
+    // V317: the calendar tab must NEVER wait for or trigger the monolithic
+    // canonical planner. Paint the calendar immediately; its own year data is
+    // built cooperatively afterwards. This keeps the tab clickable on Safari.
     window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;
     renderCalendar();
     const year=state.calendarYear||today.getFullYear();
-    const start=()=>{
+    setTimeout(()=>{
       if(selectedTab!=="calendar")return;
-      const ready=calendarCache.year===year&&calendarCache.days&&calendarCache.days.size;
-      if(ready)return;
-      const key=plannerKey();
-      if(!(plannerCache&&plannerCache.key===key)){
-        // Never build the large canonical plan inside the click handler. Let
-        // the already scheduled idle preparation finish, then start the
-        // calendar in small cooperative chunks.
-        const retry=()=>{
-          if(selectedTab!=="calendar")return;
-          const currentKey=plannerKey();
-          if(plannerCache&&plannerCache.key===currentKey){
-            buildRecurringCalendarYearAsync(year,()=>{if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar()});
-          }else{
-            (window.requestIdleCallback||function(cb){setTimeout(cb,200)})(retry,{timeout:800});
-          }
-        };
-        retry();
-        return;
-      }
-      buildRecurringCalendarYearAsync(year,()=>{if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar()});
-    };
-    if("requestIdleCallback" in window)requestIdleCallback(start,{timeout:1200});else setTimeout(start,300);
+      buildRecurringCalendarYearAsync(year,()=>{
+        if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar();
+      });
+    },1200);
     return;
   }
   if(selectedTab==="week"){
@@ -3024,16 +3009,8 @@ setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 // V309: first paint is always the lightweight Today view.
 render();
-// V310: after the first paint, build the canonical plan once in the background.
-// Today then converges to exactly the same task IDs shown by Catalog/Week/Calendar.
-const __prepareCanonicalPlan=()=>{
-  try{
-    const p=buildIntelligentPlan();
-    const k=dayKey(today);
-    state.todayPlanSnapshot=state.todayPlanSnapshot&&typeof state.todayPlanSnapshot==="object"?state.todayPlanSnapshot:{};
-    state.todayPlanSnapshot[k]=[...p.next.entries()].filter(([,d])=>d instanceof Date&&sameDay(d,today)).map(([id])=>id);
-    if(selectedTab==="today")render();
-  }catch{}
-};
-if("requestIdleCallback" in window)requestIdleCallback(__prepareCanonicalPlan,{timeout:1800});else setTimeout(__prepareCanonicalPlan,1200);
+// V317: DO NOT auto-run buildIntelligentPlan after startup. It is a large
+// synchronous computation and can block Safari's main thread exactly when the
+// user is trying to tap a tab. Canonical planning is now requested only by the
+// views that actually need it, never by the initial boot sequence.
 // V307: no delayed full-state write after boot. It could block Safari during interaction.
