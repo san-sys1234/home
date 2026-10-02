@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V289";
+const APP_BUILD="V290";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -251,9 +251,9 @@ let state=loadState();
 // It is discarded once so the new slot engine can create a clean, deterministic
 // first-run baseline. Completion history, manual dates, edits and postponements
 // are preserved.
-if(!state.__v288FreshBaseline){
+if(!state.__v290FreshBaseline){
   state.balancedDue={};
-  state.__v288FreshBaseline=true;
+  state.__v290FreshBaseline=true;
   state.__plannerAuditStatus="";
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
 }
@@ -1087,7 +1087,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v288|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.balancedDue||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ return "v290|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.balancedDue||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1318,6 +1318,14 @@ function ensureInitialBalancedDue(){
   }
   const isBlocked=d=>plannerBlocked(d);
   const getDay=d=>dayKey(d);
+  // Reserve the weekly sanitary routine day and other fixed-rhythm days while
+  // creating the initial due baseline. Otherwise the baseline can consume the
+  // only available focus slots before the fixed routine is inserted later.
+  const reservedFixedDays=new Set();
+  for(let d=new Date(horizon.start);d<=horizon.end;d=addDays(d,1)){
+    if(d.getDay()===2) reservedFixedDays.add(getDay(d)); // sanitary Tuesday
+    if(d.getDay()===4) reservedFixedDays.add(getDay(d)); // bed-linen Thursday
+  }
   for(const x of candidates){
     const mins=taskMinutes(x),f=focusKeyFor(x);
     let best=null;
@@ -1327,6 +1335,8 @@ function ensureInitialBalancedDue(){
       const d=addDays(today,off);if(d>horizon.end||isBlocked(d))continue;
       const k=getDay(d),m=used.get(k)||0,fs=focusOnDay.get(k)||new Set();
       if(reservedWindowDays.has(k))continue;
+      // Keep fixed routine weekdays available for their fixed packages.
+      if(reservedFixedDays.has(k) && !isSanitaryWeeklyCore(x) && !isFixedRhythmRoutine(x))continue;
       if(isMegaTask(x)){if(fs.size||m+mins>90)continue}
       else if([...fs].some(z=>z.startsWith('MEGA|')))continue;
       else if(!fs.has(f)&&fs.size>=2)continue;
@@ -1538,6 +1548,43 @@ function buildIntelligentPlan(){
     }
     const due=nextDue(x,today),delta=Math.abs(Math.round((pd-due)/86400000));
     if(pd<today||delta>PLANNING_WINDOW)audit.push({id:taskId(x),reason:'date-window',delta});
+  }
+  for(const [k,a] of days){const flex=a.filter(x=>!isSanitaryWeeklyCore(x)),f=dayFocusKeys(flex),mins=dayWorkMinutes(flex);if(f.size>2)audit.push({k,reason:'focus-count',focuses:[...f]});if(mins>DAILY_WORK_MINUTES)audit.push({k,reason:'minutes',mins});if(flex.some(isMegaTask)&&flex.length>1)audit.push({k,reason:'mega-mixed'});for(const x of flex)if(isFloorMopTask(x)){const v=floorPairTaskFor(x,CATALOG);if(v&&!isDone(v)&&!isPostponed(v)&&!a.some(y=>taskId(y)===taskId(v)))audit.push({k,reason:'mop-without-vacuum',id:taskId(x)})}}
+  // FINAL COMPLETENESS PASS: no active task may leave the canonical plan
+  // without a planned date. Try every legal +/-7-day slot deterministically.
+  // This pass never widens the planning window and never violates the two-focus
+  // / 90-minute hard limits.
+  const stillUnplanned=active.filter(x=>!(next.get(taskId(x)) instanceof Date));
+  for(const x of stillUnplanned){
+    const due=nextDue(x,today);
+    if(!(due instanceof Date))continue;
+    const candidates=[];
+    for(let dd=-PLANNING_WINDOW;dd<=PLANNING_WINDOW;dd++){
+      const d=addDays(due,dd),a=days.get(dayKey(d));
+      if(!a||d<today||plannerBlocked(d))continue;
+      if(!legalDate(x,d))continue;
+      const u=unitFor(x),anchor=u.find(isFloorMopTask)||u[0];
+      if(u.some(y=>!legalDate(y,d)&&!isFloorVacuumTask(y)))continue;
+      const mins=u.reduce((n,y)=>n+taskMinutes(y),0);
+      if(!canFit(a,anchor,mins))continue;
+      const f=focusKeyFor(anchor);
+      candidates.push({d,a,score:(a._slots.has(f)?0:a._slots.size===0?10:20)+flexMinutes(a)*2+Math.abs(dd)});
+    }
+    candidates.sort((p,q)=>p.score-q.score);
+    const c=candidates[0];
+    if(c){
+      const u=unitFor(x);
+      for(const y of u){add(dayKey(c.d),y);next.set(taskId(y),c.d)}
+    }
+  }
+  // Recompute the audit after the completeness pass. The audit is now the
+  // authoritative diagnostic: an active task without a date is a hard error.
+  audit.length=0;
+  for(const x of active){
+    const pd=next.get(taskId(x));
+    if(!(pd instanceof Date)){audit.push({id:taskId(x),reason:'unplanned'});continue}
+    const due=nextDue(x,today),delta=Math.abs(Math.round((pd-due)/86400000));
+    if(pd<today||delta>PLANNING_WINDOW) audit.push({id:taskId(x),reason:'date-window',delta});
   }
   for(const [k,a] of days){const flex=a.filter(x=>!isSanitaryWeeklyCore(x)),f=dayFocusKeys(flex),mins=dayWorkMinutes(flex);if(f.size>2)audit.push({k,reason:'focus-count',focuses:[...f]});if(mins>DAILY_WORK_MINUTES)audit.push({k,reason:'minutes',mins});if(flex.some(isMegaTask)&&flex.length>1)audit.push({k,reason:'mega-mixed'});for(const x of flex)if(isFloorMopTask(x)){const v=floorPairTaskFor(x,CATALOG);if(v&&!isDone(v)&&!isPostponed(v)&&!a.some(y=>taskId(y)===taskId(v)))audit.push({k,reason:'mop-without-vacuum',id:taskId(x)})}}
   state.__plannerAudit=audit;state.__plannerAuditAt=new Date().toISOString();state.__plannerAuditStatus=audit.length?'CONFLICTS':'OK';
