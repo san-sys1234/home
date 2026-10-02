@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V284";
+const APP_BUILD="V285";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1005,102 +1005,151 @@ function moveTaskBetweenDays(days,id,targetKey){
  return true;
 }
 function enforceFocus90(days){
- const ordered=[...days.keys()];
- const priority=(x)=>{
-   const mega=isMegaTask(x)?100:0;
-   return mega+taskWeight(x)*10;
- };
- // Work from today forward. Fixed sanitary routines are protected; flexible
- // work is redistributed into legal +/-7-day slots instead of being dropped.
- for(const k of ordered){
-   const arr=days.get(k);
-   if(!arr||arr.length<2)continue;
-   const flex=arr.filter(x=>!isProtectedSanitaryRoutine(x));
-   if(!flex.length)continue;
-   const groups=new Map();
-   for(const x of flex){const f=focusKeyFor(x);if(!groups.has(f))groups.set(f,[]);groups.get(f).push(x);}
-   // Keep the largest/most important focus as the primary focus. This avoids
-   // arbitrary task-by-task stripping when an older plan has several rooms.
-   const groupList=[...groups.entries()].sort((a,b)=>{
-     const am=a[1].reduce((n,x)=>n+taskMinutes(x),0),bm=b[1].reduce((n,x)=>n+taskMinutes(x),0);
-     const ap=Math.max(...a[1].map(priority)),bp=Math.max(...b[1].map(priority));
-     return bp-ap||bm-am||a[0].localeCompare(b[0],"de");
-   });
-   const primary=groupList[0]?.[0]||"";
-   let used=0;
-   const keep=[];
-   // Within the primary focus keep as much as fits into 90 minutes.
-   for(const x of groups.get(primary)||[]){
-     const m=taskMinutes(x);
-     if(used+m<=90 || (isMegaTask(x)&&used===0)){keep.push(x);used+=m;}
-   }
-   // At most one additional focus, and only if its combined work actually fits.
-   // A second room/focus may contain several small related tasks; the 90-minute
-   // ceiling, not an arbitrary task count, is the limiting factor.
-   for(const [f,items] of groupList.slice(1)){
-     if(!items.length)continue;
-     const candidate=[...items].sort((a,b)=>taskMinutes(a)-taskMinutes(b)||priority(b)-priority(a));
-     let added=false;
-     for(const x of candidate){
-       const m=taskMinutes(x);
-       if(used+m<=90){keep.push(x);used+=m;added=true;}
-     }
-     if(added)break;
-   }
-   const keepIds=new Set(keep.map(taskId));
-   for(const x of flex){
-     if(keepIds.has(taskId(x)))continue;
-     // Try to place the task on the best legal day within +/-7 days of its due
-     // date. Never place a second focus unless that day remains <=90 minutes.
-     const due=nextDue(x,today);
-     const candidates=[];
-     for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
-       const d=addDays(due,delta),tk=dayKey(d);
-       if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
-       if(tk===dayKey(today)&&Array.isArray(state.todayPlanLock?.[tk])&&!state.todayPlanLock[tk].includes(taskId(x)))continue;
-       const ta=days.get(tk);
-       if(ta.some(y=>taskId(y)===taskId(x)))continue;
-       if(!focus90Compatible(ta,x))continue;
-       // Keep floor pairs together. If this is vacuum/mop, require its pair to
-       // be on the same candidate day too.
-       if(isFloorVacuumTask(x)||isFloorMopTask(x)){
-         const pair=floorPairTaskFor(x,CATALOG);
-         if(pair&&!isDone(pair)&&!isPostponed(pair)&&!focus90Compatible(ta,pair))continue;
-       }
-       const same=flexibleFocusKeys(ta).has(focusKeyFor(x));
-       candidates.push({tk,score:(same?-120:0)+(ta.length?flexibleMinutes(ta)*2:0)+Math.abs(delta)*0.5});
-     }
-     candidates.sort((a,b)=>a.score-b.score);
-     if(candidates[0])moveTaskBetweenDays(days,taskId(x),candidates[0].tk);
-     // If no legal day exists inside the strict window, keep the task where it
-     // is rather than losing it. A later global fallback can surface the conflict.
-   }
- }
- // Final pass: ensure no flexible day contains more than two focus keys or >90m.
- // If an oversized day remains, move the smallest task first.
- for(const k of ordered){
-   const arr=days.get(k); if(!arr)continue;
-   let guard=0;
-   while(guard++<arr.length+2){
-     const flex=arr.filter(x=>!isProtectedSanitaryRoutine(x));
-     const keys=flexibleFocusKeys(flex),mins=flexibleMinutes(arr);
-     if(keys.size<=2&&mins<=90)break;
-     const victim=[...flex].sort((a,b)=>taskMinutes(a)-taskMinutes(b)||priority(a)-priority(b))[0];
-     if(!victim)break;
-     const due=nextDue(victim,today),c=[];
-     for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
-       const d=addDays(due,delta),tk=dayKey(d);
-       if(d<today||!days.has(tk)||plannerBlocked(d)||tk===k)continue;
-       if(tk===dayKey(today)&&Array.isArray(state.todayPlanLock?.[tk])&&!state.todayPlanLock[tk].includes(taskId(victim)))continue;
-       const ta=days.get(tk); if(!focus90Compatible(ta,victim))continue;
-       c.push({tk,score:flexibleMinutes(ta)*2+Math.abs(delta)});
-     }
-     c.sort((a,b)=>a.score-b.score);
-     if(!c.length)break;
-     moveTaskBetweenDays(days,taskId(victim),c[0].tk);
-   }
- }
+  // V285: canonical room-focus allocator.
+  // We deliberately rebuild ONLY flexible work from the existing day buckets.
+  // Fixed sanitary routines and explicitly locked-today tasks remain untouched.
+  // This prevents any later fallback from reintroducing a multi-room day.
+  const allFlexible=[];
+  const lockedTodayKey=dayKey(today);
+  const lockedToday=new Set(Array.isArray(state.todayPlanLock?.[lockedTodayKey])?state.todayPlanLock[lockedTodayKey]:[]);
+
+  for(const [k,arr] of days){
+    if(!arr)continue;
+    const keep=[];
+    for(const x of arr){
+      const protectedRoutine=isProtectedSanitaryRoutine(x);
+      const lockedTodayTask=(k===lockedTodayKey && lockedToday.has(taskId(x)));
+      if(protectedRoutine||lockedTodayTask){
+        keep.push(x);
+      }else{
+        allFlexible.push(x);
+      }
+    }
+    arr.length=0;
+    for(const x of keep)arr.push(x);
+    arr._weight=keep.reduce((n,x)=>n+taskWeight(x),0);
+  }
+
+  // Remove duplicate occurrences before rebuilding. Older planner versions
+  // could leave the same task in more than one day; V285 canonicalizes that.
+  const seen=new Set();
+  const flexible=[];
+  for(const x of allFlexible){
+    const id=taskId(x);
+    if(seen.has(id))continue;
+    seen.add(id);
+    flexible.push(x);
+  }
+
+  // Floor care is a real dependency: if mopping is scheduled, vacuuming in
+  // the same room must travel with it. Build small scheduling units first.
+  const byId=new Map(flexible.map(x=>[taskId(x),x]));
+  const usedIds=new Set();
+  const units=[];
+  for(const x of flexible){
+    const id=taskId(x);
+    if(usedIds.has(id))continue;
+    const pair=floorPairTaskFor(x,CATALOG);
+    if(pair && byId.has(taskId(pair)) && !isDone(pair) && !isPostponed(pair) && !usedIds.has(taskId(pair))){
+      const members=[x,pair];
+      usedIds.add(id);usedIds.add(taskId(pair));
+      units.push({members,focus:focusKeyFor(x),minutes:members.reduce((n,y)=>n+taskMinutes(y),0),due:members.reduce((d,y)=>{const q=nextDue(y,today);return !d||q<d?q:d},null)});
+    }else{
+      usedIds.add(id);
+      units.push({members:[x],focus:focusKeyFor(x),minutes:taskMinutes(x),due:nextDue(x,today)});
+    }
+  }
+
+  // Large/urgent units first, then by due date. This makes a heavy room the
+  // anchor of its day rather than allowing many tiny unrelated tasks to steal it.
+  units.sort((a,b)=>{
+    const am=Math.max(...a.members.map(isMegaTask))?1000:a.minutes;
+    const bm=Math.max(...b.members.map(isMegaTask))?1000:b.minutes;
+    return bm-am || ((a.due?.getTime?.()||0)-(b.due?.getTime?.()||0));
+  });
+
+  function flexibleState(arr){
+    const flex=arr.filter(x=>!isProtectedSanitaryRoutine(x));
+    return {flex,keys:flexibleFocusKeys(flex),minutes:flexibleMinutes(arr)};
+  }
+  function canPlace(arr,unit){
+    const members=unit.members;
+    const incomingMinutes=unit.minutes;
+    if(members.some(isMegaTask)){
+      // A mega focus owns the day: no other flexible focus/task may share it.
+      const st=flexibleState(arr);
+      return st.flex.length===0 && incomingMinutes<=90;
+    }
+    if(incomingMinutes>90)return false;
+    const st=flexibleState(arr);
+    const keys=new Set(st.keys);
+    const incoming=unit.focus;
+    if(st.flex.some(isMegaTask))return false;
+    if(keys.size>2)return false;
+    if(!keys.has(incoming) && keys.size>=2)return false;
+    return st.minutes+incomingMinutes<=90;
+  }
+
+  function legalDayForUnit(k,unit){
+    const d=fromKey(k);
+    if(d<today||!days.has(k)||plannerBlocked(d))return false;
+    if(k===lockedTodayKey){
+      // A non-locked flexible task may not enter a locked-today plan.
+      return false;
+    }
+    const members=unit.members;
+    for(const x of members){
+      const due=nextDue(x,today);
+      if(Math.abs(Math.round((d-due)/86400000))>PLANNING_WINDOW)return false;
+    }
+    return canPlace(days.get(k),unit);
+  }
+
+  for(const unit of units){
+    const candidates=[];
+    const anchor=unit.due||today;
+    for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
+      const d=addDays(anchor,delta),k=dayKey(d);
+      if(!legalDayForUnit(k,unit))continue;
+      const arr=days.get(k),st=flexibleState(arr);
+      const same=st.keys.has(unit.focus);
+      const empty=st.flex.length===0;
+      const second=st.keys.size===1&&!same;
+      const load=st.minutes;
+      // Strongly prefer an existing same-room focus; otherwise an empty day.
+      // A second focus is deliberately much less attractive than a fresh day.
+      const score=(same?-10000:0)+(empty?-5000:0)+(second?5000:0)+load*10+Math.abs(delta);
+      candidates.push({k,score});
+    }
+    candidates.sort((a,b)=>a.score-b.score);
+    const best=candidates[0];
+    if(best){
+      const arr=days.get(best.k);
+      for(const x of unit.members){arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)}
+    }else{
+      // If a legal focus day cannot be found, keep the unit on an empty legal
+      // day within the strict window. Never violate the focus invariant merely
+      // to satisfy a capacity fallback.
+      let bestEmpty=null;
+      for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++){
+        const d=addDays(anchor,delta),k=dayKey(d);
+        if(d<today||!days.has(k)||plannerBlocked(d)||k===lockedTodayKey)continue;
+        if(!unit.members.every(x=>Math.abs(Math.round((d-nextDue(x,today))/86400000))<=PLANNING_WINDOW))continue;
+        const st=flexibleState(days.get(k));
+        if(st.flex.length===0 && unit.minutes<=90){bestEmpty={k,score:Math.abs(delta)};break;}
+      }
+      if(bestEmpty){
+        const arr=days.get(bestEmpty.k);
+        for(const x of unit.members){arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x)}
+      }
+    }
+  }
+
+  // Absolute invariant: every flexible day has <=2 focus keys and <=90 minutes.
+  // If a protected routine is present, it does not count toward either limit.
+  // There is intentionally NO later fallback that can relax this invariant.
 }
+
 function dayTaskLimit(d){
  // Keep the visible list small as well as the weighted capacity. The weekly
  // hygiene block is the one deliberate exception: its fixed routine may contain
