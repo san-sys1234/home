@@ -405,7 +405,7 @@ let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
+function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}; if(state&&state.__plannerSnapshot) delete state.__plannerSnapshot}
 // UI-only saves should not throw away the expensive planner cache. The planner
 // itself is keyed by the state that actually affects scheduling, so it will
 // automatically rebuild when a scheduling input changes.
@@ -1458,6 +1458,28 @@ function buildIntelligentPlan(){
      only after the first focus is already present and the complete day remains
      <=90 minutes. Sanitary weekly core is the only explicit exception.
   */
+  // V296: restore the last complete plan when the planner inputs and
+  // calendar day are identical. This turns repeat page loads from a full
+  // multi-second re-plan into a tiny Map reconstruction.
+  const savedPlan=state.__plannerSnapshot;
+  if(savedPlan && savedPlan.key===key && savedPlan.day===dayKey(today) && savedPlan.next && typeof savedPlan.next==="object"){
+    const next=new Map();
+    let valid=true;
+    for(const x of CATALOG){
+      if(isDailyTask(x)) continue;
+      const id=taskId(x), raw=savedPlan.next[id];
+      if(raw){
+        const d=fromKey(raw);
+        if(!(d instanceof Date)||Number.isNaN(d.getTime())){valid=false;break}
+        next.set(id,d);
+      }
+    }
+    if(valid){
+      plannerCache={key,days:new Map(),next};
+      return plannerCache;
+    }
+  }
+
   const {start,end}=plannerHorizon();
   const days=new Map();
   for(let d=new Date(start);d<=end;d=addDays(d,1)){
@@ -1681,6 +1703,11 @@ function buildIntelligentPlan(){
   }
   for(const [k,a] of days){const flex=a.filter(x=>!isSanitaryWeeklyCore(x)),f=dayFocusKeys(flex),mins=dayWorkMinutes(flex);if(f.size>2)audit.push({k,reason:'focus-count',focuses:[...f]});if(mins>DAILY_WORK_MINUTES)audit.push({k,reason:'minutes',mins});if(flex.some(isMegaTask)&&flex.length>1)audit.push({k,reason:'mega-mixed'});for(const x of flex)if(isFloorMopTask(x)){const v=floorPairTaskFor(x,CATALOG);if(v&&!isDone(v)&&!isPostponed(v)&&!a.some(y=>taskId(y)===taskId(v)))audit.push({k,reason:'mop-without-vacuum',id:taskId(x)})}}
   state.__plannerAudit=audit;state.__plannerAuditAt=new Date().toISOString();state.__plannerAuditStatus=audit.length?'CONFLICTS':'OK';
+  // V296: persist only the authoritative task -> planned-date map. We do not
+  // persist transient day buckets, so the stored snapshot stays small.
+  const snapshotNext={};
+  for(const [id,d] of next) if(d instanceof Date) snapshotNext[id]=dayKey(d);
+  state.__plannerSnapshot={key,day:dayKey(today),next:snapshotNext};
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
   for(const [k,a] of days)a.sort((p,q)=>taskWeight(q)-taskWeight(p)||String(p.room||'').localeCompare(String(q.room||''),'de')||String(p.text||'').localeCompare(String(q.text||''),'de'));
   plannerCache={key,days,next};return plannerCache;
@@ -2848,7 +2875,37 @@ function syncCurrentDay(){
    save();
  }
 }
-function render(){syncCurrentDay();document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));if(selectedTab==="today")renderToday();else if(selectedTab==="week")renderWeek();else if(selectedTab==="calendar")renderCalendar();else renderCatalog()}
+let __plannerBooted=false;
+let __plannerBooting=false;
+function renderBoot(){
+  const main=document.getElementById("main");
+  if(!main)return;
+  const daily=dailyTasks();
+  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">🌿 Unser Zuhause</div></div><span class="badge">Wird vorbereitet …</span></div><div class="progress"><i style="width:0%"></i></div><div class="small">Dein Haushaltsplan wird gerade geladen.</div></div>
+  <div class="roomViewIntro">Alltag · morgens, Tagescheck, nach Mahlzeiten & abends</div>
+  <div id="bootDaily"></div>`;
+  const box=main.querySelector("#bootDaily");
+  appendDailyRoutineGroups(box,daily);
+}
+function render(){
+  syncCurrentDay();
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
+  if(!__plannerBooted && !__plannerBooting && selectedTab==="today" && !plannerCache.key){
+    __plannerBooting=true;
+    renderBoot();
+    const start=()=>setTimeout(()=>{
+      __plannerBooted=true;
+      __plannerBooting=false;
+      render();
+    },0);
+    if(window.requestAnimationFrame) requestAnimationFrame(start); else start();
+    return;
+  }
+  if(selectedTab==="today")renderToday();
+  else if(selectedTab==="week")renderWeek();
+  else if(selectedTab==="calendar")renderCalendar();
+  else renderCatalog();
+}
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 render();
