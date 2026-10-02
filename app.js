@@ -405,7 +405,7 @@ let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}; if(state&&state.__plannerSnapshot) delete state.__plannerSnapshot}
+function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
 // UI-only saves should not throw away the expensive planner cache. The planner
 // itself is keyed by the state that actually affects scheduling, so it will
 // automatically rebuild when a scheduling input changes.
@@ -1458,28 +1458,6 @@ function buildIntelligentPlan(){
      only after the first focus is already present and the complete day remains
      <=90 minutes. Sanitary weekly core is the only explicit exception.
   */
-  // V296: restore the last complete plan when the planner inputs and
-  // calendar day are identical. This turns repeat page loads from a full
-  // multi-second re-plan into a tiny Map reconstruction.
-  const savedPlan=state.__plannerSnapshot;
-  if(savedPlan && savedPlan.key===key && savedPlan.day===dayKey(today) && savedPlan.next && typeof savedPlan.next==="object"){
-    const next=new Map();
-    let valid=true;
-    for(const x of CATALOG){
-      if(isDailyTask(x)) continue;
-      const id=taskId(x), raw=savedPlan.next[id];
-      if(raw){
-        const d=fromKey(raw);
-        if(!(d instanceof Date)||Number.isNaN(d.getTime())){valid=false;break}
-        next.set(id,d);
-      }
-    }
-    if(valid){
-      plannerCache={key,days:new Map(),next};
-      return plannerCache;
-    }
-  }
-
   const {start,end}=plannerHorizon();
   const days=new Map();
   for(let d=new Date(start);d<=end;d=addDays(d,1)){
@@ -1703,11 +1681,6 @@ function buildIntelligentPlan(){
   }
   for(const [k,a] of days){const flex=a.filter(x=>!isSanitaryWeeklyCore(x)),f=dayFocusKeys(flex),mins=dayWorkMinutes(flex);if(f.size>2)audit.push({k,reason:'focus-count',focuses:[...f]});if(mins>DAILY_WORK_MINUTES)audit.push({k,reason:'minutes',mins});if(flex.some(isMegaTask)&&flex.length>1)audit.push({k,reason:'mega-mixed'});for(const x of flex)if(isFloorMopTask(x)){const v=floorPairTaskFor(x,CATALOG);if(v&&!isDone(v)&&!isPostponed(v)&&!a.some(y=>taskId(y)===taskId(v)))audit.push({k,reason:'mop-without-vacuum',id:taskId(x)})}}
   state.__plannerAudit=audit;state.__plannerAuditAt=new Date().toISOString();state.__plannerAuditStatus=audit.length?'CONFLICTS':'OK';
-  // V296: persist only the authoritative task -> planned-date map. We do not
-  // persist transient day buckets, so the stored snapshot stays small.
-  const snapshotNext={};
-  for(const [id,d] of next) if(d instanceof Date) snapshotNext[id]=dayKey(d);
-  state.__plannerSnapshot={key,day:dayKey(today),next:snapshotNext};
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
   for(const [k,a] of days)a.sort((p,q)=>taskWeight(q)-taskWeight(p)||String(p.room||'').localeCompare(String(q.room||''),'de')||String(p.text||'').localeCompare(String(q.text||''),'de'));
   plannerCache={key,days,next};return plannerCache;
@@ -2474,7 +2447,7 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=opts.skipPlan?null:plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room || isDailyTask(x))return false;
@@ -2612,6 +2585,28 @@ function appendDailyRoutineGroups(container,tasks){
     container.appendChild(sec);
   });
 }
+function fastTodayTasks(){
+  const d=today, k=dayKey(d);
+  if(isHouseholdFree(d)) return (state.todayExtras||[]).filter(e=>e.date===k).map(e=>({...e,key:e.id,source:"extra",group:"Heute zusätzlich"}));
+  const out=dailyTasks();
+  const ids=Array.isArray(state.todayPlanSnapshot?.[k])?state.todayPlanSnapshot[k]:null;
+  const addById=id=>{const x=CATALOG.find(y=>taskId(y)===id);if(x&&!isDailyTask(x)&&!isDone(x)&&!isPostponed(x))out.push({...x,group:groupFor(x)})};
+  if(ids&&ids.length){ids.forEach(addById)}
+  else {
+    // First paint: only evaluate today's cadence, never invoke the expensive
+    // optimizer. The optimizer is deliberately lazy and starts only when the
+    // user opens a planning-heavy view.
+    for(const x of CATALOG){
+      if(isDailyTask(x)||isDone(x)||isPostponed(x))continue;
+      const manual=normalizeDateKey(state.plannedOverrides?.[taskId(x)]||state.manualDates?.[x.key]||state.catalogDates?.[x.key]);
+      if(manual===k || rawDueOn(x,d)) out.push({...x,group:groupFor(x)});
+    }
+  }
+  for(const e of (state.todayExtras||[]).filter(e=>e.date===k)) out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
+  const seen=new Set();
+  return out.filter(x=>{const id=taskId(x);if(seen.has(id))return false;seen.add(id);return true});
+}
+
 function renderToday(){
   purgePostponed();
   const main=document.getElementById("main");
@@ -2621,9 +2616,9 @@ function renderToday(){
   // pulled forward by the user must still be visible and executable today.
   const tasks=freeToday
     ? (state.todayExtras||[]).filter(e=>e.date===dayKey(today)).map(e=>({...e,key:e.id,source:"extra",group:"Heute zusätzlich"}))
-    : plannedToday();
+    : (window.__fastMode ? fastTodayTasks() : plannedToday());
   const done=tasks.filter(x=>isDone(x)).length;
-  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(themeFor(today))}</div></div><span class="badge">${freeToday?"🏖️ Haushaltsfrei":(state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal"))}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button><button class="btn" id="free">🏖️ Ausflug / Urlaub</button></div></div>`;
+  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">${esc(window.__fastMode ? "Heute · dein Haushaltsplan" : themeFor(today))}</div></div><span class="badge">${freeToday?"🏖️ Haushaltsfrei":(state.chaos?"Heute leicht":(sunday?"Haushaltsfrei":"Normal"))}</span></div><div class="progress"><i style="width:${tasks.length?Math.round(done/tasks.length*100):0}%"></i></div><div class="small">${done} von ${tasks.length} Aufgaben erledigt</div><div class="actions"><button class="btn" id="energy">⚡ Ich habe Energie</button><button class="btn" id="chaos">🧸 Heute leicht</button><button class="btn" id="free">🏖️ Ausflug / Urlaub</button></div></div>`;
   if(freeToday){const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🏖️ Heute bleibt der Haushalt liegen.</div><div class="small">${esc(state.householdFreeDays?.[dayKey(today)]||"Ausflug / Urlaub")} · Deine gespeicherten Erledigungen und Fälligkeiten bleiben erhalten.</div>`;main.appendChild(note);} else if(sunday){
     const note=document.createElement("div");note.className="card";note.innerHTML=`<div class="celebrate">🌿 Sonntag = haushaltsfrei.</div><div class="small">Heute gibt es keinen festen Tagesplan. Wenn du trotzdem Lust auf einen Raum hast, kannst du ihn unten freiwillig öffnen.</div>`;main.appendChild(note);
   }
@@ -2875,36 +2870,20 @@ function syncCurrentDay(){
    save();
  }
 }
-let __plannerBooted=false;
-let __plannerBooting=false;
-function renderBoot(){
-  const main=document.getElementById("main");
-  if(!main)return;
-  const daily=dailyTasks();
-  main.innerHTML=`<div class="card hero"><div class="topline"><div><b>${esc(dateLabel())}</b><div class="small">🌿 Unser Zuhause</div></div><span class="badge">Wird vorbereitet …</span></div><div class="progress"><i style="width:0%"></i></div><div class="small">Dein Haushaltsplan wird gerade geladen.</div></div>
-  <div class="roomViewIntro">Alltag · morgens, Tagescheck, nach Mahlzeiten & abends</div>
-  <div id="bootDaily"></div>`;
-  const box=main.querySelector("#bootDaily");
-  appendDailyRoutineGroups(box,daily);
-}
 function render(){
   syncCurrentDay();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
-  if(!__plannerBooted && !__plannerBooting && selectedTab==="today" && !plannerCache.key){
-    __plannerBooting=true;
-    renderBoot();
-    const start=()=>setTimeout(()=>{
-      __plannerBooted=true;
-      __plannerBooting=false;
-      render();
-    },0);
-    if(window.requestAnimationFrame) requestAnimationFrame(start); else start();
-    return;
+  if(selectedTab==="today"){
+    window.__fastMode=true;
+    renderToday();
+    window.__fastMode=false;
+  } else if(selectedTab==="week"){
+    buildIntelligentPlan(); renderWeek();
+  } else if(selectedTab==="calendar"){
+    buildIntelligentPlan(); renderCalendar();
+  } else {
+    buildIntelligentPlan(); renderCatalog();
   }
-  if(selectedTab==="today")renderToday();
-  else if(selectedTab==="week")renderWeek();
-  else if(selectedTab==="calendar")renderCalendar();
-  else renderCatalog();
 }
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
