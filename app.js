@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V291";
+const APP_BUILD="V300";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -407,11 +407,17 @@ let calendarCache={year:null,days:new Map()};
 let yearPlanCache={year:null,days:new Map()};
 let plannerCache={key:null,days:new Map(),next:new Map()};
 function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
-// UI-only saves should not throw away the expensive planner cache. The planner
-// itself is keyed by the state that actually affects scheduling, so it will
-// automatically rebuild when a scheduling input changes.
+function clearPlannerSnapshot(){try{delete state.__plannerSnapshot;localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}}
 function invalidatePlans(){calendarCache={year:null,days:new Map()};yearPlanCache={year:null,days:new Map()};invalidatePlanner()}
-function save(){state.__planRevision=(state.__planRevision||0)+1;localStorage.setItem(STORAGE,JSON.stringify(state));invalidatePlans()}
+function save(){
+  const oldKey=plannerCache.key;
+  state.__planRevision=(state.__planRevision||0)+1;
+  try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+  // UI-only state changes keep the in-memory plan. Scheduling changes invalidate it.
+  let changed=false;
+  try{changed=!!oldKey && oldKey!==plannerKey()}catch{}
+  if(changed){invalidatePlans();clearPlannerSnapshot();}
+}
 function taskId(x){return x.key||x.id||((x.source||"task")+"|"+x.room+"|"+x.text)}
 function doneKey(x){return "done|"+taskId(x)}
 function lastKey(x){return "last|"+taskId(x)}
@@ -777,6 +783,19 @@ function refreshCatalog(){
  invalidatePlanner();
 }
 refreshCatalog();
+
+function restorePlannerSnapshot(){
+  try{
+    const p=state.__plannerSnapshot;
+    if(!p||p.version!==1||p.key!==plannerKey()||!p.next||typeof p.next!=="object")return;
+    const next=new Map();
+    for(const [id,k] of Object.entries(p.next)){const d=fromKey(k);if(d instanceof Date&&!Number.isNaN(d.getTime()))next.set(id,d);}
+    if(next.size){plannerCache={key:p.key,days:new Map(),next};}
+  }catch{}
+}
+
+// V300: restore the last valid plan instead of recalculating it on every app launch.
+// Data repairs below can invalidate it; restore again immediately before first render.
 
 // V233 data-repair: older room-focus/energy copies could exist without a
 // canonical catalog key. Repair their identity and any already-recorded
@@ -1224,7 +1243,7 @@ function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
  // Do not key the expensive planner off the generic save revision: toggling a
  // UI state (e.g. opening Erledigt) must not force a full year re-plan.
- return "v290|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.balancedDue||{})+"|"+JSON.stringify(state.householdFreeDays||{});
+ return "v300|"+JSON.stringify(state.manualDates||{})+"|"+JSON.stringify(state.catalogDates||{})+"|"+CATALOG.length+"|"+JSON.stringify(state.lastDone||{})+"|"+JSON.stringify(state.catalogDeleted||{})+"|"+JSON.stringify(state.custom||[])+"|"+JSON.stringify(state.catalogEdits||{})+"|"+JSON.stringify(state.postponed||{})+"|"+JSON.stringify(state.todayPlanLock||{})+"|"+JSON.stringify(state.sundayOptional||{})+"|"+JSON.stringify(state.balancedDue||{})+"|"+JSON.stringify(state.householdFreeDays||{});
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1448,9 +1467,12 @@ function ensureInitialBalancedDue(){
 }
 
 function buildIntelligentPlan(){
-  ensureInitialBalancedDue();
   const key=plannerKey();
   if(plannerCache.key===key)return plannerCache;
+  ensureInitialBalancedDue();
+  // balancedDue may have been initialized by the first run, so refresh the key once.
+  const effectiveKey=plannerKey();
+  if(plannerCache.key===effectiveKey)return plannerCache;
 
   /* V289 FINAL — SLOT-BASED PLANNER + FLOOR DEPENDENCY
      There is no legacy day-placement fallback. A day is a container with at
@@ -1684,7 +1706,11 @@ function buildIntelligentPlan(){
   state.__plannerAudit=audit;state.__plannerAuditAt=new Date().toISOString();state.__plannerAuditStatus=audit.length?'CONFLICTS':'OK';
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
   for(const [k,a] of days)a.sort((p,q)=>taskWeight(q)-taskWeight(p)||String(p.room||'').localeCompare(String(q.room||''),'de')||String(p.text||'').localeCompare(String(q.text||''),'de'));
-  plannerCache={key,days,next};return plannerCache;
+  plannerCache={key:effectiveKey,days,next};
+  const planSnapshot={version:1,key:effectiveKey,next:Object.fromEntries([...next].map(([id,d])=>[id,dayKey(d)]))};
+  state.__plannerSnapshot=planSnapshot;
+  try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+  return plannerCache;
 }
 
 function plannedForDate(d){
@@ -1949,6 +1975,8 @@ function ensureTodayPlanSnapshot(d=today){
 function plannedToday(){
  const d=today;
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
+ // V301: today's list must never trigger the heavyweight optimizer.
+ if(!plannerCache.next || plannerCache.next.size===0) return fastTodayTasks();
  const out=dailyTasks();
  const plan=plannedForDate(d);
  // Once "Später" is used today, the non-daily plan for today is a fixed set.
@@ -2510,7 +2538,7 @@ function swipeRow(el,x){
   el.addEventListener("touchend",end,{passive:true});
   el.addEventListener("touchcancel",reset,{passive:true});
 }
-function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const due=nextDueLabel(x),planned=opts.skipPlan?null:plannedDateForTask(x);const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
+function taskRow(x,opts={}){const el=document.createElement("div");el.className="task"+(isDone(x)?" done":"");const showDue=!!opts.showDue,hideRoom=!!opts.hideRoom,showPullToday=!!opts.showPullToday,returnTo=opts.returnTo||"today";const showManage=opts.showManage!==false&&x.source!=="extra";const showPlan=!!opts.showDue&&!isDailyTask(x)&&!window.__fastMode;const due=nextDueLabel(x),planned=showPlan?plannedDateForTask(x):null;const plannedText=planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—";const plannedDiff=planned?Math.round((planned-nextDue(x))/86400000):null;const shiftNote=plannedDiff!==null&&plannedDiff!==0?` <span class="small">(${plannedDiff>0?"+":""}${plannedDiff} ${Math.abs(plannedDiff)===1?"Tag":"Tage"})</span>`:"";el.innerHTML=`<div class="swipeBg"><span class="swipeLabel">✓ Erledigt</span></div><div class="taskContent"><button class="check">${isDone(x)?"✓":""}</button><div class="taskMain"><div class="taskName">${esc(x.text)}</div>${!hideRoom?`<div class="meta">${esc(x.room)}${x.area?" · "+esc(x.area):""}</div>`:""}${showDue&&!isDone(x)?`<div class="meta nextDue">Fällig: <b>${esc(due)}</b></div><div class="meta plannedDate">Geplant: <b>${esc(plannedText)}</b>${shiftNote}</div>`:""}${isDone(x)?`<div class="meta nextDue">${isDailyTask(x)?"Fälligkeit: <b>täglich</b>":`Nächster Termin: <b>${esc(due)}</b>`}</div>`:""}</div><div class="taskButtons">${showPullToday&&!isDone(x)?`<button class="iconBtn pullToday" title="Aufgabe vorziehen">⚡</button>`:""}${showManage?`<button class="iconBtn todayEdit" title="Aufgabe bearbeiten">✏️</button><button class="iconBtn todayDelete" title="Aufgabe löschen">🗑️</button>`:""}<button class="iconBtn info">ⓘ</button></div></div>`;el.querySelector(".check").onclick=()=>toggleTask(x);el.querySelector(".info").onclick=()=>openDetail(x);const pull=el.querySelector(".pullToday");if(pull)pull.onclick=()=>{pullCatalogTaskToday(x);render()};const edit=el.querySelector(".todayEdit");if(edit)edit.onclick=e=>{e.stopPropagation();openEditor(x,{preservePlan:true,returnTo})};const del=el.querySelector(".todayDelete");if(del)del.onclick=e=>{e.stopPropagation();if(!confirm(`„${x.text}“ wirklich aus dem Aufgabenkatalog löschen?`))return;state.catalogDeleted=state.catalogDeleted||{};state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);delete state.catalogEdits?.[x.key];save();refreshCatalog();render();toast("Aufgabe gelöscht")};swipeRow(el,x);return el}
 
 function focusRoomMatches(x,room){
   if(!x || !room || isDailyTask(x))return false;
@@ -2883,25 +2911,26 @@ function pullCatalogTaskToday(x){
   toast(`„${canonical.text}“ für heute vorgezogen ❤️`);
 }
 
-function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=(usePlan=false)=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=usePlan&&plannerCache.key===plannerKey()?plannerCache:null;const plannedMap=new Map();if(plan){for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben${plan?"":" · Planung wird im Hintergrund vorbereitet …"}</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=()=>draw(plannerCache.key===plannerKey());draw(false);setTimeout(()=>{if(selectedTab!=="catalog")return;buildIntelligentPlan();draw(true)},40)}
+function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=(usePlan=false)=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=usePlan&&plannerCache.key===plannerKey()?plannerCache:null;const plannedMap=new Map();if(plan){for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben${plan?"":" · Planung wird im Hintergrund vorbereitet …"}</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=()=>draw(plannerCache.key===plannerKey());draw(plannerCache.key===plannerKey())}
 function renderWeek(){
   const main=document.getElementById("main");
+  const hasPlan=plannerCache.key===plannerKey()&&plannerCache.next.size>0;
   const candidates=CATALOG.filter(x=>x&&!isDone(x)&&!isPostponed(x)&&!isDailyTask(x)&&!x.window&&x.source!=="rotation")
-    .map(x=>({...x,_planned:plannedDateForTask(x)}))
-    .filter(x=>x._planned instanceof Date && x._planned>=today)
+    .map(x=>{const planned=hasPlan?plannerCache.next.get(taskId(x)):null;return {...x,_planned:planned instanceof Date?planned:nextDue(x,today),_isPlanned:planned instanceof Date}})
+    .filter(x=>x._planned instanceof Date&&x._planned>=today)
     .sort((a,b)=>a._planned-b._planned||roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||taskWeight(b)-taskWeight(a))
     .slice(0,20);
-  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">Bald fällig</h2><div class="small">Die nächsten 20 offenen Aufgaben · nach Räumen gebündelt</div></div><span class="badge">${candidates.length}</span></div><div id="soonList"></div></div>`;
+  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">Bald fällig</h2><div class="small">Die nächsten 20 offenen Aufgaben · ${hasPlan?"sinnvoll geplant":"nach Fälligkeit – Planung wird bei Bedarf aufgebaut"}</div></div><span class="badge">${candidates.length}</span></div><div id="soonList"></div></div>`;
   const list=main.querySelector("#soonList");
   if(!candidates.length){list.innerHTML=`<div class="empty">Gerade ist nichts offen, das bald ansteht. 🥰</div>`;return;}
-  appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:true});
+  appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:hasPlan});
 }
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
 function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
  // Calendar day details always come from the same canonical plan as Today and
  // the catalog. Keep manually pulled-forward tasks visible even on a free day.
- const dayTasks=plannedForDate(d).filter(x=>x.source!=="daily");
+ const dayTasks=calendarTasksForDate(d).filter(x=>x.source!=="daily");
  const completed=calendarDayCompleted(d,dayTasks),done=completedTasksForDate(d,dayTasks),doneBy={};
  done.forEach(x=>(doneBy[x.room]??=[]).push(x));
  const plannedBy={};dayTasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));
@@ -2945,16 +2974,18 @@ function render(){
   if(selectedTab==="calendar"){
     renderCalendar();
     const year=state.calendarYear||today.getFullYear();
-    setTimeout(()=>{if(selectedTab!=="calendar")return;populateCalendarYear(year);renderCalendar()},40);
+    setTimeout(()=>{if(selectedTab!=="calendar")return;restorePlannerSnapshot();populateCalendarYear(year);renderCalendar()},60);
     return;
   }
   if(selectedTab==="week"){
     document.getElementById("main").innerHTML='<div class="card"><div class="empty">Plan wird vorbereitet …</div></div>';
-    setTimeout(()=>{if(selectedTab!=="week")return;buildIntelligentPlan();renderWeek()},40);
+    setTimeout(()=>{if(selectedTab!=="week")return;restorePlannerSnapshot();buildIntelligentPlan();renderWeek()},60);
     return;
   }
   renderCatalog();
 }
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
+// V302: absolutely no planner restoration/validation during boot.
 render();
+setTimeout(()=>{try{if(!state.__v302FastBoot){state.__v302FastBoot=true;localStorage.setItem(STORAGE,JSON.stringify(state));}}catch{}},1500);
