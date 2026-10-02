@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V311";
+const APP_BUILD="V312";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1529,15 +1529,15 @@ function ensureInitialBalancedDue(){
 }
 
 function buildIntelligentPlan(){
-  // V310: one lightweight canonical planner. All views read the same `next` map.
-  // The previous slot/relocation optimizer was too strict for the size of the
-  // household catalog and consequently left hundreds of tasks without a date.
+  // V312: one lightweight canonical planner. All views read the same `next` map.
+  // HARD room rule: one primary room/focus per day; a second physical room is
+  // allowed only when the remaining workload capacity is sufficient. Never a third room.
   ensureInitialBalancedDue();
-  const key=plannerKey()+"|V311-CANONICAL";
+  const key=plannerKey()+"|V312-ROOMFOCUS";
   if(plannerCache.key===key)return plannerCache;
 
   const days=new Map(),next=new Map();
-  const PLAN_WINDOW=PLANNING_WINDOW,DAY_MINUTES=180,DAY_TASKS=17,MAX_FOCUSES=3,MAX_ROOMS=3;
+  const PLAN_WINDOW=PLANNING_WINDOW,DAY_MINUTES=180,DAY_TASKS=17,MAX_FOCUSES=2,MAX_ROOMS=2;
   const horizonEnd=addDays(today,420);
   for(let d=new Date(today);d<=horizonEnd;d=addDays(d,1)){
     const a=[];a._weight=0;a._slots=new Map();days.set(dayKey(d),a);
@@ -1556,14 +1556,21 @@ function buildIntelligentPlan(){
     const a=days.get(dayKey(d));if(!a||d<today||plannerBlocked(d))return false;
     if(!ignoreSoft && a.length>=DAY_TASKS)return false;
     if(dayWorkMinutes(a)+taskMinutes(x)>DAY_MINUTES)return false;
-    if(ignoreSoft)return a.length<18;
-    const focus=focusKeyFor(x),focuses=dayFocusKeys(a);
-    if(isMegaTask(x))return focuses.size===0;
+    // Room/focus limits are HARD invariants. Even the emergency placement path
+    // may only relax the visible task-count limit; it must never introduce a
+    // third room or a third focus.
+    const focus=focusKeyFor(x);
+    const focuses=dayFocusKeys(a);
+    // A "Raumschwerpunkt" means a physical room, not a sub-workflow inside
+    // that room. Different tasks in the same room therefore remain one focus.
+    if(isMegaTask(x))return focuses.size===0 && dayPhysicalRooms(a).size===0;
     if([...focuses].some(f=>f.startsWith("MEGA|")))return false;
-    if(focus&&focus!=="__SANITAER_ROUTINE__"&&!focuses.has(focus)&&focuses.size>=MAX_FOCUSES)return false;
     const rooms=new Set(a.map(y=>String(y.room||"")).filter(Boolean));
-    if(x.room&&!rooms.has(x.room)&&rooms.size>=MAX_ROOMS)return false;
-    return true;
+    const incomingRooms=new Set(x.room?[String(x.room)]:[]);
+    let newRoomCount=0;
+    for(const r of incomingRooms)if(r&&!rooms.has(r))newRoomCount++;
+    if(newRoomCount>0 && rooms.size+newRoomCount>MAX_ROOMS)return false;
+    return ignoreSoft ? a.length<18 : true;
   };
   const hash=s=>String(s||"").split("").reduce((n,ch)=>(n*31+ch.charCodeAt(0))>>>0,17);
   const score=(d,x,due,preferred)=>{
@@ -1730,14 +1737,19 @@ function calendarCandidateDate(d,unit,days){
     const c=addDays(d,dd),k=dayKey(c),a=days.get(k);
     if(!a||c<today||plannerBlocked(c))continue;
     const flex=a.filter(x=>!isSanitaryWeeklyCore(x));
-    const minutes=flex.reduce((n,x)=>n+taskMinutes(x),0);
-    if(minutes+mins>DAILY_WORK_MINUTES)continue;
-    const focuses=new Set(flex.map(focusKeyFor).filter(Boolean));
-    if(!isSanitaryWeeklyCore(anchor)&&!focuses.has(focus)&&focuses.size>=2)continue;
-    if(focuses.has(focus)===false && focuses.size>=2)continue;
-    const sameFocus=focuses.has(focus)?0:1;
-    const empty=focuses.size===0?0:1;
-    candidates.push({c,a,score:sameFocus*1000+empty*100+minutes*2+Math.abs(dd)*10});
+    const minutes=a.reduce((n,x)=>n+taskMinutes(x),0);
+    const incomingMinutes=unit.reduce((n,x)=>n+taskMinutes(x),0);
+    if(minutes+incomingMinutes>180)continue;
+    // Calendar must use the same physical-room rule as the canonical planner:
+    // one main room, optionally one second room when the remaining capacity
+    // allows it, never a third room.
+    const rooms=new Set(a.map(x=>String(x.room||"")).filter(Boolean)),incomingRooms=new Set(unit.map(x=>String(x.room||"")).filter(Boolean));
+    let newRooms=0;
+    for(const r of incomingRooms)if(r&&!rooms.has(r))newRooms++;
+    if(newRooms>0&&rooms.size+newRooms>2)continue;
+    const sameRoom=incomingRooms.size>0&&[...incomingRooms].some(r=>rooms.has(r));
+    const empty=rooms.size===0?0:1;
+    candidates.push({c,a,score:(sameRoom?-120:empty?0:-20)+minutes*2+Math.abs(dd)*10});
   }
   candidates.sort((a,b)=>a.score-b.score||dayKey(a.c).localeCompare(dayKey(b.c)));
   return candidates[0]?.c||null;
