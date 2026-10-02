@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V290";
+const APP_BUILD="V291";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -143,6 +143,129 @@ const SEASONAL_SPECIALS = [
 
 const BASEMENT=["Waschküche","Musikzimmer","Trainingsraum","Technikraum","Lagerraum","Flur KG"];
 const WEEKDAYS={Wohnzimmer:1,Essbereich:1,Küche:1,"Gäste-WC":2,Kinderbad:2,Bad:2,"Eltern-WC":2,Schlafzimmer:3,Ankleidezimmer:3,"Kinderzimmer 1":3,"Kinderzimmer 2":3,"Flur OG":3,Saunaraum:3,Stiegenhaus:3,Eingangsbereich:4,Garderobe:4,Flur:4,Büro:4,Abstellraum:4,Speis:4};
+
+// V291 – room-specific workload packages.
+// Every physical room gets a small hierarchy: frequent care first, regular
+// maintenance next, and deep/rare work last. The interval is the recurrence
+// of the individual task; packageFirstDue() controls the first sensible
+// occurrence so frequent work is not pushed behind rare deep-cleaning tasks.
+const ROOM_PACKAGE_RULES = {
+  "Wohnzimmer": { weekday:1, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/polster|sofaritze|fernbedien|decke.*zusammen|fensterbank|möbelfüße|kaminbereich/i},
+    {id:"regular",interval:30,pattern:/dekoration|bilderrahmen|teppichränder|vorhänge auf staub/i},
+    {id:"deep",interval:90,pattern:/teppich gründlich|decken nach pflege|teppiche nach pflege/i}]},
+  "Essbereich": { weekday:1, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/esstisch|tischkanten|tischbeine|stuhlsitze|stuhllehnen|krümel/i},
+    {id:"regular",interval:30,pattern:/sideboard|dekoration/i},
+    {id:"deep",interval:60,pattern:/boden unter dem tisch/i}]},
+  "Küche": { weekday:1, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/arbeitsplatten|herd gründlich|kochfeldränder|spüle|armatur|fronten gründlich/i},
+    {id:"regular",interval:30,pattern:/dunstabzug außen|mikrowelle|kühlschrank fächer|kühlschrank türdichtungen|kühlschrank gemüsefächer/i},
+    {id:"deep",interval:90,pattern:/dunstabzugfilter|backofeninnenraum|backofentür|backofenbleche|gefrierfach|vorratsschrank|schubladen innen|mülleimer|sockelleisten|boden unter beweglichen/i}]},
+  "Garderobe": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/jacken nach saison|schuhe paarweise|schuhsohlen|ablageflächen|taschen|schlüsselplatz|spiegel|garderobenhaken|türklink/i},
+    {id:"regular",interval:45,pattern:/schuhschrank außen|schuhschrank innen/i},
+    {id:"deep",interval:90,pattern:/schrank innen/i}]},
+  "Eingangsbereich": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/fußmatte ausschütteln|tür innen|boden gründlich|ecken kontrollieren/i},
+    {id:"regular",interval:45,pattern:/türrahmen|sockelleisten|spinnweben/i},
+    {id:"deep",interval:90,pattern:/fußmatte nach hersteller|tür außen/i}]},
+  "Flur": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/lichtschalter|türklink|ecken absaugen|boden saugen|boden wischen|bilderrahmen/i},
+    {id:"regular",interval:45,pattern:/türrahmen|sockelleisten|spinnweben/i}]},
+  "Flur OG": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/lichtschalter|türklink|ecken absaugen|boden saugen|boden wischen|bilderrahmen/i},
+    {id:"regular",interval:45,pattern:/türrahmen|sockelleisten|spinnweben/i}]},
+  "Flur KG": { weekday:6, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/lichtschalter|türklink|ecken absaugen|boden saugen|boden wischen/i},
+    {id:"regular",interval:45,pattern:/türrahmen|sockelleisten|spinnweben/i}]},
+  "Büro": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/schreibtischfläche|tastatur|maus|papierkorb|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/monitor|regale|bücheroberseiten|fensterbank/i},
+    {id:"deep",interval:60,pattern:/schreibtisch komplett|kabel|papierstapel/i}]},
+  "Abstellraum": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/vorräte prüfen|reinigungsmittelbestand|besen\/staubsaugerbereich|mülltrennung|boden gründlich|boden wischen/i},
+    {id:"regular",interval:30,pattern:/regale abstauben|regalböden/i},
+    {id:"deep",interval:90,pattern:/schubladen/i}]},
+  "Speis": { weekday:4, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/vorräte nach|mindesthaltbarkeit|angebrochene|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/regale abstauben|regalböden|behälter außen|boden unter regalen/i},
+    {id:"deep",interval:90,pattern:/schubladen/i}]},
+  "Gäste-WC": { weekday:2, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spiegel|boden saugen|boden wischen|papierhalter|türklink|lichtschalter|sockelleisten/i},
+    {id:"regular",interval:30,pattern:/armatur entkalken/i},
+    {id:"deep",interval:180,pattern:/fugen kontrollieren/i}]},
+  "Kinderbad": { weekday:2, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spiegel|dusche reinigen|duschrinne|badewanne reinigen|boden saugen|boden wischen|türklink|lichtschalter|sockelleisten/i},
+    {id:"regular",interval:30,pattern:/armatur entkalken/i},
+    {id:"deep",interval:180,pattern:/fugen kontrollieren|silikon kontrollieren/i}]},
+  "Bad": { weekday:2, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spiegel|dusche entkalken|duschglas|duschrinne|badewanne reinigen|badewannenarmatur|boden saugen|boden wischen|türklink|lichtschalter|sockelleisten/i},
+    {id:"regular",interval:30,pattern:/armatur entkalken/i},
+    {id:"deep",interval:180,pattern:/fugen kontrollieren|silikon kontrollieren/i}]},
+  "Eltern-WC": { weekday:2, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spiegel|boden saugen|boden wischen|türklink|lichtschalter|sockelleisten/i},
+    {id:"regular",interval:30,pattern:/armatur entkalken/i},
+    {id:"deep",interval:180,pattern:/fugen kontrollieren/i}]},
+  "Schlafzimmer": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/bettwäsche|unter bett|nachttische|lampen außen|kopfteil|boden gründlich|boden wischen|spiegel/i},
+    {id:"regular",interval:30,pattern:/matratze absaugen|fensterbank/i},
+    {id:"deep",interval:90,pattern:/kleidung aussortieren/i},
+    {id:"veryDeep",interval:180,pattern:/matratze nach hersteller/i}]},
+  "Ankleidezimmer": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/kleidung nach saison|schubladen ordnen|spiegel|boden unter schränken|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/kleiderbügel|regalböden|schrankfronten|schrankgriffe/i},
+    {id:"deep",interval:90,pattern:/schubladen auswischen/i}]},
+  "Kinderzimmer 1": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spielzeug|bücher|kleidung ordnen|schubladen ordnen|fensterbank|türklink|boden unter|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/regale|schrankfronten/i}]},
+  "Kinderzimmer 2": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/spielzeug|bücher|kleidung ordnen|schubladen ordnen|fensterbank|türklink|boden unter|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/regale|schrankfronten/i}]},
+  "Waschküche": { weekday:1, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/waschmaschine außen|waschmittelschublade|türdichtung|arbeitsflächen|wäschekörbe|vorräte an waschmittel|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/trockner außen|flusensieb/i},
+    {id:"deep",interval:90,pattern:/waschmaschinenpflege|sockelleisten|bereich hinter\/zwischen/i}]},
+  "Musikzimmer": { weekday:2, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/instrumente|oberflächen|kabel|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/noten|regale|fensterbank/i},
+    {id:"deep",interval:90,pattern:/sockelleisten/i}]},
+  "Trainingsraum": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/trainingsgeräte|matten|gewichte|handtücher|ablageflächen|spiegel|boden saugen|boden wischen/i}]},
+  "Technikraum": { weekday:4, defaultInterval:60, rules:[
+    {id:"frequent",interval:30,pattern:/sichtbaren staub|zugänge|boden/i}]},
+  "Lagerraum": { weekday:5, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/vorräte prüfen|boden saugen|boden wischen/i},
+    {id:"regular",interval:45,pattern:/kartons ordnen|regale abstauben/i}]},
+  "Saunaraum": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/nach nutzung|holzflächen|bänke|glasflächen|boden saugen|boden wischen/i},
+    {id:"regular",interval:30,pattern:/saunaofen/i}]},
+  "Stiegenhaus": { weekday:3, defaultInterval:45, rules:[
+    {id:"frequent",interval:14,pattern:/stufen saugen|stufen wischen|handlauf|ecken absaugen/i},
+    {id:"regular",interval:45,pattern:/geländer|sockelleisten/i},
+    {id:"deep",interval:90,pattern:/spinnweben/i}]},
+};
+function roomPackageMeta(x){
+  if(!x||!x.room||isDailyTask(x))return null;
+  const profile=ROOM_PACKAGE_RULES[String(x.room).trim()];
+  if(!profile)return null;
+  const text=String(x.text||"");
+  const hit=profile.rules.find(r=>r.pattern.test(text));
+  const tier=hit||{id:"regular",interval:profile.defaultInterval,pattern:null};
+  return {room:x.room,packageId:tier.id,packageInterval:Number(tier.interval)||profile.defaultInterval,packageWeekday:profile.weekday};
+}
+function packageFirstDue(x,ref=today){
+  const meta=roomPackageMeta(x);
+  if(!meta)return null;
+  let d=nextDow(new Date(ref),meta.packageWeekday);
+  const offset=meta.packageId==="frequent"?0:(meta.packageId==="regular"?7:21);
+  d=addDays(d,offset);
+  if(d<ref){
+    const iv=Math.max(7,meta.packageInterval);
+    while(d<ref)d=addDays(d,iv);
+  }
+  return d;
+}
 const DAY_THEME={1:"EG · Wohnen, Essen & Küche",2:"Bäder & WCs",3:"OG · Schlafen, Kinder & Sauna",4:"EG · Nebenräume",5:"Keller · nur ein Raum",6:"Wäsche + maximal eine Sonderaufgabe",0:"Haushaltsfrei ❤️"};
 
 function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36)}
@@ -251,9 +374,9 @@ let state=loadState();
 // It is discarded once so the new slot engine can create a clean, deterministic
 // first-run baseline. Completion history, manual dates, edits and postponements
 // are preserved.
-if(!state.__v290FreshBaseline){
+if(!state.__v291PackageBaseline){
   state.balancedDue={};
-  state.__v290FreshBaseline=true;
+  state.__v291PackageBaseline=true;
   state.__plannerAuditStatus="";
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
 }
@@ -562,6 +685,8 @@ function catalogDeleted(key){return !!state.catalogDeleted?.[key]}
 function editFor(key){return state.catalogEdits?.[key]||null}
 function catalogInterval(x){
  if(Number(x.interval)>0)return Number(x.interval);
+ const packageMeta=roomPackageMeta(x);
+ if(packageMeta&&Number(packageMeta.packageInterval)>0)return Number(packageMeta.packageInterval);
  const t=(x.text||"").toLowerCase();
  const hygieneRooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
  if(isSanitaryWeeklyCore(x))return 7;
@@ -759,6 +884,15 @@ function rawNextDue(x,ref=today){
    while(d<ref)d=addDays(d,7);
    return d;
  }
+ // V291 room-package cadence: frequent work recurs first and more often;
+ // regular/deep work gets a later first occurrence and a longer recurrence.
+ const pkg=roomPackageMeta(x);
+ if(pkg){
+   const last=lastDone(x);
+   let d=last?addDays(fromKey(last),Math.max(1,pkg.packageInterval)):packageFirstDue(x,ref)||ref;
+   while(d<ref)d=addDays(d,Math.max(1,pkg.packageInterval));
+   return d;
+ }
  if(BASEMENT.includes(x.room)){
    const items=roomItems(x.room),idx=Math.max(0,items.findIndex(y=>y.key===x.key)),firstFriday=fromKey("2026-09-04");
    if(isFrequentMaintenance(x)){const interval=frequentInterval(x),last=lastDone(x);let d=last?addDays(fromKey(last),interval):addDays(firstFriday,idx%7);while(d<ref)d=addDays(d,interval);return d;}
@@ -794,6 +928,8 @@ function rawDueOn(x,d){
  if(x.window)return sameDay(windowDate(x,d),d);
  if(x.start){const start=fromKey(x.start),interval=catalogInterval(x),last=lastDone(x);let anchor=start;if(last&&fromKey(last)>anchor)anchor=fromKey(last);if(d<anchor)return false;const diff=Math.round((d-anchor)/86400000);return diff>=0&&diff%interval===0}
  if(x.source==="rotation"){const interval=catalogInterval(x),a=rotationAnchor(x),last=lastDone(x);let anchor=last?addDays(fromKey(last),interval):a;if(d<anchor)return false;return Math.round((d-anchor)/86400000)%interval===0}
+ const pkg=roomPackageMeta(x);
+ if(pkg){const anchor=lastDone(x)?addDays(fromKey(lastDone(x)),pkg.packageInterval):packageFirstDue(x,fromKey("2026-08-31"));if(!anchor||d<anchor)return false;return Math.round((d-anchor)/86400000)%pkg.packageInterval===0;}
  if(BASEMENT.includes(x.room)){return sameDay(rawNextDue(x,d),d);}
  const w=weeklyDate(x);
  if(!w)return false;
@@ -1293,62 +1429,19 @@ function enforceFocus90(days,next){
 }
 
 function ensureInitialBalancedDue(){
-  // Untouched catalog tasks do not yet have a meaningful personal due date.
-  // Instead of inheriting the old "one task per room per week" seed pattern,
-  // assign their FIRST due date from a balanced long-range focus rotation.
-  // This is the only place where an initial seed date is generated. Once a task
-  // has been completed, its real recurrence is always lastDone + interval.
+  // V291: first due dates are derived from the room's work package. This keeps
+  // high-frequency care early in the cycle and pushes deep-clean work later.
+  // The actual planner may still move the occurrence by at most +/-7 days.
   state.balancedDue=state.balancedDue&&typeof state.balancedDue==='object'?state.balancedDue:{};
   const candidates=CATALOG.filter(x=>!isDailyTask(x)&&!isDone(x)&&!isPostponed(x)&&!state.balancedDue[taskId(x)])
     .filter(x=>!lastDone(x)&&!x.window&&!x.raffstore&&!x.manualStart&&!normalizeDateKey(state.manualDates?.[x.key]||state.catalogDates?.[x.key]));
-  if(!candidates.length)return;
-  // Stable order makes the generated baseline deterministic across devices.
-  candidates.sort((a,b)=>String(focusKeyFor(a)).localeCompare(String(focusKeyFor(b)),'de')||String(a.text||'').localeCompare(String(b.text||''),'de')||taskId(a).localeCompare(taskId(b)));
-  const horizon=plannerHorizon();
-  const used=new Map();
-  const focusOnDay=new Map();
-  const reservedWindowDays=new Set();
-  // Seasonal window/raffstore work is a real household focus and must not be
-  // crowded out by the initial baseline. Reserve its raw due days first; the
-  // actual planner may still move individual window items within their ±7-day
-  // window.
-  for(const x of CATALOG){
-    if(isDailyTask(x)||isDone(x)||isPostponed(x)||(!x.window&&!x.raffstore))continue;
-    const d=nextDue(x,today);if(d instanceof Date){reservedWindowDays.add(dayKey(d));}
-  }
-  const isBlocked=d=>plannerBlocked(d);
-  const getDay=d=>dayKey(d);
-  // Reserve the weekly sanitary routine day and other fixed-rhythm days while
-  // creating the initial due baseline. Otherwise the baseline can consume the
-  // only available focus slots before the fixed routine is inserted later.
-  const reservedFixedDays=new Set();
-  for(let d=new Date(horizon.start);d<=horizon.end;d=addDays(d,1)){
-    if(d.getDay()===2) reservedFixedDays.add(getDay(d)); // sanitary Tuesday
-    if(d.getDay()===4) reservedFixedDays.add(getDay(d)); // bed-linen Thursday
-  }
   for(const x of candidates){
-    const mins=taskMinutes(x),f=focusKeyFor(x);
-    let best=null;
-    // Use a long but finite baseline horizon. This is not a relaxation of the
-    // ±7 rule: this date becomes the task's authoritative initial due date.
-    for(let off=0;off<365;off++){
-      const d=addDays(today,off);if(d>horizon.end||isBlocked(d))continue;
-      const k=getDay(d),m=used.get(k)||0,fs=focusOnDay.get(k)||new Set();
-      if(reservedWindowDays.has(k))continue;
-      // Keep fixed routine weekdays available for their fixed packages.
-      if(reservedFixedDays.has(k) && !isSanitaryWeeklyCore(x) && !isFixedRhythmRoutine(x))continue;
-      if(isMegaTask(x)){if(fs.size||m+mins>90)continue}
-      else if([...fs].some(z=>z.startsWith('MEGA|')))continue;
-      else if(!fs.has(f)&&fs.size>=2)continue;
-      if(m+mins>DAILY_WORK_MINUTES)continue;
-      const score=(fs.has(f)?-10000:fs.size===0?-5000:-1000)+m*2+off*0.15;
-      if(!best||score<best.score)best={d,k,score};
-    }
-    if(best){
-      state.balancedDue[taskId(x)]=best.k;
-      used.set(best.k,(used.get(best.k)||0)+mins);
-      if(!focusOnDay.has(best.k))focusOnDay.set(best.k,new Set());focusOnDay.get(best.k).add(f);
-    }
+    const d=packageFirstDue(x,today);
+    if(d instanceof Date){state.balancedDue[taskId(x)]=dayKey(d);continue;}
+    // Rotation/custom/non-room-package tasks retain their established baseline
+    // behaviour. This branch does not alter explicit/manual dates.
+    const w=weeklyDate(x);
+    if(w instanceof Date)state.balancedDue[taskId(x)]=dayKey(w);
   }
   try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
 }
