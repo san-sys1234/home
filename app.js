@@ -917,8 +917,8 @@ function dayRoomCompatible(arr,x){
 function taskFocusKey(x){
  const room=String(x?.room||"").trim();
  const t=String(x?.text||"").toLowerCase();
- if(x?.window||x?.windowSill||x?.raffstore||/fenster|fensterbank|raffstore|sonnenschutz/.test(t))return `schwerpunkt|fenster|${room}`;
- if(isMegaTask(x))return `schwerpunkt|mega|${taskId(x)}`;
+ if(x?.window||x?.windowSill||x?.raffstore||/fenster|fensterbank|raffstore|sonnenschutz/.test(t))return `fenster|${room}`;
+ if(isMegaTask(x))return `mega|${taskId(x)}`;
  return `raum|${room}`;
 }
 function taskMinutes(x){
@@ -929,85 +929,31 @@ function taskMinutes(x){
  if(w>=2)return 20;
  return 10;
 }
-function dayEstimatedMinutes(arr){return (arr||[]).reduce((n,y)=>n+taskMinutes(y),0);}
-function focusIsFlexible(x){return x && x.source!=="daily" && !isFixedRhythmRoutine(x) && x.source!=="seasonal";}
-function focusCompatibleAfterRoutine(arr,x){
+function isBathroomRoutineTask(x){
+ const bathrooms=["Gäste-WC","Kinderbad","Bad","Eltern-WC"];
+ return bathrooms.includes(String(x?.room||"")) && isFixedRhythmRoutine(x);
+}
+function focusCompatible(arr,x){
  if(!arr||!arr.length)return taskMinutes(x)<=90;
- if(isMegaTask(x)||arr.some(isMegaTask))return false;
- const routine=!!arr._fixedRoutine;
- const flex=arr.filter(focusIsFlexible);
+ // Bathroom weekly routine is the explicit multi-room exception. Its own
+ // effort is not counted against the optional second focus.
+ const flex=arr.filter(y=>!isBathroomRoutineTask(y)&&y.source!=="daily"&&y.source!=="seasonal");
+ if(isBathroomRoutineTask(x))return true;
+ if(isMegaTask(x)||arr.some(y=>isMegaTask(y)))return false;
  const keys=new Set(flex.map(taskFocusKey));
  const incoming=taskFocusKey(x);
- const minutes=dayEstimatedMinutes(arr)+taskMinutes(x);
+ const minutes=flex.reduce((n,y)=>n+taskMinutes(y),0)+taskMinutes(x);
  if(minutes>90)return false;
- // Bathroom routine is the explicit exception: it may span several sanitary rooms.
- // It may still be followed by ONE additional non-routine focus if time remains.
- if(routine){
-   if(!flex.length)return true;
-   if(keys.has(incoming))return true;
-   return keys.size<1;
- }
- if(keys.has(incoming))return true;
- return keys.size<2;
-}
-function enforceDailyFocusLimit(days){
- // Final, deterministic safety pass. It runs once after all existing planner
- // heuristics, so it cannot destabilize the expensive placement search.
- const movable=[];
- for(const [k,arr] of days){
-   if(!arr||!arr.length||arr._fixedRoutine)continue;
-   const keep=[];
-   // Preserve order/priority while removing only tasks that violate the final cap.
-   for(const x of [...arr].sort((a,b)=>taskWeight(b)-taskWeight(a))){
-     if(focusCompatibleAfterRoutine(keep,x) && dayRoomCompatible(keep,x)){
-       keep.push(x);
-     }else{
-       movable.push(x);
-     }
-   }
-   arr.splice(0,arr.length,...keep);
-   arr._weight=keep.reduce((n,y)=>n+taskWeight(y),0);
- }
- // Fixed bathroom routine may receive one additional focus if there is enough time.
- for(const [k,arr] of days){
-   if(!arr?._fixedRoutine)continue;
-   const flex=arr.filter(focusIsFlexible);
-   if(flex.length<=0)continue;
-   const allowed=[];
-   const keys=new Set();
-   for(const x of flex){
-     const key=taskFocusKey(x);
-     if(!keys.has(key)&&keys.size>=1)movable.push(x);
-     else if(dayEstimatedMinutes(arr)<=90){keys.add(key);allowed.push(x);}
-   }
-   if(allowed.length!==flex.length){
-     const allowedIds=new Set(allowed.map(taskId));
-     const routineOnly=arr.filter(x=>!focusIsFlexible(x)||allowedIds.has(taskId(x)));
-     arr.splice(0,arr.length,...routineOnly);
-     arr._weight=routineOnly.reduce((n,y)=>n+taskWeight(y),0);
-   }
- }
- // Reinsert removed tasks into legal future dates within the existing ±7-day window.
- for(const x of movable){
-   const due=nextDue(x,today);
-   let best=null;
-   for(let delta=-PLANNING_WINDOW;delta<=PLANNING_WINDOW;delta++)for(const sign of delta===0?[1]:[1,-1]){
-     const d=addDays(due,delta*sign),k=dayKey(d),arr=days.get(k);
-     if(!arr||d<today||plannerBlocked(d))continue;
-     if(arr.some(y=>taskId(y)===taskId(x)))continue;
-     if(arr._fixedRoutine && !focusCompatibleAfterRoutine(arr,x))continue;
-     if(!focusCompatibleAfterRoutine(arr,x))continue;
-     if(!dayRoomCompatible(arr,x))continue;
-     const score=Math.abs(delta*sign)*10+(arr._weight||0)*2+(arr.length*3);
-     if(!best||score<best.score)best={k,score};
-   }
-   if(best){const a=days.get(best.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);}
- }
+ // One main focus; a second focus is allowed only when the total flexible
+ // workload remains within 90 minutes. Same focus can naturally contain many
+ // related tasks, subject to the existing weight/task limits.
+ return keys.size===0 || keys.has(incoming) || keys.size<2;
 }
 function dayPackageCompatible(arr,x){
  if(!arr||!arr.length)return true;
  if(isMegaTask(x))return false;
  if(arr.some(isMegaTask))return false;
+ if(!focusCompatible(arr,x))return false;
  return dayRoomCompatible(arr,x);
 }
 function roomWorkflow(x){
@@ -1041,8 +987,8 @@ function workPackage(x){
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
  if(d.getDay()===0)return 0;
- // 1/2/3/5/8 weight units correspond roughly to 10/20/30/60/90 minutes.
- // Keep the existing stable planner and allow up to 90 minutes of work per day.
+ // Weight units are mapped conservatively to minutes: 1=10, 2=20,
+ // 3=30, 5=60, 8=90. Never schedule more than 90 minutes of flexible work.
  return 9;
 }
 function dayTaskLimit(d){
@@ -1555,13 +1501,6 @@ function buildIntelligentPlan(){
      }
    }
  }
- // Final daily focus rule: max. one main room/focus, plus at most one small
- // additional focus when the total estimated effort remains <= 90 minutes.
- // The weekly multi-room bathroom routine is the explicit exception.
- enforceDailyFocusLimit(days);
- // Rebuild canonical planned-date map after the final safety pass.
- next.clear();
- for(const [k,arr] of days)for(const y of arr){const id=taskId(y);if(!next.has(id))next.set(id,fromKey(k));}
  plannerCache={key,days,next};
  return plannerCache;
 }
