@@ -3,12 +3,6 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#9a8675">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Unser Zuhause">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-<meta name="theme-color" content="#9a8675"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Unser Zuhause">
 <link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" href="icon-192.png"><title>Unser Zuhause</title>
 <style>
 :root{--bg:#f7f5f1;--card:#fff;--ink:#2d2b29;--muted:#77716b;--line:#e8e0d8;--accent:#9a8675;--accent2:#efe9e3;--green:#eaf2eb;--greenInk:#3f6a4b;--shadow:0 8px 24px rgba(75,55,40,.06)}
@@ -57,12 +51,15 @@ h1{font-size:25px;line-height:1.05;margin:0 0 7px;letter-spacing:-.7px}
 footer{margin-top:12px;font-size:10px}
 @media(max-width:500px){.app{padding:11px 10px 70px}.brand{font-size:11px}h1{font-size:24px}.tab{padding:8px 10px}.card{padding:11px}.hero{padding:11px}.hero .topline{align-items:flex-start}.hero .small{font-size:11px}}
 </style>
+<script>
+(function(){try{if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});} if(window.caches&&caches.keys){caches.keys().then(function(ks){ks.forEach(function(k){if(/^unser-zuhause/i.test(k))caches.delete(k);});}).catch(function(){});}}catch(e){}})();
+</script>
 </head>
 <body>
 <div class="app"><div class="brand">🌿 Unser Zuhause</div><h1>Haushaltsplan</h1>
 <div class="tabs"><button class="tab active" data-tab="today">Heute</button><button class="tab" data-tab="week">⏳ Bald fällig</button><button class="tab" data-tab="calendar">📅 Kalender</button><button class="tab" data-tab="catalog">📚 Aufgabenkatalog</button></div>
 <main id="main"></main><footer>Flexibel statt perfekt. Ein ausgelassener Tag wird nicht automatisch nachgeholt. ❤️</footer></div>
 <div class="detailOverlay" id="detailOverlay"><div class="sheet"><div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div><div id="detailContent"></div></div></div><div class="toast" id="toast"></div>
-<script src="./app.js?v=293"></script>
+<script src="app.js?v=291"></script>
 </body></html>
 
