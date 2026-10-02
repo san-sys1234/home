@@ -2,6 +2,12 @@
 <html lang="de">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#9a8675">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Unser Zuhause">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
 <meta name="theme-color" content="#9a8675"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Unser Zuhause">
 <link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" href="icon-192.png"><title>Unser Zuhause</title>
 <style>
@@ -57,12 +63,6 @@ footer{margin-top:12px;font-size:10px}
 <div class="tabs"><button class="tab active" data-tab="today">Heute</button><button class="tab" data-tab="week">⏳ Bald fällig</button><button class="tab" data-tab="calendar">📅 Kalender</button><button class="tab" data-tab="catalog">📚 Aufgabenkatalog</button></div>
 <main id="main"></main><footer>Flexibel statt perfekt. Ein ausgelassener Tag wird nicht automatisch nachgeholt. ❤️</footer></div>
 <div class="detailOverlay" id="detailOverlay"><div class="sheet"><div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div><div id="detailContent"></div></div></div><div class="toast" id="toast"></div>
-<script src="./app.js?v=292" defer></script>
-<script>
-window.addEventListener("error",function(e){
-  try{document.documentElement.dataset.appError="1"; const m=document.getElementById("main"); if(m && !m.innerHTML.trim()) m.innerHTML='<div style="margin:20px;padding:18px;border-radius:18px;background:#fff4f2;border:1px solid #e6c5be"><b>Unser Zuhause konnte nicht geladen werden.</b><div style="margin-top:7px;font-size:14px">Bitte die Seite einmal neu laden. Wenn das Problem bleibt, öffne die Web-App über die normale Seite und füge sie danach erneut zum Home-Bildschirm hinzu.</div></div>'; }catch(_){}
-});
-if("serviceWorker" in navigator){ window.addEventListener("load",function(){ navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(function(){}); }); }
-</script>
+<script src="./app.js?v=293"></script>
 </body></html>
 
