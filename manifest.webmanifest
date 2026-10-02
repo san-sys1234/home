@@ -1,15 +1,28 @@
 {
-  "name": "Unser Zuhause – Haushaltsplan",
+  "name": "Unser Zuhause",
   "short_name": "Unser Zuhause",
-  "start_url": "./index.html",
+  "description": "Persönlicher Haushaltsplan für unser Zuhause",
+  "lang": "de-AT",
+  "dir": "ltr",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
   "background_color": "#f7f5f1",
   "theme_color": "#9a8675",
-  "lang": "de",
   "icons": [
-    {"src":"./icon-180.png","sizes":"180x180","type":"image/png"},
-    {"src":"./icon-192.png","sizes":"192x192","type":"image/png"},
-    {"src":"./icon-512.png","sizes":"512x512","type":"image/png"}
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
