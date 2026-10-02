@@ -1,28 +1,17 @@
 {
-  "name": "Unser Zuhause",
-  "short_name": "Unser Zuhause",
-  "description": "Persönlicher Haushaltsplan für unser Zuhause",
-  "lang": "de-AT",
-  "dir": "ltr",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "orientation": "portrait",
-  "background_color": "#f7f5f1",
-  "theme_color": "#9a8675",
-  "icons": [
-    {
-      "src": "./icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+  "name":"Unser Zuhause",
+  "short_name":"Unser Zuhause",
+  "description":"Persönlicher Haushaltsplan für unser Zuhause",
+  "lang":"de-AT",
+  "start_url":"./",
+  "scope":"./",
+  "display":"standalone",
+  "display_override":["standalone","minimal-ui"],
+  "orientation":"portrait",
+  "background_color":"#f7f5f1",
+  "theme_color":"#9a8675",
+  "icons":[
+    {"src":"./icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"./icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
   ]
 }

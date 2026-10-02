@@ -50,25 +50,14 @@ h1{font-size:25px;line-height:1.05;margin:0 0 7px;letter-spacing:-.7px}
 .roomGroup .check{width:23px;height:23px;flex-basis:23px}
 footer{margin-top:12px;font-size:10px}
 @media(max-width:500px){.app{padding:11px 10px 70px}.brand{font-size:11px}h1{font-size:24px}.tab{padding:8px 10px}.card{padding:11px}.hero{padding:11px}.hero .topline{align-items:flex-start}.hero .small{font-size:11px}}
-
-<style>
-.pwaInstall{margin:0 0 12px;padding:11px 13px;border:1px solid var(--line);border-radius:16px;background:var(--accent2);font-size:12px;line-height:1.4;color:var(--ink)}
-.pwaInstall b{font-weight:800}.pwaInstall .pwaSteps{margin-top:4px;color:var(--muted)}
-.pwaInstall button{border:0;background:transparent;padding:0;color:var(--accent);font-weight:800}
-@media (display-mode: standalone){.pwaInstall{display:none}}
-</style>
 </style>
 </head>
 <body>
 <div class="app"><div class="brand">🌿 Unser Zuhause</div><h1>Haushaltsplan</h1>
-<div class="pwaInstall" id="pwaInstall"><b>📱 Für den Home-Bildschirm</b><div class="pwaSteps">In Safari auf <b>Teilen</b> → <b>Zum Home-Bildschirm</b> → <b>Hinzufügen</b> tippen.</div></div><div class="tabs"><button class="tab active" data-tab="today">Heute</button><button class="tab" data-tab="week">⏳ Bald fällig</button><button class="tab" data-tab="calendar">📅 Kalender</button><button class="tab" data-tab="catalog">📚 Aufgabenkatalog</button></div>
+<div class="tabs"><button class="tab active" data-tab="today">Heute</button><button class="tab" data-tab="week">⏳ Bald fällig</button><button class="tab" data-tab="calendar">📅 Kalender</button><button class="tab" data-tab="catalog">📚 Aufgabenkatalog</button></div>
 <main id="main"></main><footer>Flexibel statt perfekt. Ein ausgelassener Tag wird nicht automatisch nachgeholt. ❤️</footer></div>
 <div class="detailOverlay" id="detailOverlay"><div class="sheet"><div class="sheetTop"><div><div class="small" id="detailMeta"></div><h2 id="detailTitle"></h2></div><button class="close" id="closeDetail">×</button></div><div id="detailContent"></div></div></div><div class="toast" id="toast"></div>
-<script src="app.js?v=292"></script>
-<script>
-if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js", {scope: "./"}).catch(() => {}));
-}
-</script>
+<script src="app.js?v=293"></script>
+<script>if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js",{scope:"./"}).catch(()=>{}));}</script>
 </body></html>
 
