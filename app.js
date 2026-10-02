@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V312";
+const APP_BUILD="V313";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1533,7 +1533,7 @@ function buildIntelligentPlan(){
   // HARD room rule: one primary room/focus per day; a second physical room is
   // allowed only when the remaining workload capacity is sufficient. Never a third room.
   ensureInitialBalancedDue();
-  const key=plannerKey()+"|V312-ROOMFOCUS";
+  const key=plannerKey()+"|V313-ROOMFOCUS";
   if(plannerCache.key===key)return plannerCache;
 
   const days=new Map(),next=new Map();
@@ -1623,6 +1623,61 @@ function buildIntelligentPlan(){
     relaxed.sort((a,b)=>a.score-b.score);
     if(relaxed[0]){add(relaxed[0].d,x);next.set(taskId(x),relaxed[0].d)}
   }
+
+  // V313: augmenting-path repair. The first greedy pass may consume a legal
+  // slot needed by another task. Before allowing an unplanned task, relocate
+  // a movable task to another legal +/-7-day slot and use the released capacity.
+  const movable=(y)=>{
+    if(!y||isDailyTask(y)||isDone(y)||isPostponed(y))return false;
+    if(state.plannedOverrides?.[taskId(y)])return false;
+    if(y.manualStart||y.window||y.raffstore||isFixedRhythmRoutine(y)||isSanitaryWeeklyCore(y))return false;
+    return true;
+  };
+  const hardCandidate=(d,x)=>{
+    const a=days.get(dayKey(d)); if(!a||d<today||d>horizonEnd||plannerBlocked(d))return false;
+    if(isMegaTask(x))return dayPhysicalRooms(a).size===0&&a.length===0;
+    if(a.some(isMegaTask))return false;
+    const union=new Set(dayPhysicalRooms(a)); for(const r of physicalRooms(x))union.add(r);
+    return union.size<=MAX_ROOMS_PER_DAY;
+  };
+  const tryAugment=(x,depth=0,trail=new Set())=>{
+    if(depth>4)return null;
+    const id=taskId(x); if(trail.has(id))return null;
+    const nextTrail=new Set(trail); nextTrail.add(id);
+    const due=nextDue(x,today); if(!(due instanceof Date)||Number.isNaN(due.getTime()))return null;
+    const options=[];
+    for(let delta=-PLAN_WINDOW;delta<=PLAN_WINDOW;delta++){
+      const d=addDays(due,delta),a=days.get(dayKey(d));
+      if(!hardCandidate(d,x)||a.some(y=>taskId(y)===id))continue;
+      options.push({d,a,score:score(d,x,due,null)});
+    }
+    options.sort((a,b)=>a.score-b.score);
+    for(const o of options){
+      if(canFit(o.d,x)){add(o.d,x);next.set(id,o.d);return o.d;}
+    }
+    for(const o of options){
+      const candidates=o.a.filter(movable).sort((a,b)=>{
+        const ad=Math.abs(Math.round((o.d-nextDue(a,today))/86400000));
+        const bd=Math.abs(Math.round((o.d-nextDue(b,today))/86400000));
+        return bd-ad || taskMinutes(a)-taskMinutes(b);
+      });
+      for(const y of candidates){
+        const yi=o.a.findIndex(z=>taskId(z)===taskId(y)); if(yi<0)continue;
+        o.a.splice(yi,1); o.a._weight=Math.max(0,(o.a._weight||0)-taskWeight(y));
+        next.delete(taskId(y));
+        if(canFit(o.d,x)){
+          add(o.d,x); next.set(id,o.d);
+          const moved=tryAugment(y,depth+1,nextTrail);
+          if(moved)return o.d;
+          removeTaskFromDays(days,id); next.delete(id);
+        }
+        o.a.push(y); o.a._weight=(o.a._weight||0)+taskWeight(y); next.set(taskId(y),o.d);
+      }
+    }
+    return null;
+  };
+  const initiallyUnplanned=active.filter(x=>!next.has(taskId(x)));
+  for(const x of initiallyUnplanned)tryAugment(x);
 
   // Postponed occurrences are authoritative and belong on their exact date.
   for(const p of Object.values(state.postponed||{})){
