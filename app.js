@@ -914,10 +914,44 @@ function dayRoomCompatible(arr,x){
  for(const r of incoming)union.add(r);
  return union.size<=MAX_ROOMS_PER_DAY;
 }
-function dayPackageCompatible(arr,x){
+function taskFocusKey(x){
+ const room=String(x?.room||"").trim();
+ const t=String(x?.text||"").toLowerCase();
+ if(x?.window||x?.windowSill||x?.raffstore||/fenster|fensterbank|raffstore|sonnenschutz/.test(t))return `schwerpunkt|fenster|${room}`;
+ if(isMegaTask(x))return `schwerpunkt|mega|${taskId(x)}`;
+ return `raum|${room}`;
+}
+function taskMinutes(x){
+ // Scheduling weight is translated into a simple practical time estimate.
+ // 1/2/3/5/8 correspond roughly to 10/20/30/60/90 minutes.
+ const w=taskWeight(x);
+ if(w>=8)return 90;
+ if(w>=5)return 60;
+ if(w>=3)return 30;
+ if(w>=2)return 20;
+ return 10;
+}
+function dayEstimatedMinutes(arr){
+ return (arr||[]).reduce((n,y)=>n+taskMinutes(y),0);
+}
+function dayFocusCompatible(arr,x){
  if(!arr||!arr.length)return true;
+ // The fixed weekly bathroom routine is the explicit exception: it may contain
+ // several sanitary rooms and is treated as one protected routine block.
+ if(arr._fixedRoutine)return false;
+ const keys=new Set(arr.map(taskFocusKey));
+ const incoming=taskFocusKey(x);
+ if(keys.has(incoming))return dayEstimatedMinutes(arr)+taskMinutes(x)<=90;
+ // At most one additional room/focus is allowed, and only when the whole day
+ // remains within the 90-minute household-work budget.
+ if(keys.size>=2)return false;
+ return dayEstimatedMinutes(arr)+taskMinutes(x)<=90;
+}
+function dayPackageCompatible(arr,x){
+ if(!arr||!arr.length)return taskMinutes(x)<=90;
  if(isMegaTask(x))return false;
  if(arr.some(isMegaTask))return false;
+ if(!dayFocusCompatible(arr,x))return false;
  return dayRoomCompatible(arr,x);
 }
 function roomWorkflow(x){
@@ -951,13 +985,9 @@ function workPackage(x){
 function roomCap(x){if(x.window)return 1;if(x.raffstore)return 2;if(/boden|kamin|bad|dusche|wanne|wc|toilette/i.test(x.text||""))return 2;return 6}
 function dayBudget(d){
  if(d.getDay()===0)return 0;
- // Household work should feel light, not like a second full-time job.
- // Keep the room/work-package logic, but deliberately portion each room into
- // smaller, manageable chunks. Fixed Tuesday hygiene remains protected below.
- if(d.getDay()===6)return 1;
- if(d.getDay()===3)return 2;
- if(d.getDay()===5)return 2;
- return 3;
+ // Hard daily workload budget: at most about 90 minutes of non-routine
+ // household work. The fixed bathroom routine is protected separately.
+ return 9;
 }
 function dayTaskLimit(d){
  // Keep the visible list small as well as the weighted capacity. The weekly
@@ -1279,6 +1309,7 @@ function buildIntelligentPlan(){
      // At most two physical rooms per day. Within that limit, prefer the same
      // room, then a compatible same-floor/workflow room as the second room.
      if(!dayRoomCompatible(arr,occ.x))continue;
+     if(!dayFocusCompatible(arr,occ.x))continue;
      if(isMegaTask(occ.x)&&!empty)continue;
      if(arr.some(isMegaTask))continue;
      const breathing=dayBreathingScore(d,arr);
