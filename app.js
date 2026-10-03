@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V292";
+const APP_BUILD="V293";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -942,13 +942,25 @@ function roomSpreadPenalty(arr,x){
 // HARTE REGEL: Ein Tag darf höchstens 2 Raumpakete enthalten.
 // Mehrere Aufgaben desselben Raumes zählen als EIN Raumpaket.
 function roomPackageCount(arr){
+ // The Tuesday hygiene block is one physical work package even though it
+ // covers several bathrooms/WCs. All WC/toilet + washbasin checklist items
+ // therefore count as ONE package, not four rooms.
  const rooms=new Set();
- for(const y of (arr||[])){const r=String(y?.room||"").trim();if(r)rooms.add(r);}
- return rooms.size;
+ let hasTuesdayHygiene=false;
+ for(const y of (arr||[])){
+   if(isWCSubtask(y)){hasTuesdayHygiene=true;continue;}
+   const r=String(y?.room||"").trim();
+   if(r)rooms.add(r);
+ }
+ return rooms.size+(hasTuesdayHygiene?1:0);
 }
 function canAddRoomPackage(arr,x){
  if(!arr||!arr.length)return true;
  const room=String(x?.room||"");
+ // All WC/toilet + washbasin tasks belong to the single Tuesday hygiene
+ // package and may span Gäste-WC, Kinderbad, Bad and Eltern-WC.
+ if(isWCSubtask(x) && (arr||[]).every(y=>isWCSubtask(y)))return true;
+ if(isWCSubtask(x) && (arr||[]).some(y=>isWCSubtask(y)))return roomPackageCount(arr)<2;
  if((arr||[]).some(y=>String(y?.room||"")===room))return true;
  return roomPackageCount(arr)<2;
 }
@@ -959,7 +971,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v292-single-plan|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v293-single-plan|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1056,7 +1068,10 @@ function enforceMaxTwoRoomPackages(days,next){
    const normal=a.filter(x=>!isWCSubtask(x));
    const hygiene=a.filter(x=>isWCSubtask(x));
    const rooms=[...new Set(normal.map(x=>String(x.room||'').trim()).filter(Boolean))];
-   if(rooms.length<=2)continue;
+   // Tuesday hygiene counts as one package, irrespective of how many bathroom/WC
+   // rooms it covers. A normal day still counts physical rooms individually.
+   const packageCount=rooms.length+(hygiene.length?1:0);
+   if(packageCount<=2)continue;
    // Keep the two strongest/most anchored rooms; move everything else forward.
    const roomScore=new Map();
    for(const x of normal){
@@ -1067,7 +1082,8 @@ function enforceMaxTwoRoomPackages(days,next){
      if(due instanceof Date)score+=Math.max(0,30-Math.abs(Math.round((d-due)/86400000)))*0.1;
      roomScore.set(r,(roomScore.get(r)||0)+score);
    }
-   const keep=new Set([...rooms].sort((r1,r2)=>(roomScore.get(r2)||0)-(roomScore.get(r1)||0)||r1.localeCompare(r2,'de')).slice(0,2));
+   const slotsForRooms=hygiene.length?1:2;
+   const keep=new Set([...rooms].sort((r1,r2)=>(roomScore.get(r2)||0)-(roomScore.get(r1)||0)||r1.localeCompare(r2,'de')).slice(0,slotsForRooms));
    const move=a.filter(x=>!isWCSubtask(x)&&!keep.has(String(x.room||'').trim()));
    if(!move.length)continue;
    for(const x of move){
@@ -1112,9 +1128,18 @@ function buildIntelligentPlan(){
    // After the first "Später"/completion action today, never refill the freed slot.
    if(sameDay(d,today) && lock && !lock.has(id))return false;
    if(a.some(y=>taskId(y)===id))return false;
-   // NEVER allow a third room package, regardless of task type.
-   if(!canAddRoomPackage(a,x))return false;
+   // The Tuesday hygiene package is a deliberate multi-room exception: all
+   // WC/toilet + washbasin tasks are one physical package across the four
+   // bathroom/WC rooms. It must be allowed to collect the complete block.
+   const tuesdayHygiene= d.getDay()===2 && isWCSubtask(x) && a.every(y=>isWCSubtask(y));
+   // NEVER allow a third normal room package.
+   if(!tuesdayHygiene && !canAddRoomPackage(a,x))return false;
    const w=taskWeight(x), used=a._weight||0, cap=dayBudget(d);
+   if(tuesdayHygiene){
+     // Fixed hygiene is intentionally exempt from the small per-day task/weight
+     // budget; it is the one predefined weekly block.
+     return true;
+   }
    const exterior=!!(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/i.test(x.text||''));
    const hasExterior=a.some(y=>y.window||y.windowSill||y.raffstore||/fensterbank|raffstore|sonnenschutz/i.test(y.text||''));
    const heavy=a.some(y=>isHeavyTask(y)||taskWeight(y)>=5);
@@ -2074,7 +2099,14 @@ function appendPackageGroups(container,tasks,opts={}){
 }
 function appendRoomGroups(container,tasks,opts={}){
   const groups=new Map();
-  tasks.forEach(x=>{
+  const hygiene=tasks.filter(x=>isWCSubtask(x));
+  const rest=tasks.filter(x=>!isWCSubtask(x));
+  // Tuesday's fixed WC/waschbecken work is displayed as ONE work package even
+  // though its checklist contains the four individual bathroom/WC rooms.
+  if(hygiene.length && today.getDay()===2){
+    groups.set("🚿 Bäder & WCs · Dienstag",hygiene);
+  }
+  rest.forEach(x=>{
     const room=roomLabel(x.room);
     if(!groups.has(room))groups.set(room,[]);
     groups.get(room).push(x);
