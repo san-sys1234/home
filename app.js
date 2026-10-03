@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V319";
+const APP_BUILD="V321";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -407,8 +407,10 @@ let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
 let calendarCache={year:null,days:new Map()};
 let yearPlanCache={year:null,days:new Map()};
-let plannerCache={key:null,days:new Map(),next:new Map()};
-function invalidatePlanner(){plannerCache={key:null,days:new Map(),next:new Map()}}
+let __plannerGeneration=0;
+let plannerCache={key:null,days:new Map(),next:new Map(),generation:-1};
+function invalidatePlanner(){__plannerGeneration++;plannerCache={key:null,days:new Map(),next:new Map(),generation:-1}}
+function plannerReady(){return plannerCache.generation===__plannerGeneration&&plannerCache.next&&plannerCache.next.size>0}
 function clearPlannerSnapshot(){try{delete state.__plannerSnapshot;localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}}
 function invalidatePlans(){calendarCache={year:null,days:new Map()};yearPlanCache={year:null,days:new Map()};invalidatePlanner()}
 function save(){
@@ -1706,7 +1708,7 @@ function buildIntelligentPlan(){
 
 function plannedForDate(d){
  const k=dayKey(d);
- const plan=(plannerCache.key===plannerKey()&&plannerCache.next.size)?plannerCache:null;
+ const plan=(plannerReady())?plannerCache:null;
  if(!plan)return [];
  // SINGLE SOURCE OF TRUTH: the calendar/today/week views must contain exactly
  // the tasks whose canonical planned date is this day. Never use the planner's
@@ -1823,7 +1825,7 @@ function buildRecurringCalendarYearAsync(year,onDone){
   const days=new Map();
   const ys=new Date(year,0,1,12),ye=new Date(year,11,31,12);
   for(let d=new Date(ys);d<=ye;d=addDays(d,1))days.set(dayKey(d),[]);
-  const canonicalNow=(plannerCache&&plannerCache.next&&plannerCache.key===plannerKey())?plannerCache.next:null;
+  const canonicalNow=(plannerReady())?plannerCache.next:null;
   const postponedById=new Map();
   for(const p of Object.values(state.postponed||{})){
     const id=String(p?.sourceKey||p?.canonical||p?.key||p?.id||'');
@@ -1895,7 +1897,7 @@ function plannedDateForTask(x){
  const id=taskId(x);
  const explicit=normalizeDateKey(state.plannedOverrides?.[id]);
  if(explicit){const ed=fromKey(explicit);if(ed instanceof Date&&!Number.isNaN(ed.getTime())&&ed>=today)return ed;}
- const plan=(plannerCache.key===plannerKey()&&plannerCache.next.size)?plannerCache:null,due=nextDue(x,today);
+ const plan=(plannerReady())?plannerCache:null,due=nextDue(x,today);
  if(!plan)return null;
  let d=plan.next.get(id);
  if(isFloorVacuumTask(x)){
@@ -2925,19 +2927,74 @@ function pullCatalogTaskToday(x){
   toast(`„${canonical.text}“ für heute vorgezogen ❤️`);
 }
 
-function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=(usePlan=false)=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=usePlan&&plannerCache.key===plannerKey()?plannerCache:null;const plannedMap=new Map();if(plan){for(const x of arr){const d=plannedDateForTask(x);plannedMap.set(taskId(x),d instanceof Date?d:null);}}arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben${plan?"":" · Planung wird im Hintergrund vorbereitet …"}</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const due=nextDue(x);const ptxt=x.source==="daily"?"täglich":(pd?pd.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");const diff=(x.source==="daily"||!pd||!due)?null:Math.round((pd-due)/86400000);const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=()=>draw(plannerCache.key===plannerKey());draw(plannerCache.key===plannerKey())}
+function renderCatalog(){
+  const main=document.getElementById("main");
+  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;
+  const q=main.querySelector("#q"),res=main.querySelector("#res");
+  q.value=catalogSearchTerm||"";
+  main.querySelector("#new").onclick=()=>openEditor();
+  let token=++window.__catalogRenderToken;
+  const draw=()=>{
+    const my=++token; window.__catalogRenderToken=my;
+    catalogSearchTerm=q.value;
+    const term=q.value.trim().toLowerCase();
+    const arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));
+    res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben · Liste wird flüssig aufgebaut …</div><div id="catalogItems"></div>`;
+    const holder=res.querySelector("#catalogItems");
+    let index=0;
+    const chunk=()=>{
+      if(my!==window.__catalogRenderToken||selectedTab!=="catalog")return;
+      const frag=document.createDocumentFragment();
+      const stop=Math.min(arr.length,index+35);
+      for(;index<stop;index++){
+        const x=arr[index],r=document.createElement("div"); r.className="result";
+        const due=nextDue(x);
+        const planned=plannerReady()?plannedDateForTask(x):null;
+        const ptxt=x.source==="daily"?"täglich":(planned?planned.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"wird geplant …");
+        const diff=(x.source==="daily"||!planned||!due)?null:Math.round((planned-due)/86400000);
+        const note=diff!==null&&diff!==0?` <span class="small">(${diff>0?"+":""}${diff} ${Math.abs(diff)===1?"Tag":"Tage"})</span>`:"";
+        r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta nextDue">Fällig: <b>${esc(nextDueLabel(x))}</b></div><div class="meta plannedDate">Geplant: <b>${esc(ptxt)}</b>${note}</div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;
+        r.querySelector(".edit").onclick=()=>openEditor(x);
+        r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};
+        const pull=r.querySelector(".pullToday"); if(pull)pull.onclick=()=>pullCatalogTaskToday(x);
+        r.querySelector(".info").onclick=()=>openDetail(x);
+        frag.appendChild(r);
+      }
+      holder.appendChild(frag);
+      if(index<arr.length) setTimeout(chunk,0);
+      else if(plannerReady() && selectedTab==="catalog") res.firstElementChild.textContent=`${arr.length} Aufgaben · geplant`;
+    };
+    chunk();
+  };
+  q.oninput=()=>{clearTimeout(window.__catalogSearchTimer);window.__catalogSearchTimer=setTimeout(draw,120)};
+  draw();
+}
 function renderWeek(){
   const main=document.getElementById("main");
-  const hasPlan=plannerCache.key===plannerKey()&&plannerCache.next.size>0;
-  const candidates=CATALOG.filter(x=>x&&!isDone(x)&&!isPostponed(x)&&!isDailyTask(x)&&!x.window&&x.source!=="rotation")
-    .map(x=>{const planned=hasPlan?plannerCache.next.get(taskId(x)):null;return {...x,_planned:planned instanceof Date?planned:nextDue(x,today),_isPlanned:planned instanceof Date}})
-    .filter(x=>x._planned instanceof Date&&x._planned>=today)
-    .sort((a,b)=>a._planned-b._planned||roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||taskWeight(b)-taskWeight(a))
-    .slice(0,20);
-  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">Bald fällig</h2><div class="small">Die nächsten 20 offenen Aufgaben · ${hasPlan?"sinnvoll geplant":"nach Fälligkeit – Planung wird bei Bedarf aufgebaut"}</div></div><span class="badge">${candidates.length}</span></div><div id="soonList"></div></div>`;
-  const list=main.querySelector("#soonList");
-  if(!candidates.length){list.innerHTML=`<div class="empty">Gerade ist nichts offen, das bald ansteht. 🥰</div>`;return;}
-  appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:hasPlan});
+  main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">Bald fällig</h2><div class="small">Die nächsten 20 offenen Aufgaben · wird flüssig aufgebaut</div></div><span class="badge" id="weekCount">…</span></div><div id="soonList"><div class="empty">⏳ Aufgaben werden vorbereitet …</div></div></div>`;
+  const list=main.querySelector("#soonList"),countEl=main.querySelector("#weekCount");
+  const token=++window.__weekRenderToken;
+  const candidates=[]; let index=0;
+  const scan=()=>{
+    if(token!==window.__weekRenderToken||selectedTab!=="week")return;
+    const stop=Math.min(CATALOG.length,index+30);
+    for(;index<stop;index++){
+      const x=CATALOG[index];
+      if(!x||isDone(x)||isPostponed(x)||isDailyTask(x)||x.window||x.source==="rotation")continue;
+      const due=nextDue(x,today); if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
+      const planned=plannerReady()?plannerCache.next.get(taskId(x)):null;
+      const target=planned instanceof Date?planned:due;
+      if(target>=today)candidates.push({...x,_planned:target,_isPlanned:planned instanceof Date});
+    }
+    if(index<CATALOG.length){setTimeout(scan,0);return;}
+    candidates.sort((a,b)=>a._planned-b._planned||roomLabel(a.room).localeCompare(roomLabel(b.room),"de")||taskWeight(b)-taskWeight(a));
+    const top=candidates.slice(0,20);
+    countEl.textContent=String(top.length);
+    list.innerHTML="";
+    if(!top.length){list.innerHTML=`<div class="empty">Gerade ist nichts offen, das bald ansteht. 🥰</div>`;return;}
+    appendRoomGroups(list,roomGroupTasksSorted(top),{showDue:plannerReady()});
+  };
+  setTimeout(scan,0);
 }
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"],ready=calendarCache.year===year&&calendarCache.days&&calendarCache.days.size;main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>${ready?"Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft":"⏳ Kalender wird vorbereitet …"}</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=ready?calendarTasksForDate(d):[],el=document.createElement("button");const completed=ready&&calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>ready?showCalendarDay(d,tasks):toast("⏳ Der Kalender wird noch vorbereitet …");grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=year-1;save();render()};main.querySelector("#next").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=year+1;save();render()};main.querySelector("#cur").onclick=()=>{window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;state.calendarYear=today.getFullYear();save();render()}}
 function showCalendarDay(d,tasks){
@@ -2977,97 +3034,79 @@ function syncCurrentDay(){
  }
 }
 let __planWorker=null, __planWorkerBusy=false, __planWorkerWaiters=[];
-function canonicalPlanPayload(){
-  const active=CATALOG.filter(x=>x&&!isDailyTask(x)&&!isDone(x)&&!isPostponed(x));
-  return active.map(x=>{
-    const due=nextDue(x,today);
-    const preferred=normalizeDateKey(state.plannedOverrides?.[taskId(x)])?fromKey(state.plannedOverrides[taskId(x)]):((isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x))?fixedRoutineDate(x,today):null);
-    const rooms=physicalRooms(x);
-    return {id:taskId(x),due:due instanceof Date&&!Number.isNaN(due.getTime())?dayKey(due):"",preferred:preferred instanceof Date&&!Number.isNaN(preferred.getTime())?dayKey(preferred):"",rooms,minutes:taskMinutes(x),weight:taskWeight(x),fixed:isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x),manual:!!state.plannedOverrides?.[taskId(x)]};
-  }).filter(x=>x.due);
+function canonicalPlanPayloadAsync(done){
+  const out=[]; let index=0; const token=++window.__payloadBuildToken;
+  const step=()=>{
+    if(token!==window.__payloadBuildToken)return;
+    const stop=Math.min(CATALOG.length,index+25);
+    for(;index<stop;index++){
+      const x=CATALOG[index];
+      if(!x||isDailyTask(x)||isDone(x)||isPostponed(x))continue;
+      const due=nextDue(x,today); if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
+      const ov=normalizeDateKey(state.plannedOverrides?.[taskId(x)]);
+      const preferred=ov?fromKey(ov):((isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x))?fixedRoutineDate(x,today):null);
+      const rooms=physicalRooms(x);
+      out.push({id:taskId(x),due:dayKey(due),preferred:preferred instanceof Date&&!Number.isNaN(preferred.getTime())?dayKey(preferred):"",rooms,minutes:taskMinutes(x),weight:taskWeight(x),fixed:isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x),manual:!!ov});
+    }
+    if(index<CATALOG.length){setTimeout(step,0);return;}
+    done?.(out);
+  };
+  setTimeout(step,0);
 }
 function requestCanonicalPlan(done){
-  if(plannerCache.key===plannerKey()&&plannerCache.next.size){done?.(plannerCache);return;}
+  if(plannerReady()){done?.(plannerCache);return;}
   if(done)__planWorkerWaiters.push(done);
   if(__planWorkerBusy)return;
-  if(!window.Worker){setTimeout(()=>{try{restorePlannerSnapshot(); if(plannerCache.key===plannerKey()&&plannerCache.next.size){} }catch{} __planWorkerWaiters.splice(0).forEach(cb=>cb(plannerCache));},0);return;}
+  if(!window.Worker){setTimeout(()=>{__planWorkerWaiters.splice(0).forEach(cb=>cb(plannerCache));},0);return;}
   __planWorkerBusy=true;
-  const workerCode=`
-  self.onmessage=e=>{
-    const {tasks, todayKey, window:W}=e.data;
-    const DAY=180, MAXTASKS=17, MAXROOMS=2;
-    const ms=86400000; const dt=k=>new Date(k+"T12:00:00");
-    const key=d=>d.toISOString().slice(0,10);
-    const add=(d,n)=>new Date(d.getTime()+n*ms);
-    const days=new Map(); const next={};
-    const get=k=>{if(!days.has(k))days.set(k,{tasks:[],minutes:0,rooms:new Set()});return days.get(k)};
-    const roomsOf=x=>new Set((x.rooms||[]).filter(Boolean));
-    const can=(d,x)=>{const a=get(key(d));const rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);return a.minutes+x.minutes<=DAY&&a.tasks.length<MAXTASKS&&rs.size<=MAXROOMS};
-    const score=(d,x)=>{const a=get(key(d));const same=[...(roomsOf(x))].some(r=>a.rooms.has(r));return Math.abs(Math.round((d-dt(x.due))/ms))*8+a.minutes*1.4+a.tasks.length*1.2+(a.tasks.length?0:-25)+(same?-55:0)};
-    const place=(d,x)=>{const a=get(key(d));a.tasks.push(x.id);a.minutes+=x.minutes;for(const r of roomsOf(x))a.rooms.add(r);next[x.id]=key(d)};
-    const ordered=[...tasks].sort((a,b)=>(a.manual===b.manual?0:a.manual?-1:1)||a.due.localeCompare(b.due)||b.weight-a.weight);
-    for(const x of ordered){
-      const due=dt(x.due), cand=[];
-      if(x.preferred){const pd=dt(x.preferred);if(Math.abs(Math.round((pd-due)/ms))<=W&&pd>=dt(todayKey)&&can(pd,x))cand.push({d:pd,s:-1000000});}
-      for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;if(can(d,x))cand.push({d,s:score(d,x)});}
-      cand.sort((a,b)=>a.s-b.s);
-      if(cand[0]){place(cand[0].d,x);continue;}
-      // Last legal attempt: keep the hard room/time limits, relaxing only task count.
-      const relaxed=[];
-      for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;const a=get(key(d));const rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);if(a.minutes+x.minutes<=DAY&&rs.size<=MAXROOMS)relaxed.push({d,s:a.minutes+a.tasks.length*2+Math.abs(n)*8});}
-      relaxed.sort((a,b)=>a.s-b.s);if(relaxed[0])place(relaxed[0].d,x);
-    }
-    self.postMessage({next});
-  };`;
-  const blob=new Blob([workerCode],{type:"application/javascript"});
-  __planWorker=new Worker(URL.createObjectURL(blob));
-  __planWorker.onmessage=e=>{
-    try{const next=new Map();for(const [id,k] of Object.entries(e.data.next||{})){const d=fromKey(k);if(d instanceof Date&&!Number.isNaN(d.getTime()))next.set(id,d);} plannerCache={key:plannerKey(),days:new Map(),next};}
-    finally{__planWorkerBusy=false;__planWorker.terminate();__planWorker=null;const q=__planWorkerWaiters.splice(0);q.forEach(cb=>{try{cb(plannerCache)}catch{}});}
-  };
-  __planWorker.onerror=()=>{__planWorkerBusy=false;try{__planWorker.terminate()}catch{};__planWorker=null;__planWorkerWaiters.splice(0).forEach(cb=>{try{cb(plannerCache)}catch{}})};
-  __planWorker.postMessage({tasks:canonicalPlanPayload(),todayKey:dayKey(today),window:PLANNING_WINDOW});
+  canonicalPlanPayloadAsync(tasks=>{
+    if(!__planWorkerBusy)return;
+    const workerCode=`
+    self.onmessage=e=>{
+      const {tasks,todayKey,window:W}=e.data;
+      const DAY=180, MAXTASKS=17, MAXROOMS=2, ms=86400000;
+      const dt=k=>new Date(k+"T12:00:00"), key=d=>d.toISOString().slice(0,10), add=(d,n)=>new Date(d.getTime()+n*ms);
+      const days=new Map(),next={};
+      const get=k=>{if(!days.has(k))days.set(k,{tasks:[],minutes:0,rooms:new Set()});return days.get(k)};
+      const roomsOf=x=>new Set((x.rooms||[]).filter(Boolean));
+      const can=(d,x)=>{const a=get(key(d)),rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);return a.minutes+x.minutes<=DAY&&a.tasks.length<MAXTASKS&&rs.size<=MAXROOMS};
+      const score=(d,x)=>{const a=get(key(d)),same=[...roomsOf(x)].some(r=>a.rooms.has(r));return Math.abs(Math.round((d-dt(x.due))/ms))*8+a.minutes*1.4+a.tasks.length*1.2+(a.tasks.length?0:-25)+(same?-55:0)};
+      const place=(d,x)=>{const a=get(key(d));a.tasks.push(x.id);a.minutes+=x.minutes;for(const r of roomsOf(x))a.rooms.add(r);next[x.id]=key(d)};
+      const ordered=[...tasks].sort((a,b)=>(a.manual===b.manual?0:a.manual?-1:1)||a.due.localeCompare(b.due)||b.weight-a.weight);
+      for(const x of ordered){const due=dt(x.due),cand=[];if(x.preferred){const pd=dt(x.preferred);if(Math.abs(Math.round((pd-due)/ms))<=W&&pd>=dt(todayKey)&&can(pd,x))cand.push({d:pd,s:-1000000});}for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;if(can(d,x))cand.push({d,s:score(d,x)});}cand.sort((a,b)=>a.s-b.s);if(cand[0]){place(cand[0].d,x);continue;}const relaxed=[];for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;const a=get(key(d)),rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);if(a.minutes+x.minutes<=DAY&&rs.size<=MAXROOMS)relaxed.push({d,s:a.minutes+a.tasks.length*2+Math.abs(n)*8});}relaxed.sort((a,b)=>a.s-b.s);if(relaxed[0])place(relaxed[0].d,x);}
+      self.postMessage({next});
+    };`;
+    const blob=new Blob([workerCode],{type:"application/javascript"});
+    __planWorker=new Worker(URL.createObjectURL(blob));
+    __planWorker.onmessage=e=>{try{const next=new Map();for(const [id,k] of Object.entries(e.data.next||{})){const d=fromKey(k);if(d instanceof Date&&!Number.isNaN(d.getTime()))next.set(id,d);}plannerCache={key:"ready",days:new Map(),next,generation:__plannerGeneration};}finally{__planWorkerBusy=false;__planWorker.terminate();__planWorker=null;const q=__planWorkerWaiters.splice(0);q.forEach(cb=>{try{cb(plannerCache)}catch{}})}};
+    __planWorker.onerror=()=>{__planWorkerBusy=false;try{__planWorker.terminate()}catch{}__planWorker=null;__planWorkerWaiters.splice(0).forEach(cb=>{try{cb(plannerCache)}catch{}})};
+    __planWorker.postMessage({tasks,todayKey:dayKey(today),window:PLANNING_WINDOW});
+  });
 }
 function render(){
   syncCurrentDay();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
   if(selectedTab==="today"){
-    window.__fastMode=true;
-    renderToday();
-    window.__fastMode=false;
-    return;
+    window.__fastMode=true; renderToday(); window.__fastMode=false; return;
   }
   if(selectedTab==="calendar"){
-    // V317: the calendar tab must NEVER wait for or trigger the monolithic
-    // canonical planner. Paint the calendar immediately; its own year data is
-    // built cooperatively afterwards. This keeps the tab clickable on Safari.
     window.__calendarBuildToken=(window.__calendarBuildToken||0)+1;
     renderCalendar();
     const year=state.calendarYear||today.getFullYear();
-    setTimeout(()=>{
-      if(selectedTab!=="calendar")return;
-      buildRecurringCalendarYearAsync(year,()=>{
-        if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar();
-      });
-    },1200);
+    setTimeout(()=>{if(selectedTab!=="calendar")return;buildRecurringCalendarYearAsync(year,()=>{if(selectedTab==="calendar"&&(state.calendarYear||today.getFullYear())===year)renderCalendar()})},0);
     return;
   }
   if(selectedTab==="week"){
-    // V319: NEVER run the monolithic planner from a category click.
-    // The view is immediately usable; the canonical worker fills plan dates
-    // asynchronously when available.
     renderWeek();
-    requestCanonicalPlan(()=>{if(selectedTab==="week")renderWeek()});
+    setTimeout(()=>{if(selectedTab==="week")requestCanonicalPlan(()=>{if(selectedTab==="week")renderWeek()})},0);
     return;
   }
   renderCatalog();
-  requestCanonicalPlan(()=>{if(selectedTab==="catalog")renderCatalog()});
+  setTimeout(()=>{if(selectedTab==="catalog")requestCanonicalPlan(()=>{if(selectedTab==="catalog")renderCatalog()})},0);
 }
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 // V309: first paint is always the lightweight Today view.
 render();
-// V319: planning is a Web Worker job. It never blocks the main UI thread.
-setTimeout(()=>{requestCanonicalPlan(()=>{if(selectedTab==="calendar")renderCalendar();});},1200);
-// No synchronous canonical planner is ever started from navigation or boot.
+// V321: no planner work is started automatically at boot.
 // V307: no delayed full-state write after boot. It could block Safari during interaction.
