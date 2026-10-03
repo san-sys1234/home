@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V293";
+const APP_BUILD="V294";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -2386,7 +2386,11 @@ function showCalendarDay(d,tasks){
  const box=document.getElementById("detailDay");
  // Calendar day details always come from the same canonical plan as Today and
  // the catalog. Keep manually pulled-forward tasks visible even on a free day.
- const dayTasks=plannedForDate(d).filter(x=>x.source!=="daily");
+ // IMPORTANT: use the exact task list that was calculated for the
+ // clicked calendar day. Re-planning here can produce a different subset
+ // (especially the fixed Tuesday WC package), causing the header count and
+ // the visible task list to disagree.
+ const dayTasks=(Array.isArray(tasks)?tasks:calendarTasksForDate(d)).filter(x=>x.source!=="daily");
  const completed=calendarDayCompleted(d,dayTasks),done=completedTasksForDate(d,dayTasks),doneBy={};
  done.forEach(x=>(doneBy[x.room]??=[]).push(x));
  const plannedBy={};dayTasks.forEach(x=>(plannedBy[x.room]??=[]).push(x));
