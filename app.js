@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V288";
+const APP_BUILD="V289";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -795,14 +795,8 @@ function isFixedWeeklyRoutine(x){
  // Bathroom windows, sills and raffstores are deliberately excluded from the
  // weekly hygiene routine. They retain their own long/seasonal intervals.
  if(x.window||x.windowSill||x.raffstore||x.source==="window"||x.source==="windowSill"||x.source==="raffstore")return false;
- // WC care is handled by the dedicated WC work-package planner below.
- // Do not classify individual WC subtasks as fixed routines here; otherwise a
- // single task (e.g. only the brush holder) can be placed before the package
- // bundler gets a chance to collect the complete WC package.
- if(isWCSubtask(x))return false;
- // WC/toilet tasks are always part of the Tuesday hygiene block. The
- // dedicated package logic keeps their physical work together, while the
- // fixed-rhythm planner pins the occurrence to Tuesday.
+ // Every WC/toilet and washbasin task is a fixed Tuesday hygiene task.
+ // The package planner then keeps all such tasks of the same room together.
  if(isWCSubtask(x))return true;
  // Bathroom/vanity basins are also a fixed weekly routine. Only the actual
  // basin-cleaning task belongs here; descaling an armature keeps its own
