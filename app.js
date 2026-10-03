@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V318";
+const APP_BUILD="V319";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -1706,7 +1706,8 @@ function buildIntelligentPlan(){
 
 function plannedForDate(d){
  const k=dayKey(d);
- const plan=buildIntelligentPlan();
+ const plan=(plannerCache.key===plannerKey()&&plannerCache.next.size)?plannerCache:null;
+ if(!plan)return [];
  // SINGLE SOURCE OF TRUTH: the calendar/today/week views must contain exactly
  // the tasks whose canonical planned date is this day. Never use the planner's
  // transient bucket alone, because legacy/override/fallback placement can leave
@@ -1894,7 +1895,8 @@ function plannedDateForTask(x){
  const id=taskId(x);
  const explicit=normalizeDateKey(state.plannedOverrides?.[id]);
  if(explicit){const ed=fromKey(explicit);if(ed instanceof Date&&!Number.isNaN(ed.getTime())&&ed>=today)return ed;}
- const plan=buildIntelligentPlan(),due=nextDue(x,today);
+ const plan=(plannerCache.key===plannerKey()&&plannerCache.next.size)?plannerCache:null,due=nextDue(x,today);
+ if(!plan)return null;
  let d=plan.next.get(id);
  if(isFloorVacuumTask(x)){
    const mop=floorPairTaskFor(x,CATALOG),md=mop&&plan.next.get(taskId(mop));
@@ -2974,6 +2976,58 @@ function syncCurrentDay(){
    save();
  }
 }
+let __planWorker=null, __planWorkerBusy=false, __planWorkerWaiters=[];
+function canonicalPlanPayload(){
+  const active=CATALOG.filter(x=>x&&!isDailyTask(x)&&!isDone(x)&&!isPostponed(x));
+  return active.map(x=>{
+    const due=nextDue(x,today);
+    const preferred=normalizeDateKey(state.plannedOverrides?.[taskId(x)])?fromKey(state.plannedOverrides[taskId(x)]):((isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x))?fixedRoutineDate(x,today):null);
+    const rooms=physicalRooms(x);
+    return {id:taskId(x),due:due instanceof Date&&!Number.isNaN(due.getTime())?dayKey(due):"",preferred:preferred instanceof Date&&!Number.isNaN(preferred.getTime())?dayKey(preferred):"",rooms,minutes:taskMinutes(x),weight:taskWeight(x),fixed:isSanitaryWeeklyCore(x)||isFixedRhythmRoutine(x),manual:!!state.plannedOverrides?.[taskId(x)]};
+  }).filter(x=>x.due);
+}
+function requestCanonicalPlan(done){
+  if(plannerCache.key===plannerKey()&&plannerCache.next.size){done?.(plannerCache);return;}
+  if(done)__planWorkerWaiters.push(done);
+  if(__planWorkerBusy)return;
+  if(!window.Worker){setTimeout(()=>{try{restorePlannerSnapshot(); if(plannerCache.key===plannerKey()&&plannerCache.next.size){} }catch{} __planWorkerWaiters.splice(0).forEach(cb=>cb(plannerCache));},0);return;}
+  __planWorkerBusy=true;
+  const workerCode=`
+  self.onmessage=e=>{
+    const {tasks, todayKey, window:W}=e.data;
+    const DAY=180, MAXTASKS=17, MAXROOMS=2;
+    const ms=86400000; const dt=k=>new Date(k+"T12:00:00");
+    const key=d=>d.toISOString().slice(0,10);
+    const add=(d,n)=>new Date(d.getTime()+n*ms);
+    const days=new Map(); const next={};
+    const get=k=>{if(!days.has(k))days.set(k,{tasks:[],minutes:0,rooms:new Set()});return days.get(k)};
+    const roomsOf=x=>new Set((x.rooms||[]).filter(Boolean));
+    const can=(d,x)=>{const a=get(key(d));const rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);return a.minutes+x.minutes<=DAY&&a.tasks.length<MAXTASKS&&rs.size<=MAXROOMS};
+    const score=(d,x)=>{const a=get(key(d));const same=[...(roomsOf(x))].some(r=>a.rooms.has(r));return Math.abs(Math.round((d-dt(x.due))/ms))*8+a.minutes*1.4+a.tasks.length*1.2+(a.tasks.length?0:-25)+(same?-55:0)};
+    const place=(d,x)=>{const a=get(key(d));a.tasks.push(x.id);a.minutes+=x.minutes;for(const r of roomsOf(x))a.rooms.add(r);next[x.id]=key(d)};
+    const ordered=[...tasks].sort((a,b)=>(a.manual===b.manual?0:a.manual?-1:1)||a.due.localeCompare(b.due)||b.weight-a.weight);
+    for(const x of ordered){
+      const due=dt(x.due), cand=[];
+      if(x.preferred){const pd=dt(x.preferred);if(Math.abs(Math.round((pd-due)/ms))<=W&&pd>=dt(todayKey)&&can(pd,x))cand.push({d:pd,s:-1000000});}
+      for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;if(can(d,x))cand.push({d,s:score(d,x)});}
+      cand.sort((a,b)=>a.s-b.s);
+      if(cand[0]){place(cand[0].d,x);continue;}
+      // Last legal attempt: keep the hard room/time limits, relaxing only task count.
+      const relaxed=[];
+      for(let n=-W;n<=W;n++){const d=add(due,n);if(d<dt(todayKey))continue;const a=get(key(d));const rs=new Set(a.rooms);for(const r of roomsOf(x))rs.add(r);if(a.minutes+x.minutes<=DAY&&rs.size<=MAXROOMS)relaxed.push({d,s:a.minutes+a.tasks.length*2+Math.abs(n)*8});}
+      relaxed.sort((a,b)=>a.s-b.s);if(relaxed[0])place(relaxed[0].d,x);
+    }
+    self.postMessage({next});
+  };`;
+  const blob=new Blob([workerCode],{type:"application/javascript"});
+  __planWorker=new Worker(URL.createObjectURL(blob));
+  __planWorker.onmessage=e=>{
+    try{const next=new Map();for(const [id,k] of Object.entries(e.data.next||{})){const d=fromKey(k);if(d instanceof Date&&!Number.isNaN(d.getTime()))next.set(id,d);} plannerCache={key:plannerKey(),days:new Map(),next};}
+    finally{__planWorkerBusy=false;__planWorker.terminate();__planWorker=null;const q=__planWorkerWaiters.splice(0);q.forEach(cb=>{try{cb(plannerCache)}catch{}});}
+  };
+  __planWorker.onerror=()=>{__planWorkerBusy=false;try{__planWorker.terminate()}catch{};__planWorker=null;__planWorkerWaiters.splice(0).forEach(cb=>{try{cb(plannerCache)}catch{}})};
+  __planWorker.postMessage({tasks:canonicalPlanPayload(),todayKey:dayKey(today),window:PLANNING_WINDOW});
+}
 function render(){
   syncCurrentDay();
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===selectedTab));
@@ -2999,18 +3053,21 @@ function render(){
     return;
   }
   if(selectedTab==="week"){
-    document.getElementById("main").innerHTML='<div class="card"><div class="empty">Plan wird vorbereitet …</div></div>';
-    setTimeout(()=>{if(selectedTab!=="week")return;restorePlannerSnapshot();buildIntelligentPlan();renderWeek()},60);
+    // V319: NEVER run the monolithic planner from a category click.
+    // The view is immediately usable; the canonical worker fills plan dates
+    // asynchronously when available.
+    renderWeek();
+    requestCanonicalPlan(()=>{if(selectedTab==="week")renderWeek()});
     return;
   }
   renderCatalog();
+  requestCanonicalPlan(()=>{if(selectedTab==="catalog")renderCatalog()});
 }
 setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(today))render()},60000);
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 // V309: first paint is always the lightweight Today view.
 render();
-// V317: DO NOT auto-run buildIntelligentPlan after startup. It is a large
-// synchronous computation and can block Safari's main thread exactly when the
-// user is trying to tap a tab. Canonical planning is now requested only by the
-// views that actually need it, never by the initial boot sequence.
+// V319: planning is a Web Worker job. It never blocks the main UI thread.
+setTimeout(()=>{requestCanonicalPlan(()=>{if(selectedTab==="calendar")renderCalendar();});},1200);
+// No synchronous canonical planner is ever started from navigation or boot.
 // V307: no delayed full-state write after boot. It could block Safari during interaction.
