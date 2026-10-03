@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V303";
+const APP_BUILD="V304";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -789,7 +789,7 @@ function isWCSubtask(x){
  // keeps its own cadence.
  return /\bwc\b|toilette|toilettenrand|wc[- ]?bürste|bürstenhalter|waschbecken/.test(t);
 }
-function wcPackage(x){return isWCSubtask(x)?{key:`wc-komplett|${x.room}`,label:`WC komplett · ${x.room}`,heavy:false}:null;}
+function wcPackage(x){return isWCSubtask(x)?{key:"wc-komplett|Bäder & WCs",label:"Bäder & WCs · Dienstag",heavy:false}:null;}
 function isWCPackageTask(x){return !!wcPackage(x);}
 function wcPackageWeight(arr){const n=(arr||[]).filter(isWCPackageTask).length;return n?Math.min(3,Math.max(2,n*0.4)):0;}
 function isFixedWeeklyRoutine(x){
@@ -956,7 +956,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v302|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v304|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -977,6 +977,17 @@ function plannerHorizon(){
 }
 function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
 function nearbyCategoryPenalty(days,k,cat){let penalty=0;for(const off of [-1,1]){const a=days.get(dayKey(addDays(fromKey(k),off)));if(a&&dominantCategory(a)===cat)penalty+=12}return penalty}
+function planningRoomKey(x){
+ // The Tuesday WC/washbasin block is one physical room package even though it
+ // contains four bathroom/WC rooms. All other work is counted by its actual room.
+ return isWCSubtask(x)?"__WC_BAEDER_WCS__":String(x?.room||"");
+}
+function planningRoomKeys(arr){return new Set((arr||[]).map(planningRoomKey).filter(Boolean));}
+function canUsePlanningRoom(arr,x){
+ const key=planningRoomKey(x),keys=planningRoomKeys(arr);
+ return !key || keys.has(key) || keys.size<2;
+}
+function roomPackageLoad(arr,key){return (arr||[]).filter(y=>planningRoomKey(y)===key).reduce((n,y)=>n+taskWeight(y),0);}
 function buildIntelligentPlan(){
  const key=plannerKey();if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();const days=new Map();const dates=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const k=dayKey(d);days.set(k,[]);dates.push(d)}
@@ -1014,7 +1025,7 @@ function buildIntelligentPlan(){
      const exterior=!!(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/i.test(x.text||''));
      const cap=dayBudget(d), limit=dayTaskLimit(d);
      const protectedRoutine=!!arr?._fixedRoutine;
-     const compatible=arr && !protectedRoutine && !arr.some(y=>isHeavyTask(y)) &&
+     const compatible=arr && canUsePlanningRoom(arr,x) && !protectedRoutine && !arr.some(y=>isHeavyTask(y)) &&
        (!exterior ? !arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||'')) : arr.length===0);
      if(arr && arr.length<limit && compatible && (arr._weight||0)+weight<=cap){addFixed(k,x);}
      else if(exterior){
@@ -1160,6 +1171,7 @@ function buildIntelligentPlan(){
      // Tuesday's fixed hygiene block is a protected capacity reservation.
      // Do not add flexible work once the reserved routine is present.
      if(arr._fixedRoutine)continue;
+     if(!canUsePlanningRoom(arr,occ.x))continue;
      if(used+weight>cap&&!samePackage)continue;
      if(!canAddByTaskCount(d,arr,occ.x))continue;
      if(packageWeight+weight>(pkg.heavy?10:6))continue;
@@ -1189,6 +1201,7 @@ function buildIntelligentPlan(){
        if(d<today||!days.has(k)|| (d.getDay()===0&&!state.sundayOptional[k])) continue;
        const arr=days.get(k);
        if(arr.some(y=>taskId(y)===taskId(occ.x))) continue;
+       if(!canUsePlanningRoom(arr,occ.x)) continue;
        const used=arr._weight||0, cap=dayBudget(d);
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasExteriorHeavy=arr.some(y=>y.window||y.raffstore||y.windowSill||/fensterbank|raffstore|sonnenschutz/i.test(y.text||""));
@@ -1228,6 +1241,7 @@ function buildIntelligentPlan(){
      if(plannerBlocked(d))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
+     if(!canUsePlanningRoom(arr,x))continue;
      const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
      candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
    }
@@ -1253,6 +1267,7 @@ function buildIntelligentPlan(){
      if(d<today||!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
      const arr=days.get(k);
      if(arr.some(y=>taskId(y)===id))continue;
+     if(!canUsePlanningRoom(arr,x))continue;
      const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
      const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
      const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
@@ -1290,6 +1305,7 @@ function buildIntelligentPlan(){
        if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
        if(plannerBlocked(d))continue;
        const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
+       if(!canUsePlanningRoom(arr,x))continue;
        const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
        const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
        const cap=dayBudget(d);
@@ -1322,6 +1338,45 @@ function buildIntelligentPlan(){
      const arr=days.get(best.k);arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(id,best.d);
    }
  }
+ // HARD ROOM-PACKAGE INVARIANT: a day may contain at most two distinct
+ // planning room packages. This is enforced after every planner phase so
+ // fixed/seasonal work and fallback safety passes cannot reintroduce a third
+ // room. The Tuesday WC/washbasin block counts as ONE package (Bäder & WCs).
+ const moveToRoomSafeDay=(x,fromDate)=>{
+   const id=taskId(x),due=nextDue(x,today),weight=taskWeight(x),fromKey=dayKey(fromDate);
+   let best=null;
+   for(let delta=-30;delta<=30;delta++){
+     const d=addDays(due,delta),k=dayKey(d);
+     if(d<today||!days.has(k)||plannerBlocked(d)||k===fromKey)continue;
+     const arr=days.get(k);
+     if(arr.some(y=>taskId(y)===id))continue;
+     if(!canUsePlanningRoom(arr,x))continue;
+     const used=arr._weight||0, sameRoom=planningRoomKey(arr[0])===planningRoomKey(x);
+     const samePkg=arr.some(y=>workPackage(y).key===workPackage(x).key);
+     const score=(arr.length?0:-20)+(sameRoom?-100:0)+(samePkg?-70:0)+used*12+Math.abs(delta)*0.5;
+     if(!best||score<best.score)best={k,d,score};
+   }
+   if(!best)return false;
+   const old=days.get(fromKey);
+   if(old){const ix=old.findIndex(y=>taskId(y)===id);if(ix>=0){old.splice(ix,1);old._weight=Math.max(0,(old._weight||0)-weight);}}
+   const a=days.get(best.k);a.push(x);a._weight=(a._weight||0)+weight;next.set(id,best.d);
+   return true;
+ };
+ for(let pass=0;pass<20;pass++){
+   let changed=false;
+   for(const [k,arr] of days){
+     const keys=[...planningRoomKeys(arr)];
+     if(keys.length<=2)continue;
+     // Keep the two most substantial packages; move the smallest/least-fixed
+     // packages first so the day's core work remains stable.
+     const loads=keys.map(key=>({key,load:roomPackageLoad(arr,key),count:arr.filter(y=>planningRoomKey(y)===key).length})).sort((a,b)=>b.load-a.load||b.count-a.count);
+     const keep=new Set(loads.slice(0,2).map(x=>x.key));
+     const overflow=arr.filter(x=>!keep.has(planningRoomKey(x))).slice().sort((a,b)=>taskWeight(a)-taskWeight(b));
+     for(const x of overflow){if(moveToRoomSafeDay(x,fromKey(k)))changed=true;}
+   }
+   if(!changed)break;
+ }
+
  // FLOOR COUPLING: mopping is less frequent, but whenever it is due it
  // must happen together with vacuuming in the same room. We enforce this
  // after the normal planner has placed all occurrences, so the visible
