@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V305";
+const APP_BUILD="V307";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -70,7 +70,7 @@ const catalogSeed=[
 ['Trainingsraum','Keller',['Trainingsgeräte abwischen','Matten reinigen','Gewichte/Griffe abwischen','Handtücher einsammeln','Ablageflächen ordnen','Spiegel reinigen','Boden saugen','Boden wischen']],
 ['Technikraum','Keller',['Sichtbaren Staub entfernen','Zugänge freihalten','Boden bei Bedarf reinigen','Keine technischen Komponenten öffnen']],
 ['Lagerraum','Keller',['Kartons ordnen','Vorräte prüfen','Regale abstauben','Boden saugen','Boden wischen']],
-['Saunaraum','OG',['Nach Nutzung lüften','Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
+['Saunaraum','OG',['Holzflächen nach Hersteller reinigen','Bänke reinigen','Glasflächen reinigen','Boden saugen','Boden wischen','Saunaofen nur nach Herstellerangabe reinigen']],
 ['Stiegenhaus','EG/OG',['Stufen saugen','Stufen wischen','Handlauf abwischen','Geländer abstauben','Ecken absaugen','Sockelleisten reinigen','Spinnweben entfernen']],
 ];
 // Keine pauschalen Keller-Aufgaben: Jeder Raum erhält nur konkrete Tätigkeiten.
@@ -977,23 +977,17 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v306|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v308|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
- // The planner must be able to place EVERY active catalog task. A fixed
- // calendar end can leave long-interval tasks (e.g. annual tasks) without a
- // plan. Extend the horizon far enough beyond the furthest current due date
- // to guarantee a legal +/-30-day planning window.
- let end=fromKey("2027-12-31");
- for(const x of CATALOG){
-   if(isDailyTask(x)||isInvalidLegacyTask(x))continue;
-   const due=nextDue(x,today);
-   if(due instanceof Date && !Number.isNaN(due.getTime())){
-     const candidate=addDays(due,30);
-     if(candidate>end)end=candidate;
-   }
- }
+ // ROLLING PLANNING HORIZON:
+ // We deliberately do NOT pre-plan the whole household through 2027.
+ // The planner only prepares the next 8 weeks. Frequent household work therefore
+ // gets a stable recurring rhythm, while rare/annual tasks enter the plan only
+ // when their next occurrence approaches the active planning window. Seasonal
+ // work is still distributed within the current window.
+ const end=addDays(start,56);
  return {start,end};
 }
 function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
@@ -1456,6 +1450,54 @@ function buildIntelligentPlan(){
    }
  };
  rebalanceCoverage();
+
+ // COMPACT LIGHT SINGLETONS:
+ // A tiny task must not occupy an otherwise empty household day by itself.
+ // First try to attach it to an already existing compatible work package inside
+ // its own +/-30-day planning window. This keeps the individual interval intact
+ // while making the weekly workload feel like real work packages.
+ const compactSingletons=()=>{
+   for(let pass=0;pass<60;pass++){
+     let moved=false;
+     const singletonDays=[...days.entries()]
+       .map(([k,arr])=>({k,arr}))
+       .filter(({k,arr})=>{const d=fromKey(k);return d>=today&&!plannerBlocked(d)&&arr.length===1&&!arr._fixedRoutine;})
+       .sort((a,b)=>a.k.localeCompare(b.k));
+     for(const item of singletonDays){
+       const x=item.arr[0];
+       if(!x||isFixedTask(x)||isHeavyTask(x)||isWCSubtask(x)||x.window||x.windowSill||x.raffstore)continue;
+       const due=nextDue(x,today),fromDate=fromKey(item.k),weight=taskWeight(x);
+       let best=null;
+       for(const [tk,ta] of days){
+         const td=fromKey(tk);
+         if(td<today||plannerBlocked(td)||tk===item.k||!ta.length||ta._fixedRoutine)continue;
+         const delta=Math.round((td-due)/86400000);
+         if(Math.abs(delta)>30)continue;
+         if(ta.length>=dayTaskLimit(td))continue;
+         if(!canUsePlanningRoom(ta,x))continue;
+         if(ta.some(isHeavyTask))continue;
+         const used=ta._weight||0,cap=dayBudget(td);
+         if(used+weight>cap)continue;
+         const sameRoom=ta.some(y=>y.room===x.room);
+         const samePkg=ta.some(y=>workPackage(y).key===workPackage(x).key);
+         const sameFloor=ta.some(y=>floorOf(y)===floorOf(x)&&floorOf(x));
+         const sameWorkflow=ta.some(y=>efficiencyWorkflow(y)===efficiencyWorkflow(x));
+         const score=(samePkg?-120:0)+(sameRoom?-90:0)+(sameFloor?-30:0)+(sameWorkflow?-18:0)+roomSpreadPenalty(ta,x)+used*8+Math.abs(delta)*0.5+Math.abs(Math.round((td-fromDate)/86400000))*0.05;
+         if(!best||score<best.score)best={tk,score};
+       }
+       if(!best)continue;
+       const src=days.get(item.k),ix=src.findIndex(y=>taskId(y)===taskId(x));
+       if(ix<0)continue;
+       src.splice(ix,1);src._weight=Math.max(0,(src._weight||0)-weight);
+       const target=days.get(best.tk);target.push(x);target._weight=(target._weight||0)+weight;
+       next.set(taskId(x),fromKey(best.tk));
+       moved=true;
+       break;
+     }
+     if(!moved)break;
+   }
+ };
+ compactSingletons();
 
  // FLOOR COUPLING: mopping is less frequent, but whenever it is due it
  // must happen together with vacuuming in the same room. We enforce this
