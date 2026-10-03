@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V282";
+const APP_BUILD="V285";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -423,10 +423,15 @@ function postponeTask(x){
  // Move at least one day into the future, but never more than 30 days away from
  // the actual due date. This user choice becomes authoritative until completion.
  let planned=addDays(currentBase,1);
+ const planForMove=buildIntelligentPlan();
  for(let i=0;i<=30;i++){
    const candidate=addDays(currentBase,1+i);
-   if(candidate>=today && Math.abs(Math.round((candidate-due)/86400000))<=30 &&
-      (candidate.getDay()!==0 || state.sundayOptional[dayKey(candidate)])){planned=candidate;break;}
+   if(candidate<today || Math.abs(Math.round((candidate-due)/86400000))>30)continue;
+   if(candidate.getDay()===0 && !state.sundayOptional[dayKey(candidate)])continue;
+   const bucket=planForMove.days.get(dayKey(candidate))||[];
+   // „Später“ darf niemals ein drittes Raumpaket auf den Zieltag bringen.
+   if(!canAddRoomPackage(bucket,x))continue;
+   planned=candidate;break;
  }
  const until=dayKey(planned);const id=taskId(x);
  delete state.done[doneKey(x)];
@@ -945,6 +950,19 @@ function roomSpreadPenalty(arr,x){
  if(sameFloor)return 42 + rooms.size*12;
  return 85 + rooms.size*18;
 }
+// HARTE REGEL: Ein Tag darf höchstens 2 Raumpakete enthalten.
+// Mehrere Aufgaben desselben Raumes zählen als EIN Raumpaket.
+function roomPackageCount(arr){
+ const rooms=new Set();
+ for(const y of (arr||[])){const r=String(y?.room||"").trim();if(r)rooms.add(r);}
+ return rooms.size;
+}
+function canAddRoomPackage(arr,x){
+ if(!arr||!arr.length)return true;
+ const room=String(x?.room||"");
+ if((arr||[]).some(y=>String(y?.room||"")===room))return true;
+ return roomPackageCount(arr)<2;
+}
 function isFixedTask(x){return x.window||x.source==="seasonal"||isFixedRhythmRoutine(x)}
 function rawTasksForDate(d){return CATALOG.filter(x=>rawDueOn(x,d))}
 function plannerKey(){
@@ -952,7 +970,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v282-simple|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v285-roomcap|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -974,7 +992,7 @@ function plannerHorizon(){
 function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
 function nearbyCategoryPenalty(days,k,cat){let penalty=0;for(const off of [-1,1]){const a=days.get(dayKey(addDays(fromKey(k),off)));if(a&&dominantCategory(a)===cat)penalty+=12}return penalty}
 function buildIntelligentPlan(){
- const key=plannerKey().replace("v281","v282-room2");
+ const key=plannerKey();
  if(plannerCache.key===key)return plannerCache;
  const {start,end}=plannerHorizon();
  const days=new Map(),next=new Map();
@@ -991,12 +1009,8 @@ function buildIntelligentPlan(){
    // After the first "Später"/completion action today, never refill the freed slot.
    if(sameDay(d,today) && lock && !lock.has(id))return false;
    if(a.some(y=>taskId(y)===id))return false;
-   // HARD HOUSEHOLD RULE: a day may contain at most two real room packages.
-   // Tasks from the same room stay one package; a third room must move to another day.
-   const room=String(x.room||"");
-   const roomCount=new Set(a.map(y=>String(y.room||"")).filter(r=>r && r!=="Alltag")).size;
-   const sameRoom=a.some(y=>String(y.room||"")===room);
-   if(room && room!=="Alltag" && !sameRoom && roomCount>=2)return false;
+   // NEVER allow a third room package, regardless of task type.
+   if(!canAddRoomPackage(a,x))return false;
    const w=taskWeight(x), used=a._weight||0, cap=dayBudget(d);
    const exterior=!!(x.window||x.windowSill||x.raffstore||/fensterbank|raffstore|sonnenschutz/i.test(x.text||''));
    const hasExterior=a.some(y=>y.window||y.windowSill||y.raffstore||/fensterbank|raffstore|sonnenschutz/i.test(y.text||''));
@@ -1071,10 +1085,7 @@ function buildIntelligentPlan(){
      for(let delta=-30;delta<=30;delta++){
        const d=addDays(due,delta),a=days.get(dayKey(d)); if(!a||d<today||plannerBlocked(d))continue;
        if(a.some(y=>taskId(y)===id))continue;
-       const room=String(x.room||"");
-       const roomCount=new Set(a.map(y=>String(y.room||"")).filter(r=>r && r!=="Alltag")).size;
-       const sameRoom=a.some(y=>String(y.room||"")===room);
-       if(room && room!=="Alltag" && !sameRoom && roomCount>=2)continue;
+       if(!canAddRoomPackage(a,x))continue;
        if(sameDay(d,today)&&lock&&!lock.has(id))continue;
        candidates.push({d,score:100000+(a._weight||0)*10+a.length*100+Math.abs(delta)});
      }
@@ -1089,10 +1100,7 @@ function buildIntelligentPlan(){
    const due=nextDue(x,today),c=[];
    for(let delta=0;delta<=30;delta++)for(const sign of delta===0?[1]:[1,-1]){
      const d=addDays(due,delta*sign),a=days.get(dayKey(d)); if(!a||d<today||plannerBlocked(d))continue;
-     const room=String(x.room||"");
-     const roomCount=new Set(a.map(y=>String(y.room||"")).filter(r=>r && r!=="Alltag")).size;
-     const sameRoom=a.some(y=>String(y.room||"")===room);
-     if(room && room!=="Alltag" && !sameRoom && roomCount>=2)continue;
+     if(!canAddRoomPackage(a,x))continue;
      if(sameDay(d,today)&&lock&&!lock.has(taskId(x)))continue;
      c.push({d,score:(a._weight||0)*10+a.length*50+Math.abs(delta)});
    }
@@ -2165,6 +2173,8 @@ function showEnergy(){
     const r=document.createElement("div");r.className="result";
     r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)}</div><div class="meta"><strong>Fällig:</strong> ${esc(nextDueLabel(x))}</div><div class="meta"><strong>Geplant:</strong> ${esc(isDailyTask(x)?"täglich":formatDateKey(dayKey(plannedDateForTask(x))))}</div></div><button class="btn primary">Heute vorziehen</button>`;
     r.querySelector("button").onclick=()=>{
+      const occupied=[...plannedToday().filter(y=>y.source!=="daily"&&y.source!=="extra"),...(state.todayExtras||[]).filter(e=>e.date===day)];
+      if(!canAddRoomPackage(occupied,x)){toast("Heute sind bereits 2 Raumpakete geplant ❤️");return;}
       state.todayExtras.push({id:`extra|${day}|${uid()}`,date:day,text:x.text,room:x.room,area:x.area,description:x.description,source:"extra",sourceKey:taskId(x),canonical:taskId(x),interval:x.interval,start:x.start,manual:true});
       state.energySeen=[...(state.energySeen||[]),taskId(x)].slice(-200);
       save();render();showEnergy();
@@ -2214,11 +2224,21 @@ function openEditor(x=null,opts={}){
 }
 function pullCatalogTaskToday(x){
   const day=dayKey(today);
+  const canonical=canonicalTaskFor(x)||x;
+  const tid=taskId(canonical);
+  // Auch manuell vorgezogene Aufgaben dürfen die Tagesgrenze nicht umgehen.
+  // Ein bereits vorhandener Raum darf beliebig viele Aufgaben enthalten; ein
+  // neuer Raum ist nur erlaubt, solange der Tag noch unter 2 Raumpaketen liegt.
+  const plannedNow=plannedToday().filter(y=>y.source!=="daily"&&y.source!=="extra");
+  const existingExtraRooms=(state.todayExtras||[]).filter(e=>e.date===day).map(e=>({room:e.room}));
+  const occupied=[...plannedNow,...existingExtraRooms];
+  if(!canAddRoomPackage(occupied,canonical)){
+    toast("Heute sind bereits 2 Raumpakete geplant ❤️");
+    return;
+  }
   if(today.getDay()===0 && !state.sundayOptional[day]){
     state.sundayOptional[day]=true;
   }
-  const canonical=canonicalTaskFor(x)||x;
-  const tid=taskId(canonical);
   // A pulled-forward catalog task is a temporary occurrence for TODAY. It
   // must always retain the canonical catalog identity. If an older copy is
   // already present, repair it rather than creating another copy.
