@@ -977,7 +977,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v304|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v306|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1198,12 +1198,17 @@ function buildIntelligentPlan(){
      if(packageWeight+weight>(pkg.heavy?10:6))continue;
      if(sameRoomWeight+weight>((weight>=5||hasHeavy)?10:6))continue;
      const empty=arr.length===0;
-     if(!samePackage&&!empty&&!sameRoom)continue;
+     // Coverage is more important than filling an already-used room. We want
+     // the workload spread over the available weekdays, while still bundling
+     // compatible work when a day already has room. An empty weekday therefore
+     // gets a strong bonus; a same-package/same-room bonus is deliberately
+     // smaller than that.
+     if(!samePackage&&!empty&&!sameRoom&&!canUsePlanningRoom(arr,occ.x))continue;
      const breathing=dayBreathingScore(d,arr);
-     const packageBonus=samePackage?-110:0;
-     const roomBonus=sameRoom?-90:0;
-     const themeBonus=!sameRoom&&arr.some(y=>groupFor(y)===groupFor(occ.x))?-18:0;
-     const emptyBonus=empty?-8:0;
+     const packageBonus=samePackage?-70:0;
+     const roomBonus=sameRoom?-38:0;
+     const themeBonus=!sameRoom&&arr.some(y=>groupFor(y)===groupFor(occ.x))?-10:0;
+     const emptyBonus=empty?-190:0;
      const spread=roomSpreadPenalty(arr,occ.x);
      const dueDistance=Math.abs(delta)*0.8+(delta>0?delta*0.35:0);
      const adjacent=adjacentLoadPenalty(days,d);
@@ -1397,6 +1402,60 @@ function buildIntelligentPlan(){
    }
    if(!changed)break;
  }
+
+ // BALANCED WEEK COVERAGE:
+ // Do not leave ordinary weekdays empty while other days carry several flexible
+ // tasks. Once the core planner has assigned everything, use the legal +/-30-day
+ // planning window to move a light flexible occurrence from a multi-task day to
+ // an actually empty weekday. This is a rebalancing pass, not a second due-date
+ // system: the task's own interval remains unchanged. Sundays, fixed routines,
+ // WC Tuesday packages and heavy/window work are never used as filler.
+ const rebalanceCoverage=()=>{
+   for(let pass=0;pass<80;pass++){
+     const emptyDays=[];
+     for(const d of dates){
+       if(d<today||plannerBlocked(d)||d.getDay()===0)continue;
+       const arr=days.get(dayKey(d));
+       if(arr && arr.length===0)emptyDays.push(d);
+     }
+     if(!emptyDays.length)break;
+     emptyDays.sort((a,b)=>a-b);
+     let moved=false;
+     for(const target of emptyDays){
+       let best=null;
+       const tk=dayKey(target),ta=days.get(tk);
+       for(const [sk,src] of days){
+         if(!src||src.length<2)continue;
+         const sd=fromKey(sk);
+         if(sd<today||plannerBlocked(sd)||sameDay(sd,target))continue;
+         for(const x of src){
+           if(isFixedTask(x)||isWCSubtask(x)||isHeavyTask(x)||x.window||x.windowSill||x.raffstore)continue;
+           const due=nextDue(x,today);
+           const diff=Math.round((target-due)/86400000);
+           if(Math.abs(diff)>30)continue;
+           if(!canUsePlanningRoom(ta,x)||ta._fixedRoutine)continue;
+           const weight=taskWeight(x);
+           if(weight>(dayBudget(target)||0))continue;
+           const samePkg=src.some(y=>taskId(y)!==taskId(x)&&workPackage(y).key===workPackage(x).key);
+           const score=Math.abs(diff)*0.8 + Math.abs(Math.round((target-sd)/86400000))*0.15 + (samePkg?18:0) + (src.length<=2?8:0);
+           if(!best||score<best.score)best={x,sk,score};
+         }
+       }
+       if(!best)continue;
+       const src=days.get(best.sk),ix=src.findIndex(y=>taskId(y)===taskId(best.x));
+       if(ix<0)continue;
+       src.splice(ix,1);
+       src._weight=Math.max(0,(src._weight||0)-taskWeight(best.x));
+       ta.push(best.x);
+       ta._weight=(ta._weight||0)+taskWeight(best.x);
+       next.set(taskId(best.x),target);
+       moved=true;
+       break;
+     }
+     if(!moved)break;
+   }
+ };
+ rebalanceCoverage();
 
  // FLOOR COUPLING: mopping is less frequent, but whenever it is due it
  // must happen together with vacuuming in the same room. We enforce this
