@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V286";
+const APP_BUILD="V288";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -965,7 +965,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v286-dateguarantee|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v288-dateguarantee|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -997,31 +997,45 @@ function ensureEveryActiveTaskHasDate(days,next){
    if(postponed&&/^\\d{4}-\\d{2}-\\d{2}$/.test(String(postponed.postponedUntil||""))){
      const pd=fromKey(postponed.postponedUntil);
      const a=days.get(dayKey(pd));
-     if(a && !a.some(y=>taskId(y)===id)){
-       // A postponed occurrence is a concrete user-selected appointment.
-       // Keep the two-room rule even here; if the day is full, find another
-       // legal date rather than creating a third room.
-       if(canAddRoomPackage(a,x)){
-         a.push(x);a._weight=(a._weight||0)+taskWeight(x);
-       } else {
-         continue;
-       }
+     if(a && !a.some(y=>taskId(y)===id) && canAddRoomPackage(a,x)){
+       a.push(x);a._weight=(a._weight||0)+taskWeight(x);
+       next.set(id,pd);continue;
      }
-     if(a){next.set(id,pd);continue;}
+     if(a && a.some(y=>taskId(y)===id)){next.set(id,pd);continue;}
+     // The stored postponement date is full. Re-plan the occurrence to the
+     // next legal date rather than allowing a third room or leaving “—”.
    }
    if(next.has(id))continue;
-   const due=nextDue(x,today);
-   if(!(due instanceof Date)||Number.isNaN(due.getTime()))continue;
+   const rawDue=nextDue(x,today);
+   // A broken/legacy recurrence must never produce an unplanned task.
+   const due=(rawDue instanceof Date&&!Number.isNaN(rawDue.getTime()))?rawDue:new Date(today);
    let best=null;
+   // Normal preference: stay within the intended +/-30-day planning window.
    for(let delta=0;delta<=30;delta++){
      for(const sign of delta===0?[1]:[1,-1]){
        const d=addDays(due,delta*sign),a=days.get(dayKey(d));
        if(!a||d<today||plannerBlocked(d))continue;
        if(!canAddRoomPackage(a,x))continue;
-       // Coverage must not be defeated by the ordinary workload budget.
-       // The room cap remains absolute; this is only a date guarantee.
        const score=(a._weight||0)*10+a.length*100+Math.abs(delta);
        if(!best||score<best.score)best={d,a,score};
+     }
+   }
+   // If the +/-30 window is already full, DO NOT leave the task at “—”.
+   // Extend the search into the future until a legal day is found. The hard
+   // two-room limit remains absolute; only the date window is relaxed when
+   // necessary to guarantee a concrete appointment for every active task.
+   if(!best){
+     for(let d=new Date(today);;d=addDays(d,1)){
+       const a=days.get(dayKey(d));
+       if(!a){
+         if(d>new Date(today.getFullYear()+3,11,31,12))break;
+         continue;
+       }
+       if(plannerBlocked(d)||!canAddRoomPackage(a,x))continue;
+       const distance=Math.abs(Math.round((d-due)/86400000));
+       const score=(a._weight||0)*10+a.length*100+distance*0.05;
+       if(!best||score<best.score)best={d,a,score};
+       if(best)break;
      }
    }
    if(best){
