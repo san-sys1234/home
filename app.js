@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V321";
+const APP_BUILD="V322";
 const STORAGE="unser-zuhause-v168";
 const PLANNING_WINDOW=7;
 const LEGACY_STORAGE="unser-zuhause-v165";
@@ -3017,20 +3017,28 @@ function showCalendarDay(d,tasks){
  box.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
 
+let __daySyncSaveQueued=false;
 function syncCurrentDay(){
  const now=new Date();now.setHours(12,0,0,0);
  const nk=dayKey(now);
  if(dayKey(today)!==nk){
    today=now;
-   // Old same-day UI state must never carry into a new calendar day. The
-   // postponed records themselves are intentionally retained because their
-   // postponedUntil date is the authoritative plan.
+   // New-day UI state must be reset immediately, but NEVER serialize the
+   // complete household state inside a tab click. On iPhone Safari the first
+   // interaction after midnight can otherwise trigger a large synchronous
+   // JSON.stringify/localStorage write and make every tab look frozen.
    state.completedOpen=false;
    state.postponedOpen=false;
    state.energySkipDay="";
    state.energySeen=[];
    state.energyOffset=0;
-   save();
+   if(!__daySyncSaveQueued){
+     __daySyncSaveQueued=true;
+     setTimeout(()=>{
+       __daySyncSaveQueued=false;
+       try{localStorage.setItem(STORAGE,JSON.stringify(state))}catch{}
+     },250);
+   }
  }
 }
 let __planWorker=null, __planWorkerBusy=false, __planWorkerWaiters=[];
@@ -3108,5 +3116,5 @@ setInterval(()=>{const before=dayKey(today);syncCurrentDay();if(before!==dayKey(
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{selectedTab=b.dataset.tab;state.completedOpen=false;state.postponedOpen=false;render()});document.getElementById("closeDetail").onclick=()=>document.getElementById("detailOverlay").classList.remove("open");document.getElementById("detailOverlay").onclick=e=>{if(e.target.id==="detailOverlay")e.currentTarget.classList.remove("open")};
 // V309: first paint is always the lightweight Today view.
 render();
-// V321: no planner work is started automatically at boot.
+// V322: new-day synchronization never blocks a tab click with a full-state save.
 // V307: no delayed full-state write after boot. It could block Safari during interaction.
