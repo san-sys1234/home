@@ -977,17 +977,16 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v308|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v309|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
- // ROLLING PLANNING HORIZON:
- // We deliberately do NOT pre-plan the whole household through 2027.
- // The planner only prepares the next 8 weeks. Frequent household work therefore
- // gets a stable recurring rhythm, while rare/annual tasks enter the plan only
- // when their next occurrence approaches the active planning window. Seasonal
- // work is still distributed within the current window.
- const end=addDays(start,56);
+ // ROLLING COVERAGE HORIZON:
+ // Keep the planner useful and finite: every active task gets a next occurrence
+ // somewhere in the coming six months, but nothing is projected indefinitely
+ // into 2027/2028. Frequent tasks keep their own cadence; rare and seasonal work
+ // is distributed into this coverage window when its normal due date lies outside it.
+ const end=addDays(start,182);
  return {start,end};
 }
 function dominantCategory(arr){if(!arr||!arr.length)return "";const scores={};for(const y of arr){const g=taskCategory(y);scores[g]=(scores[g]||0)+taskWeight(y)}return Object.entries(scores).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"de"))[0]?.[0]||""}
@@ -1245,293 +1244,64 @@ function buildIntelligentPlan(){
      if(!next.has(id)){const d=fromKey(k);if(d>=today)next.set(id,d);}
    }
  }
- // HARD GUARANTEE: every active catalog task receives a concrete planned date.
- // Never expose an unplanned state. If an earlier placement was impossible,
- // place the task on the least-loaded valid day within the absolute +/-30 day
- // window around its actual due date. This fallback may relax capacity, but
- // it may NEVER relax the 30-day boundary or create an invalid Sunday plan.
+ // HARD GUARANTEE: every active catalog task receives a concrete planned date
+ // somewhere in the six-month coverage window. Prefer the task's normal +/-30-day
+ // due window; if that window is outside the horizon or unavailable, use a light
+ // coverage day in the six-month window. The task interval remains authoritative
+ // for its normal recurrence after completion.
  for(const x of CATALOG){
    if(isDailyTask(x)||isPostponed(x))continue;
    const id=taskId(x);
    if(next.has(id))continue;
-   const due=nextDue(x,today), candidates=[];
-   for(let delta=-30;delta<=30;delta++){
-     const d=addDays(due,delta),k=dayKey(d);
-     if(d<today||!days.has(k))continue;
+   const due=nextDue(x,today),candidates=[];
+   for(let d=new Date(start);d<=end;d=addDays(d,1)){
      if(plannerBlocked(d))continue;
-     const arr=days.get(k);
-     if(arr.some(y=>taskId(y)===id))continue;
-     if(!canUsePlanningRoom(arr,x))continue;
-     const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x)), sameRoom=arr.some(y=>y.room===x.room);
-     candidates.push({k,delta,used,sameTheme,sameRoom,spread:roomSpreadPenalty(arr,x)});
+     const k=dayKey(d),arr=days.get(k);
+     if(!arr||arr.some(y=>taskId(y)===id)||!canUsePlanningRoom(arr,x))continue;
+     const used=arr._weight||0,sameRoom=arr.some(y=>y.room===x.room),sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
+     const dueDistance=due instanceof Date&&!Number.isNaN(due.getTime())?Math.abs(Math.round((d-due)/86400000)):0;
+     const inDue=dueDistance<=30;
+     candidates.push({k,used,sameRoom,sameTheme,spread:roomSpreadPenalty(arr,x),inDue,dueDistance});
    }
-   candidates.sort((a,b)=>((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||(a.used-b.used)||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(Math.abs(a.delta)-Math.abs(b.delta)));
-   const fb=candidates[0];
-   if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
- }
- // FINAL HARD VALIDATION: no planned date may ever be more than 30 days
- // before or after the task's currently displayed due date. This also repairs
- // stale today-lock entries or cached placements created by older versions.
- const byId=new Map(CATALOG.map(x=>[taskId(x),x]));
- for(const [id,pd] of [...next.entries()]){
-   const x=byId.get(id); if(!x)continue;
-   const due=nextDue(x,today);
-   const delta=Math.round((pd-due)/86400000);
-   if(Math.abs(delta)<=30)continue;
-   const oldK=dayKey(pd),oldArr=days.get(oldK);
-   if(oldArr){const ix=oldArr.findIndex(y=>taskId(y)===id);if(ix>=0){oldArr.splice(ix,1);oldArr._weight=Math.max(0,(oldArr._weight||0)-taskWeight(x));}}
-   next.delete(id);
-   const candidates=[];
-   for(let delta2=-30;delta2<=30;delta2++){
-     const d=addDays(due,delta2),k=dayKey(d);
-     if(d<today||!days.has(k)||(d.getDay()===0&&!state.sundayOptional[k]))continue;
-     const arr=days.get(k);
-     if(arr.some(y=>taskId(y)===id))continue;
-     if(!canUsePlanningRoom(arr,x))continue;
-     const used=arr._weight||0, cap=dayBudget(d), weight=taskWeight(x);
-     const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
-     const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-     const canFit=arr.length>=dayTaskLimit(d) ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap));
-     const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
-     const sameRoom=arr.some(y=>y.room===x.room);
-     const spread=roomSpreadPenalty(arr,x);
-     candidates.push({k,delta:delta2,used,sameTheme,sameRoom,spread,canFit});
-   }
-   candidates.sort((a,b)=>(a.canFit?0:100000)-(b.canFit?0:100000)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||(a.spread-b.spread)||a.used-b.used||((b.sameTheme?1:0)-(a.sameTheme?1:0))||Math.abs(a.delta)-Math.abs(b.delta));
+   candidates.sort((a,b)=>(a.inDue?0:1000)-(b.inDue?0:1000)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(a.spread-b.spread)||a.used-b.used||a.dueDistance-b.dueDistance);
    const fb=candidates[0];
    if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
  // FINAL GLOBAL INVARIANTS:
- // 1) no planned date may be in the past;
- // 2) every active non-daily task has a concrete planned date;
- // 3) the planned date is never more than +/-30 days from its CURRENT due date.
- // This pass is deliberately independent from all earlier planner heuristics so
- // stale data from older versions cannot leak into the calendar.
+ // Every active non-daily task must have a date inside the six-month coverage
+ // horizon. The +/-30-day due window is preferred, not an absolute blocker: the
+ // user's requested half-year overview must never show "Termin: —".
  for(const x of CATALOG){
    if(isDailyTask(x)||isPostponed(x))continue;
-   const id=taskId(x),due=nextDue(x,today);
-   let pd=next.get(id);
-   const valid=pd instanceof Date && pd>=today && Math.abs(Math.round((pd-due)/86400000))<=30;
-   if(valid)continue;
+   const id=taskId(x),pd=next.get(id);
+   if(pd instanceof Date && pd>=today && pd<=end && !plannerBlocked(pd))continue;
    if(pd instanceof Date){
      const old=days.get(dayKey(pd));
      if(old){const ix=old.findIndex(y=>taskId(y)===id);if(ix>=0){old.splice(ix,1);old._weight=Math.max(0,(old._weight||0)-taskWeight(x));}}
    }
    next.delete(id);
-   let best=null;
-   for(let delta=0;delta<=30;delta++){
-     for(const sign of delta===0?[1]:[1,-1]){
-       const offset=delta*sign,d=addDays(due,offset),k=dayKey(d);
-       if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-       if(plannerBlocked(d))continue;
-       const arr=days.get(k),used=arr._weight||0,weight=taskWeight(x);
-       if(!canUsePlanningRoom(arr,x))continue;
-       const hasMighty=arr.some(y=>y.window||taskWeight(y)>=8);
-       const hasLarge=arr.some(y=>!y.window&&taskWeight(y)>=5);
-       const cap=dayBudget(d);
-       const canFit=arr.length>=dayTaskLimit(d) ? false : (weight>=8 ? arr.length===0 : (!hasMighty && !(weight>=5&&hasLarge) && !(hasLarge&&weight>=3) && used+weight<=cap));
-       const sameTheme=arr.some(y=>groupFor(y)===groupFor(x));
-       const sameRoom=arr.some(y=>y.room===x.room);
-       const roomCompatible=arr.length===0||sameRoom;
-       const score=(roomCompatible?0:1000000)+(canFit?0:100000)+((sameRoom?-90:(sameTheme?-18:0)))+roomSpreadPenalty(arr,x)+used*10+Math.abs(offset)*0.1;
-       if(!best||score<best.score)best={k,d,score};
-     }
+   const due=nextDue(x,today),candidates=[];
+   for(let d=new Date(start);d<=end;d=addDays(d,1)){
+     if(plannerBlocked(d))continue;
+     const k=dayKey(d),arr=days.get(k);
+     if(!arr||arr.some(y=>taskId(y)===id)||!canUsePlanningRoom(arr,x))continue;
+     const dueDistance=due instanceof Date&&!Number.isNaN(due.getTime())?Math.abs(Math.round((d-due)/86400000)):0;
+     candidates.push({k,dueDistance,inDue:dueDistance<=30,used:arr._weight||0,sameRoom:arr.some(y=>y.room===x.room),sameTheme:arr.some(y=>taskCategory(y)===taskCategory(x)),spread:roomSpreadPenalty(arr,x)});
    }
-   // There should always be a legal future candidate in a 30-day window. If
-   // capacity is exhausted everywhere, use the least-loaded legal day rather
-   // than ever returning a past date or an unplanned state.
-   if(!best){
-     for(let delta=0;delta<=30;delta++){
-       for(const sign of delta===0?[1]:[1,-1]){
-         const d=addDays(due,delta*sign),k=dayKey(d);
-         if(d<today||!days.has(k)||Math.abs(Math.round((d-due)/86400000))>30)continue;
-         if(plannerBlocked(d))continue;
-         const arr=days.get(k),sameRoom=arr.some(y=>y.room===x.room);
-         const roomCompatible=arr.length===0||sameRoom;
-         const countPenalty=arr.length>=dayTaskLimit(d)?500000:0;
-         const score=(roomCompatible?0:1000000)+countPenalty+((sameRoom?-90:0))+roomSpreadPenalty(arr,x)+(arr._weight||0)*10+Math.abs(delta*sign);
-         if(!best||score<best.score)best={k,d,score};
-       }
-     }
-   }
-   if(best){
-     const arr=days.get(best.k);arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(id,best.d);
-   }
+   candidates.sort((a,b)=>(a.inDue?0:1000)-(b.inDue?0:1000)||((b.sameRoom?1:0)-(a.sameRoom?1:0))||((b.sameTheme?1:0)-(a.sameTheme?1:0))||(a.spread-b.spread)||a.used-b.used||a.dueDistance-b.dueDistance);
+   const fb=candidates[0];
+   if(fb){const a=days.get(fb.k);a.push(x);a._weight=(a._weight||0)+taskWeight(x);next.set(id,fromKey(fb.k));}
  }
- // HARD ROOM-PACKAGE INVARIANT: a day may contain at most two distinct
- // planning room packages. This is enforced after every planner phase so
- // fixed/seasonal work and fallback safety passes cannot reintroduce a third
- // room. The Tuesday WC/washbasin block counts as ONE package (Bäder & WCs).
- const moveToRoomSafeDay=(x,fromDate)=>{
-   const id=taskId(x),due=nextDue(x,today),weight=taskWeight(x),fromKey=dayKey(fromDate);
-   let best=null;
-   for(let delta=-30;delta<=30;delta++){
-     const d=addDays(due,delta),k=dayKey(d);
-     if(d<today||!days.has(k)||plannerBlocked(d)||k===fromKey)continue;
-     const arr=days.get(k);
-     if(arr.some(y=>taskId(y)===id))continue;
-     if(!canUsePlanningRoom(arr,x))continue;
-     const used=arr._weight||0, sameRoom=planningRoomKey(arr[0])===planningRoomKey(x);
-     const samePkg=arr.some(y=>workPackage(y).key===workPackage(x).key);
-     const score=(arr.length?0:-20)+(sameRoom?-100:0)+(samePkg?-70:0)+used*12+Math.abs(delta)*0.5;
-     if(!best||score<best.score)best={k,d,score};
-   }
-   if(!best)return false;
-   const old=days.get(fromKey);
-   if(old){const ix=old.findIndex(y=>taskId(y)===id);if(ix>=0){old.splice(ix,1);old._weight=Math.max(0,(old._weight||0)-weight);}}
-   const a=days.get(best.k);a.push(x);a._weight=(a._weight||0)+weight;next.set(id,best.d);
-   return true;
- };
- for(let pass=0;pass<20;pass++){
-   let changed=false;
-   for(const [k,arr] of days){
-     const keys=[...planningRoomKeys(arr)];
-     if(keys.length<=2)continue;
-     // Keep the two most substantial packages; move the smallest/least-fixed
-     // packages first so the day's core work remains stable.
-     const loads=keys.map(key=>({key,load:roomPackageLoad(arr,key),count:arr.filter(y=>planningRoomKey(y)===key).length})).sort((a,b)=>b.load-a.load||b.count-a.count);
-     const keep=new Set(loads.slice(0,2).map(x=>x.key));
-     const overflow=arr.filter(x=>!keep.has(planningRoomKey(x))).slice().sort((a,b)=>taskWeight(a)-taskWeight(b));
-     for(const x of overflow){if(moveToRoomSafeDay(x,fromKey(k)))changed=true;}
-   }
-   if(!changed)break;
- }
-
- // BALANCED WEEK COVERAGE:
- // Do not leave ordinary weekdays empty while other days carry several flexible
- // tasks. Once the core planner has assigned everything, use the legal +/-30-day
- // planning window to move a light flexible occurrence from a multi-task day to
- // an actually empty weekday. This is a rebalancing pass, not a second due-date
- // system: the task's own interval remains unchanged. Sundays, fixed routines,
- // WC Tuesday packages and heavy/window work are never used as filler.
- const rebalanceCoverage=()=>{
-   for(let pass=0;pass<80;pass++){
-     const emptyDays=[];
-     for(const d of dates){
-       if(d<today||plannerBlocked(d)||d.getDay()===0)continue;
-       const arr=days.get(dayKey(d));
-       if(arr && arr.length===0)emptyDays.push(d);
-     }
-     if(!emptyDays.length)break;
-     emptyDays.sort((a,b)=>a-b);
-     let moved=false;
-     for(const target of emptyDays){
-       let best=null;
-       const tk=dayKey(target),ta=days.get(tk);
-       for(const [sk,src] of days){
-         if(!src||src.length<2)continue;
-         const sd=fromKey(sk);
-         if(sd<today||plannerBlocked(sd)||sameDay(sd,target))continue;
-         for(const x of src){
-           if(isFixedTask(x)||isWCSubtask(x)||isHeavyTask(x)||x.window||x.windowSill||x.raffstore)continue;
-           const due=nextDue(x,today);
-           const diff=Math.round((target-due)/86400000);
-           if(Math.abs(diff)>30)continue;
-           if(!canUsePlanningRoom(ta,x)||ta._fixedRoutine)continue;
-           const weight=taskWeight(x);
-           if(weight>(dayBudget(target)||0))continue;
-           const samePkg=src.some(y=>taskId(y)!==taskId(x)&&workPackage(y).key===workPackage(x).key);
-           const score=Math.abs(diff)*0.8 + Math.abs(Math.round((target-sd)/86400000))*0.15 + (samePkg?18:0) + (src.length<=2?8:0);
-           if(!best||score<best.score)best={x,sk,score};
-         }
-       }
-       if(!best)continue;
-       const src=days.get(best.sk),ix=src.findIndex(y=>taskId(y)===taskId(best.x));
-       if(ix<0)continue;
-       src.splice(ix,1);
-       src._weight=Math.max(0,(src._weight||0)-taskWeight(best.x));
-       ta.push(best.x);
-       ta._weight=(ta._weight||0)+taskWeight(best.x);
-       next.set(taskId(best.x),target);
-       moved=true;
-       break;
-     }
-     if(!moved)break;
-   }
- };
- rebalanceCoverage();
-
- // COMPACT LIGHT SINGLETONS:
- // A tiny task must not occupy an otherwise empty household day by itself.
- // First try to attach it to an already existing compatible work package inside
- // its own +/-30-day planning window. This keeps the individual interval intact
- // while making the weekly workload feel like real work packages.
- const compactSingletons=()=>{
-   for(let pass=0;pass<60;pass++){
-     let moved=false;
-     const singletonDays=[...days.entries()]
-       .map(([k,arr])=>({k,arr}))
-       .filter(({k,arr})=>{const d=fromKey(k);return d>=today&&!plannerBlocked(d)&&arr.length===1&&!arr._fixedRoutine;})
-       .sort((a,b)=>a.k.localeCompare(b.k));
-     for(const item of singletonDays){
-       const x=item.arr[0];
-       if(!x||isFixedTask(x)||isHeavyTask(x)||isWCSubtask(x)||x.window||x.windowSill||x.raffstore)continue;
-       const due=nextDue(x,today),fromDate=fromKey(item.k),weight=taskWeight(x);
-       let best=null;
-       for(const [tk,ta] of days){
-         const td=fromKey(tk);
-         if(td<today||plannerBlocked(td)||tk===item.k||!ta.length||ta._fixedRoutine)continue;
-         const delta=Math.round((td-due)/86400000);
-         if(Math.abs(delta)>30)continue;
-         if(ta.length>=dayTaskLimit(td))continue;
-         if(!canUsePlanningRoom(ta,x))continue;
-         if(ta.some(isHeavyTask))continue;
-         const used=ta._weight||0,cap=dayBudget(td);
-         if(used+weight>cap)continue;
-         const sameRoom=ta.some(y=>y.room===x.room);
-         const samePkg=ta.some(y=>workPackage(y).key===workPackage(x).key);
-         const sameFloor=ta.some(y=>floorOf(y)===floorOf(x)&&floorOf(x));
-         const sameWorkflow=ta.some(y=>efficiencyWorkflow(y)===efficiencyWorkflow(x));
-         const score=(samePkg?-120:0)+(sameRoom?-90:0)+(sameFloor?-30:0)+(sameWorkflow?-18:0)+roomSpreadPenalty(ta,x)+used*8+Math.abs(delta)*0.5+Math.abs(Math.round((td-fromDate)/86400000))*0.05;
-         if(!best||score<best.score)best={tk,score};
-       }
-       if(!best)continue;
-       const src=days.get(item.k),ix=src.findIndex(y=>taskId(y)===taskId(x));
-       if(ix<0)continue;
-       src.splice(ix,1);src._weight=Math.max(0,(src._weight||0)-weight);
-       const target=days.get(best.tk);target.push(x);target._weight=(target._weight||0)+weight;
-       next.set(taskId(x),fromKey(best.tk));
-       moved=true;
-       break;
-     }
-     if(!moved)break;
-   }
- };
- compactSingletons();
-
- // FLOOR COUPLING: mopping is less frequent, but whenever it is due it
- // must happen together with vacuuming in the same room. We enforce this
- // after the normal planner has placed all occurrences, so the visible
- // calendar/Today view and the canonical next-date map stay in sync.
- const isVacuumTask=x=>/boden saugen|stufen saugen|ecken absaugen|unter .* saugen|absaugen/i.test(String(x?.text||''));
- const isMopTask=x=>/boden wischen|stufen wischen|boden bei bedarf reinigen/i.test(String(x?.text||''));
- const movePlannedTask=(x,target)=>{
-   const id=taskId(x),from=next.get(id);
-   if(!(target instanceof Date)||Number.isNaN(target.getTime())||!days.has(dayKey(target)))return false;
-   if(from instanceof Date && sameDay(from,target))return true;
-   if(from instanceof Date){
-     const old=days.get(dayKey(from));
-     if(old){const i=old.findIndex(y=>taskId(y)===id);if(i>=0){old.splice(i,1);old._weight=Math.max(0,(old._weight||0)-taskWeight(x));}}
-   }
-   const a=days.get(dayKey(target));
-   if(!a)return false;
-   if(!a.some(y=>taskId(y)===id)){a.push(x);a._weight=(a._weight||0)+taskWeight(x);}
-   next.set(id,target);
-   return true;
- };
- for(const mop of CATALOG.filter(x=>!isDailyTask(x)&&!isDone(x)&&isMopTask(x))){
-   const mid=taskId(mop),md=next.get(mid);
-   if(!(md instanceof Date))continue;
-   const vacuum=CATALOG.find(x=>x.room===mop.room&&!isDone(x)&&isVacuumTask(x));
-   if(!vacuum)continue;
-   const vd=next.get(taskId(vacuum));
-   if(!(vd instanceof Date))continue;
-   const diff=Math.abs(Math.round((md-vd)/86400000));
-   // A weekly vacuum is the anchor. If the mop is due within its legal
-   // +/-7-day planning window, put it on the vacuum day. Otherwise move the
-   // vacuum occurrence onto the mop day; the two physical steps stay together.
-   if(diff<=7){
-     movePlannedTask(mop,vd);
+ // Absolute safety net for pathological legacy data: never expose an active
+ // task without a date. This does not create a second planning system; it only
+ // fills the first legal day inside the already-built six-month calendar.
+ for(const x of CATALOG){
+   if(isDailyTask(x)||isPostponed(x)||next.has(taskId(x)))continue;
+   for(let d=new Date(start);d<=end;d=addDays(d,1)){
+     if(plannerBlocked(d))continue;
+     const k=dayKey(d),arr=days.get(k);
+     if(!arr||!canUsePlanningRoom(arr,x))continue;
+     arr.push(x);arr._weight=(arr._weight||0)+taskWeight(x);next.set(taskId(x),new Date(d));break;
    }
  }
  plannerCache={key,days,next};
@@ -1630,53 +1400,18 @@ function calendarTasksForDate(d){
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
- const plan=buildIntelligentPlan(),id=taskId(x),due=nextDue(x,today);
- // A WC work package is one physical planning unit. Legacy/manual per-task
- // planned overrides must not split its checklist items across different days.
+ const plan=buildIntelligentPlan(),id=taskId(x);
  const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(!isWCPackageTask(x) && preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-due)/86400000))<=30)return pd;}
- // The planner's date is the canonical planned date. A "todayPlanLock" is
- // only an action/display mechanism for tasks explicitly sent to "Später"; it
- // must never make an otherwise valid planned date disappear from the catalog
- // or calendar. The postponed occurrence itself is represented separately by
- // state.postponed and is handled by plannedForDate().
- const d=plan.next.get(id);
- if(d instanceof Date && d>=today && !isHouseholdFree(d)){
-   if(Math.abs(Math.round((d-due)/86400000))<=30)return d;
+ if(!isWCPackageTask(x) && preserved){
+   const pd=fromKey(preserved);
+   if(pd>=today&&!isHouseholdFree(pd)&&pd<=addDays(today,182))return pd;
  }
- // Search the actual planner days, using the same canonical rule.
+ const d=plan.next.get(id);
+ if(d instanceof Date && d>=today && d<=addDays(today,182) && !isHouseholdFree(d))return d;
  for(const [k,arr] of plan.days){
    if(!arr.some(y=>taskId(y)===id))continue;
    const dd=fromKey(k);
-   if(dd>=today && !isHouseholdFree(dd) && Math.abs(Math.round((dd-due)/86400000))<=30)return dd;
- }
- // Absolute display invariant: an active task may NEVER be shown without a
- // concrete plan. If an older/overloaded planner state somehow failed to expose
- // a date, allocate one directly into the same planner cache. This is a final
- // safety net, not a second planning system: Today, calendar and catalog all
- // read the same mutated plan object afterwards.
- if(!isDailyTask(x)){
-   let fallbackDue=due instanceof Date && !Number.isNaN(due.getTime())?due:new Date(today);
-   let best=null;
-   for(let delta=0;delta<=30;delta++){
-     for(const sign of delta===0?[1]:[1,-1]){
-       const d=addDays(fallbackDue,delta*sign),k=dayKey(d);
-       if(d<today||!plan.days.has(k)||Math.abs(Math.round((d-fallbackDue)/86400000))>30)continue;
-       if(plannerBlocked(d))continue;
-       const arr=plan.days.get(k);
-       if(arr.some(y=>taskId(y)===id))continue;
-       const used=arr._weight||0, sameTheme=arr.some(y=>taskCategory(y)===taskCategory(x));
-       const score=used*10+(sameTheme?0:20)+Math.abs(delta);
-       if(!best||score<best.score)best={k,d,score};
-     }
-   }
-   if(best){
-     const arr=plan.days.get(best.k);
-     arr.push(x);
-     arr._weight=(arr._weight||0)+taskWeight(x);
-     plan.next.set(id,best.d);
-     return best.d;
-   }
+   if(dd>=today&&dd<=addDays(today,182)&&!isHouseholdFree(dd))return dd;
  }
  return null;
 }
