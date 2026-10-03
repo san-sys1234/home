@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V289";
+const APP_BUILD="V290";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -959,7 +959,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v288-dateguarantee|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v290-two-room-final|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1035,6 +1035,61 @@ function ensureEveryActiveTaskHasDate(days,next){
    if(best){
      best.a.push(x);best.a._weight=(best.a._weight||0)+taskWeight(x);
      next.set(id,new Date(best.d));
+   }
+ }
+}
+
+function enforceMaxTwoRoomPackages(days,next){
+ // FINAL HARD INVARIANT FOR THE WHOLE APP:
+ // Every non-special day may contain at most two actual room packages.
+ // This runs AFTER all planner/fallback/fixed-task logic, so no later planning
+ // stage can accidentally put a third room onto Heute or any calendar day.
+ const dates=[...days.keys()].sort();
+ const todayKey=dayKey(today);
+ for(const k of dates){
+   const d=fromKey(k);
+   if(!d || d<today || d.getDay()===0)continue;
+   const a=days.get(k); if(!a||a.length<2)continue;
+   // Tuesday hygiene is one intentional physical work package across the
+   // bathroom/WC rooms. It is handled separately and therefore does not count
+   // as four unrelated room packages.
+   const normal=a.filter(x=>!isWCSubtask(x));
+   const hygiene=a.filter(x=>isWCSubtask(x));
+   const rooms=[...new Set(normal.map(x=>String(x.room||'').trim()).filter(Boolean))];
+   if(rooms.length<=2)continue;
+   // Keep the two strongest/most anchored rooms; move everything else forward.
+   const roomScore=new Map();
+   for(const x of normal){
+     const r=String(x.room||'').trim();
+     let score=taskWeight(x);
+     if(x.window||x.source==='seasonal'||isFixedRhythmRoutine(x))score+=1000;
+     const due=nextDue(x,today);
+     if(due instanceof Date)score+=Math.max(0,30-Math.abs(Math.round((d-due)/86400000)))*0.1;
+     roomScore.set(r,(roomScore.get(r)||0)+score);
+   }
+   const keep=new Set([...rooms].sort((r1,r2)=>(roomScore.get(r2)||0)-(roomScore.get(r1)||0)||r1.localeCompare(r2,'de')).slice(0,2));
+   const move=a.filter(x=>!isWCSubtask(x)&&!keep.has(String(x.room||'').trim()));
+   if(!move.length)continue;
+   for(const x of move){
+     const id=taskId(x);
+     let placed=false;
+     const due=nextDue(x,today);
+     // Prefer a future day close to the task's due date, but NEVER create a
+     // third room package. We deliberately search forward as far as needed.
+     for(let off=1;off<=730&&!placed;off++){
+       const target=addDays(d,off);
+       const ta=days.get(dayKey(target));
+       if(!ta||target.getDay()===0||plannerBlocked(target))continue;
+       if(ta.some(y=>taskId(y)===id))continue;
+       if(!canAddRoomPackage(ta,x))continue;
+       // Do not put a task on a day whose two existing rooms are already fixed
+       // more strongly than this movable task.
+       ta.push(x); ta._weight=(ta._weight||0)+taskWeight(x); next.set(id,new Date(target)); placed=true;
+     }
+     if(placed){
+       const idx=a.findIndex(y=>taskId(y)===id);
+       if(idx>=0){a.splice(idx,1);a._weight=Math.max(0,(a._weight||0)-taskWeight(x));}
+     }
    }
  }
 }
@@ -1155,6 +1210,11 @@ function buildIntelligentPlan(){
    c.sort((a,b)=>a.score-b.score); if(c[0])add(x,c[0].d);
  }
  ensureEveryActiveTaskHasDate(days,next);
+ enforceMaxTwoRoomPackages(days,next);
+ // A second coverage pass is intentionally required because moving a task
+ // out of an overloaded day changes its canonical date.
+ ensureEveryActiveTaskHasDate(days,next);
+ enforceMaxTwoRoomPackages(days,next);
  for(const a of days.values())a.sort((u,v)=>taskWeight(v)-taskWeight(u)||String(u.room).localeCompare(String(v.room),"de")||String(u.text).localeCompare(String(v.text),"de"));
  plannerCache={key,days,next};
  return plannerCache;
