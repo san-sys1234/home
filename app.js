@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V290";
+const APP_BUILD="V292";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -959,7 +959,7 @@ function plannerKey(){
  // and invalidates the planner cache. This avoids rebuilding/stringifying the
  // full household state for every task lookup. Today is part of the key because
  // relative due dates change at midnight.
- return "v290-two-room-final|"+String(state.__planRevision||0)+"|"+dayKey(today);
+ return "v292-single-plan|"+String(state.__planRevision||0)+"|"+dayKey(today);
 }
 function plannerHorizon(){
  const start=new Date(today.getFullYear(),today.getMonth(),today.getDate(),12);
@@ -1211,8 +1211,8 @@ function buildIntelligentPlan(){
  }
  ensureEveryActiveTaskHasDate(days,next);
  enforceMaxTwoRoomPackages(days,next);
- // A second coverage pass is intentionally required because moving a task
- // out of an overloaded day changes its canonical date.
+ // Moving a task creates a new open slot; fill only missing dates, then enforce
+ // the same two-room invariant once more. No view performs any planning.
  ensureEveryActiveTaskHasDate(days,next);
  enforceMaxTwoRoomPackages(days,next);
  for(const a of days.values())a.sort((u,v)=>taskWeight(v)-taskWeight(u)||String(u.room).localeCompare(String(v.room),"de")||String(u.text).localeCompare(String(v.text),"de"));
@@ -1222,25 +1222,13 @@ function buildIntelligentPlan(){
 function plannedForDate(d){
  const k=dayKey(d);
  const plan=buildIntelligentPlan();
- // SINGLE SOURCE OF TRUTH: the calendar/today/week views must contain exactly
- // the tasks whose canonical planned date is this day. Never use the planner's
- // transient bucket alone, because legacy/override/fallback placement can leave
- // an item in a bucket that differs from the date shown in the catalog.
+ // SINGLE SOURCE OF TRUTH: the planner is the only place that assigns dates.
+ // Views never add, remove or re-plan tasks.
  const arr=[];
- const seen=new Set();
  for(const x of CATALOG){
-   if(isDailyTask(x)||isDone(x)||isPostponed(x))continue;
+   if(isDailyTask(x)||isDone(x))continue;
    const pd=plan.next.get(taskId(x));
-   if(pd instanceof Date && dayKey(pd)===k){arr.push(x);seen.add(taskId(x));}
- }
- // A user-postponed date is authoritative and remains visible on that exact
- // date, but only once.
- for(const p of Object.values(state.postponed||{})){
-   if(!p||String(p.postponedUntil)!==k)continue;
-   const id=String(p.sourceKey||p.canonical||p.key||taskId(p));
-   if(seen.has(id))continue;
-   const x=CATALOG.find(y=>taskId(y)===id) || CATALOG.find(y=>String(y.key||'')===String(p.key||'')) || CATALOG.find(y=>String(y.text||'')===String(p.text||'')&&String(y.room||'')===String(p.room||''));
-   if(x && !isDone(x)){arr.push(x);seen.add(taskId(x));}
+   if(pd instanceof Date && dayKey(pd)===k)arr.push(x);
  }
  return arr;
 }
@@ -1312,15 +1300,7 @@ function calendarTasksForDate(d){
 function isDailyTask(x){return !!x&&(x.source==="daily"||String(x.key||"").startsWith("daily|")||String(x.id||"").startsWith("daily|"))}
 function nextDueLabel(x){return isDailyTask(x)?"täglich":nextDue(x).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"})}
 function plannedDateForTask(x){
- const id=taskId(x);
- const postponed=postponedEntry(x);
- if(postponed&&/^\d{4}-\d{2}-\d{2}$/.test(String(postponed.postponedUntil||""))){
-   const pd=fromKey(postponed.postponedUntil);
-   if(pd instanceof Date&&!Number.isNaN(pd.getTime()))return pd;
- }
- const preserved=normalizeDateKey(state.plannedOverrides?.[id]);
- if(!isWCPackageTask(x)&&preserved){const pd=fromKey(preserved);if(pd>=today&&!isHouseholdFree(pd)&&Math.abs(Math.round((pd-nextDue(x,today))/86400000))<=30)return pd;}
- const d=buildIntelligentPlan().next.get(id);
+ const d=buildIntelligentPlan().next.get(taskId(x));
  return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
 }
 function plannedDateLabel(x){
@@ -1401,39 +1381,20 @@ function ensureTodayPlanSnapshot(d=today){
 function plannedToday(){
  const d=today;
  if(state.chaos)return dailyTasks().filter(x=>/Geschirrspüler|Küchenarbeitsfläche|Esstisch|Hochstuhl|Heruntergefallenes|Müll/.test(x.text));
+ // TODAY IS READ-ONLY: daily routines + the canonical planner result.
+ // No second catalog scan, no fallback allocation and no extra task insertion.
  const out=dailyTasks();
- const plan=plannedForDate(d);
- // Once "Später" is used today, the non-daily plan for today is a fixed set.
- // Never let the planner refill a freed slot with another task. The planner
- // already respects this lock when calculating dates; this second guard keeps
- // the Today view stable even if an older cached/legacy plan contains extras.
- for(const x of plan){
-   out.push({...x,group:groupFor(x)});
- }
- // Final display invariant: every non-daily catalog task whose authoritative
- // planned date is today must be present in Today. This is intentionally a
- // second guard against any stale/legacy planner entry becoming visible only
- // in the catalog. The today lock remains authoritative and can still exclude
- // tasks that were not part of the frozen plan.
- const visibleIds=new Set(out.map(taskId));
- const todayPlan=buildIntelligentPlan();
- for(const x of CATALOG){
-   if(x.area==="Alltag"||isDone(x)||isPostponed(x)||visibleIds.has(taskId(x)))continue;
-   const pd=todayPlan.next.get(taskId(x));
-   if(pd instanceof Date && sameDay(pd,d)){out.push({...x,group:groupFor(x)});visibleIds.add(taskId(x));}
- }
+ for(const x of plannedForDate(d))out.push({...x,group:groupFor(x)});
  for(const e of state.todayExtras.filter(e=>e.date===dayKey(d)))out.push({...e,key:e.id,source:"extra",group:"Heute zusätzlich"});
- const seen=new Set();return out.filter(x=>{
+ const seen=new Set();
+ return out.filter(x=>{
    const id=taskId(x);
    if(seen.has(id))return false;
    seen.add(id);
    const p=postponedEntry(x);
-   // A pulled-forward catalog task is an explicit TODAY action. An older
-   // postponement must never hide it. For normal planned tasks, a postponement
-   // remains authoritative until its stored date.
    if(x.source!=="extra" && p&&p.postponedUntil&&p.postponedUntil>dayKey(d))return false;
    return true;
- })
+ });
 }
 
 function definition(x){
@@ -2375,7 +2336,7 @@ function pullCatalogTaskToday(x){
   toast(`„${canonical.text}“ für heute vorgezogen ❤️`);
 }
 
-function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=plan.next;arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const emergency=(!pd&&x.source!=="daily")?nextDue(x):null;const shownDate=pd||emergency;const ptxt=x.source==="daily"?"täglich":(shownDate?shownDate.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta plannedDate">Termin: <b>${esc(ptxt)}</b></div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
+function renderCatalog(){const main=document.getElementById("main");main.innerHTML=`<div class="card"><div class="topline"><div><h2 style="margin:0">📚 Aufgabenkatalog</h2><div class="small">Hier ist die vollständige Masterliste – jede Aufgabe kann bearbeitet oder gelöscht werden.</div></div><button class="btn primary" id="new">＋ Aufgabe hinzufügen</button></div><input class="search" id="q" placeholder="Aufgabe, Raum, Bereich, Ort suchen …" style="margin-top:14px"><div id="res"></div></div>`;const q=main.querySelector("#q"),res=main.querySelector("#res");q.value=catalogSearchTerm||"";main.querySelector("#new").onclick=()=>openEditor();const draw=()=>{catalogSearchTerm=q.value;const term=q.value.trim().toLowerCase(),arr=CATALOG.filter(x=>!isInvalidLegacyTask(x)&&(!term||[x.text,x.room,x.area,x.place,x.description].join(" ").toLowerCase().includes(term)));const plan=buildIntelligentPlan();const plannedMap=plan.next;arr.sort((a,b)=>{const da=plannedMap.get(taskId(a))||null,db=plannedMap.get(taskId(b))||null;if(da&&db){const diff=da.getTime()-db.getTime();if(diff)return diff;}else if(da&&!db)return -1;else if(!da&&db)return 1;return String(a.text||"").localeCompare(String(b.text||""),"de");});res.innerHTML=`<div class="small" style="padding:10px 4px">${arr.length} Aufgaben</div>`;arr.forEach(x=>{const r=document.createElement("div");r.className="result";const pd=plannedMap.get(taskId(x))||null;const shownDate=pd;const ptxt=x.source==="daily"?"täglich":(shownDate?shownDate.toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit",year:"numeric"}):"—");r.innerHTML=`<div class="resultText"><b>${esc(x.text)}</b><div class="meta">${esc(x.room)} · ${esc(x.area)}${x.place?" · "+esc(x.place):""}</div><div class="meta plannedDate">Termin: <b>${esc(ptxt)}</b></div></div><div class="catalogActions"><button class="iconBtn edit" title="Bearbeiten">✏️</button><button class="iconBtn remove" title="Löschen">🗑️</button>${x.source!=="daily"?`<button class="iconBtn pullToday" title="Heute vorziehen">⚡</button>`:""}<button class="iconBtn info" title="Info">ⓘ</button></div>`;r.querySelector(".edit").onclick=()=>openEditor(x);r.querySelector(".remove").onclick=()=>{if(confirm(`„${x.text}“ wirklich löschen?`)){state.catalogDeleted[x.key]=true;state.custom=state.custom.filter(c=>(c.key||`custom|${c.id}`)!==x.key);save();refreshCatalog();renderCatalog();toast("Aufgabe gelöscht")}};const pull=r.querySelector(".pullToday");if(pull)pull.onclick=()=>pullCatalogTaskToday(x);r.querySelector(".info").onclick=()=>openDetail(x);res.appendChild(r)})};q.oninput=draw;draw()}
 function renderWeek(){
   const main=document.getElementById("main");
   const candidates=CATALOG.filter(x=>x&&!isDone(x)&&!isPostponed(x)&&!isDailyTask(x)&&!x.window&&x.source!=="rotation")
