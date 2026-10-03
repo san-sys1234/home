@@ -1,5 +1,5 @@
 /* Unser Zuhause – V249 · Ausflug/Urlaub als haushaltsfreie Tage */
-const APP_BUILD="V304";
+const APP_BUILD="V305";
 const STORAGE="unser-zuhause-v168";
 const LEGACY_STORAGE="unser-zuhause-v165";
 const LEGACY_STORAGE_OLD="unser-zuhause-v148";
@@ -265,6 +265,7 @@ let state=loadState();
   }
 })();
 let selectedTab="today";
+let calendarDetailDateKey="";
 let catalogSearchTerm="";
 let today=new Date();today.setHours(12,0,0,0);
 let CATALOG=[];
@@ -409,6 +410,12 @@ function postponedTodayEntries(){
  return out.sort((a,b)=>String(a.postponedUntil).localeCompare(String(b.postponedUntil))||String(a.text||"").localeCompare(String(b.text||""),"de"));
 }
 function postponeTask(x){
+ // In the calendar, “Später” must behave like an inline action: keep the
+ // selected calendar day and the user's scroll position instead of sending
+ // them back to the Today/start view.
+ const keepCalendar=selectedTab==="calendar";
+ const keepCalendarDay=keepCalendar?calendarDetailDateKey:"";
+ const keepScrollY=keepCalendar?window.scrollY:0;
  const day=dayKey();
  const current=plannedToday().filter(y=>!isDone(y)&&!isPostponed(y)&&y.source!=="daily"&&y.source!=="extra");
  state.todayPlanLock=state.todayPlanLock||{};
@@ -431,7 +438,21 @@ function postponeTask(x){
  const until=dayKey(planned);const id=taskId(x);
  delete state.done[doneKey(x)];
  state.postponed[id]={...x,key:x.key||id,from:day,postponedUntil:until,actionDate:day,planningOnly:true};
- save();render();toast(`Für später geplant · ${formatDateKey(until)} ❤️`)
+ save();
+ if(keepCalendar){
+   // Rebuild the calendar, then reopen exactly the day the user was viewing.
+   // The postponed task naturally disappears from that day and reappears on
+   // its new canonical date. Nothing else about the calendar navigation changes.
+   renderCalendar();
+   if(keepCalendarDay){
+     const d=fromKey(keepCalendarDay);
+     showCalendarDay(d,calendarTasksForDate(d),true);
+   }
+   requestAnimationFrame(()=>window.scrollTo({top:keepScrollY,left:0,behavior:"auto"}));
+ }else{
+   render();
+ }
+ toast(`Für später geplant · ${formatDateKey(until)} ❤️`)
 }
 function restorePostponed(id){delete state.postponed[id];save();render()}
 function purgePostponed(){const k=dayKey();for(const [id,v] of Object.entries(state.postponed||{}))if(v.from&&v.from<k&&!v.postponedUntil)delete state.postponed[id]}
@@ -2624,8 +2645,9 @@ function renderWeek(){
   appendRoomGroups(list,roomGroupTasksSorted(candidates),{showDue:true});
 }
 function renderCalendar(){const main=document.getElementById("main"),year=state.calendarYear||today.getFullYear(),months=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];main.innerHTML=`<div class="card"><div class="yearIntro"><div><div class="small">Jahresvorschau</div><div class="yearTitle">📅 ${year}</div></div><div class="yearNav"><button id="prev">‹</button><button id="cur">Dieses Jahr</button><button id="next">›</button></div></div><div class="calendarLegend"><span>🟢 erledigt</span><span>☀️ Sonntag frei</span><span>🏖️ Ausflug/Urlaub</span><span>Die Zahl = sinnvoll eingeplante Aufgaben · ✨ = Tag geschafft</span></div><div class="monthGrid" id="mg"></div><div id="detailDay"></div></div>`;const mg=main.querySelector("#mg");for(let m=0;m<12;m++){const card=document.createElement("div");card.className="monthCard";card.innerHTML=`<div class="monthName">${months[m]}</div><div class="weekdays">${["Mo","Di","Mi","Do","Fr","Sa","So"].map(x=>`<span>${x}</span>`).join("")}</div><div class="monthDays"></div>`;const grid=card.querySelector(".monthDays"),first=new Date(year,m,1,12),offset=(first.getDay()+6)%7;for(let z=0;z<offset;z++)grid.appendChild(document.createElement("span"));const count=new Date(year,m+1,0).getDate();for(let n=1;n<=count;n++){const d=new Date(year,m,n,12),tasks=calendarTasksForDate(d),el=document.createElement("button");const completed=calendarDayCompleted(d,tasks);el.className="yearDay"+(d.getDay()===0||isHouseholdFree(d)?" free":"")+(sameDay(d,today)?" today":"")+(completed?" completed":"");el.innerHTML=`<span class="dayNum">${n}</span>${tasks.length?`<span class="dayMark">${tasks.length}</span>`:""}${completed?`<span class="dayComplete" title="Tag geschafft">✨</span>`:""}`;el.onclick=()=>showCalendarDay(d,tasks);grid.appendChild(el)}mg.appendChild(card)}main.querySelector("#prev").onclick=()=>{state.calendarYear=year-1;save();renderCalendar()};main.querySelector("#next").onclick=()=>{state.calendarYear=year+1;save();renderCalendar()};main.querySelector("#cur").onclick=()=>{state.calendarYear=today.getFullYear();save();renderCalendar()}}
-function showCalendarDay(d,tasks){
+function showCalendarDay(d,tasks,restoreScroll=false){
  const box=document.getElementById("detailDay");
+ calendarDetailDateKey=dayKey(d);
  // Calendar day details always come from the same canonical plan as Today and
  // the catalog. Keep manually pulled-forward tasks visible even on a free day.
  const dayTasks=(Array.isArray(tasks)?tasks:plannedForDate(d)).filter(x=>x.source!=="daily");
@@ -2641,7 +2663,7 @@ function showCalendarDay(d,tasks){
  if(list){
    appendRoomGroups(list,roomGroupTasksSorted(dayTasks),{showDue:true,showPullToday:true,showManage:true,returnTo:"calendar"});
  }
- box.scrollIntoView({behavior:"smooth",block:"nearest"});
+ if(!restoreScroll)box.scrollIntoView({behavior:"smooth",block:"nearest"});
 }
 
 function syncCurrentDay(){
